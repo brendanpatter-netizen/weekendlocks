@@ -12,6 +12,9 @@ export default function Home() {
       <Link href="/auth/login" style={styles.link}>
         Get started →
       </Link>
+      <Link href="/auth/login" style={styles.link}>Get started →</Link>
+      {/* NEW Picks link */}
+      <Link href="/picks/page" style={styles.link}>Picks →</Link>
     </View>
   );
 }
