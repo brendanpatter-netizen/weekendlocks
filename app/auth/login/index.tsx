@@ -2,7 +2,7 @@ export const unstable_settings = { prerender: false };
 
 import { useState } from 'react';
 import { View, TextInput, Button, Alert, StyleSheet } from 'react-native';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../../lib/supabase';
 
 export default function Login() {
   const [email, setEmail] = useState('');
