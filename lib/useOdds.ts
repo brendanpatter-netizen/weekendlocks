@@ -1,6 +1,6 @@
 // lib/useOdds.ts
 import { useEffect, useState } from 'react';
-import { getWeekRange } from './nflweeks';
+import { getWeekRange } from './nflWeeks';
 
 /* ────────────────────────────────
    Type helpers
