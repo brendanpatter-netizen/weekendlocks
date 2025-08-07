@@ -7,7 +7,7 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      {/* Expo Router will auto-create routes for every file in /app/ */}
+      {/* Expo Router will auto-register every file in /app/ */}
       <Stack screenOptions={{ headerShown: false }} />
     </ThemeProvider>
   );
