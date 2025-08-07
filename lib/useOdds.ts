@@ -26,8 +26,8 @@ export function useOdds(sport = 'americanfootball_nfl') {
 
     const fetchOdds = async () => {
       try {
-        const key = process.env.ODDS_API_KEY;
-        if (!key) throw new Error('Missing ODDS_API_KEY env variable');
+        const key = process.env.EXPO_PUBLIC_ODDS_API_KEY;
+        if (!key) throw new Error('Missing EXPO_PUBLIC_ODDS_API_KEY');
 
         const url = `https://api.the-odds-api.com/v4/sports/${sport}/odds?apiKey=${key}&regions=us&markets=spreads,totals&oddsFormat=american`;
         const res = await fetch(url);
