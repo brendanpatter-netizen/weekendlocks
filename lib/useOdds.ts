@@ -58,7 +58,7 @@ export function useOdds(
         /* 2. Call the API */
         const url =
           `https://api.the-odds-api.com/v4/sports/${sport}/odds` +
-          `?apiKey=${key}&regions=us&markets=spreads,totals&oddsFormat=american`;
+          `?apiKey=${key}&regions=us&markets=spreads,totals,h2h&oddsFormat=american`;
 
         const res = await fetch(url);
         if (!res.ok) {
