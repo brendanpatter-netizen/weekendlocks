@@ -110,9 +110,9 @@ export default function PicksPage() {
           <View key={game.id} style={styles.card}>
             {/* Team logos graphic */}
             <View style={styles.logosRow}>
-              <Image source={logoSrc(game.away_team)} style={styles.logo} />
+              <Image source={logoSrc(game.away_team, 'nfl')} style={styles.logo} />
               <Text style={styles.vs}>@</Text>
-              <Image source={logoSrc(game.home_team)} style={styles.logo} />
+              <Image source={logoSrc(game.home_team, 'nfl')} style={styles.logo} />
             </View>
 
             <Text style={styles.match}>
