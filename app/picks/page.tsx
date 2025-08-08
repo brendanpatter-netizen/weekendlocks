@@ -9,16 +9,18 @@ import {
   StyleSheet,
   ActivityIndicator,
   Pressable,
+  Image,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { getCurrentWeek } from '../../lib/nflWeeks';
 import { useOdds } from '../../lib/useOdds';
+import { logoSrc } from '../../lib/teamLogos';
 
 type BetType = 'spreads' | 'totals' | 'h2h';
 
 export default function PicksPage() {
   /* -------- state -------- */
-  const [week, setWeek] = useState<number>(getCurrentWeek() || 1);
+  const [week, setWeek]   = useState<number>(getCurrentWeek() || 1);
   const [betType, setBetType] = useState<BetType>('spreads');
 
   /* -------- fetch -------- */
@@ -55,10 +57,7 @@ export default function PicksPage() {
           <Pressable
             key={type}
             onPress={() => setBetType(type)}
-            style={[
-              styles.tab,
-              betType === type && styles.tabActive,
-            ]}
+            style={[styles.tab, betType === type && styles.tabActive]}
           >
             <Text style={betType === type && styles.tabActiveText}>
               {type.toUpperCase()}
@@ -79,8 +78,8 @@ export default function PicksPage() {
         let lineText = '';
 
         if (betType === 'spreads' || betType === 'h2h') {
-          const home = market.outcomes.find(o => o.name === game.home_team);
-          const away = market.outcomes.find(o => o.name === game.away_team);
+          const home = market.outcomes.find((o: any) => o.name === game.home_team);
+          const away = market.outcomes.find((o: any) => o.name === game.away_team);
           if (!home || !away) return null;
 
           lineText =
@@ -88,14 +87,21 @@ export default function PicksPage() {
               ? `${away.name} ${away.point} / ${home.name} ${home.point}`
               : `ML: ${away.price} / ${home.price}`;
         } else if (betType === 'totals') {
-          const over  = market.outcomes.find(o => o.name === 'Over');
-          const under = market.outcomes.find(o => o.name === 'Under');
+          const over  = market.outcomes.find((o: any) => o.name === 'Over');
+          const under = market.outcomes.find((o: any) => o.name === 'Under');
           if (!over || !under) return null;
           lineText = `Total ${over.point}  Over ${over.price} / Under ${under.price}`;
         }
 
         return (
           <View key={game.id} style={styles.card}>
+            {/* Team logos graphic */}
+            <View style={styles.logosRow}>
+              <Image source={logoSrc(game.away_team)} style={styles.logo} />
+              <Text style={styles.vs}>@</Text>
+              <Image source={logoSrc(game.home_team)} style={styles.logo} />
+            </View>
+
             <Text style={styles.match}>
               {game.away_team} @ {game.home_team}
             </Text>
@@ -112,15 +118,19 @@ export default function PicksPage() {
 
 /* -------- styles -------- */
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
-  container: { padding: 16, gap: 12 },
+  center:      { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
+  container:   { padding: 16, gap: 12 },
   /* tabs */
-  tabs: { flexDirection: 'row', marginBottom: 12 },
-  tab: { flex: 1, padding: 8, borderWidth: 1, borderColor: '#999', alignItems: 'center' },
-  tabActive: { backgroundColor: '#000' },
-  tabActiveText: { color: '#fff' },
+  tabs:        { flexDirection: 'row', marginBottom: 12 },
+  tab:         { flex: 1, padding: 8, borderWidth: 1, borderColor: '#999', alignItems: 'center' },
+  tabActive:   { backgroundColor: '#000' },
+  tabActiveText:{ color: '#fff' },
   /* card */
-  card: { padding: 12, borderWidth: 1, borderRadius: 8, borderColor: '#ccc' },
-  match: { fontWeight: 'bold', marginBottom: 4, fontSize: 16 },
-  kick: { marginTop: 4, fontSize: 12, opacity: 0.7 },
+  card:        { padding: 12, borderWidth: 1, borderRadius: 8, borderColor: '#ccc' },
+  match:       { fontWeight: 'bold', marginBottom: 4, fontSize: 16 },
+  kick:        { marginTop: 4, fontSize: 12, opacity: 0.7 },
+  /* logos */
+  logosRow:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', columnGap: 8, marginBottom: 6 },
+  logo:        { width: 42, height: 42, borderRadius: 21 },
+  vs:          { fontWeight: 'bold', fontSize: 16 },
 });
