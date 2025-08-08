@@ -1,4 +1,4 @@
-// app/picks/college.tsx
+// app/picks/college.tsx – NCAA Division‑I picks
 export const unstable_settings = { prerender: false };
 
 import { useState } from 'react';
@@ -11,37 +11,44 @@ import {
   Pressable,
   Image,
 } from 'react-native';
+import { Link } from 'expo-router';             // ← navigation
 import { useOdds } from '../../lib/useOdds';
 import { logoSrc } from '../../lib/teamLogos';
 
-/* -----------------------------------------
-   NCAA Division‑I (FBS) Picks page
-   -----------------------------------------*/
-
 type BetType = 'spreads' | 'totals' | 'h2h';
-const SPORT   = 'americanfootball_ncaaf';       // Odds‑API key for college
+const SPORT: string = 'americanfootball_ncaaf';   // Odds‑API key for college
 
 export default function CollegePicksPage() {
-  /* -- state -- */
+  /* ---------- state ---------- */
   const [betType, setBetType] = useState<BetType>('spreads');
 
-  /* -- fetch every 60 s -- */
+  /* ---------- fetch odds ---------- */
   const { data, error, loading } = useOdds(SPORT); // no week filter for CFB
 
-  /* -- status UI -- */
+  /* ---------- status UI ---------- */
   if (loading) return <ActivityIndicator style={styles.center} size="large" />;
   if (error)   return <Text style={styles.center}>Error: {error.message}</Text>;
   if (!data?.length) return (
     <View style={styles.center}><Text>No games found.</Text></View>
   );
 
-  /* -- render -- */
+  /* ---------- render ---------- */
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      {/* Bet‑type tabs */}
+      {/* header with link back to NFL */}
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>NCAA Picks</Text>
+        <Link href={{ pathname: '/picks/page' }} style={styles.switch}>
+          NFL ↗︎
+        </Link>
+      </View>
+
+      {/* bet‑type tabs */}
       <View style={styles.tabs}>
         {(['spreads','totals','h2h'] as BetType[]).map(t => (
-          <Pressable key={t} onPress={() => setBetType(t)}
+          <Pressable
+            key={t}
+            onPress={() => setBetType(t)}
             style={[styles.tab, betType===t && styles.tabActive]}
           >
             <Text style={betType===t && styles.tabActiveText}>{t.toUpperCase()}</Text>
@@ -49,7 +56,7 @@ export default function CollegePicksPage() {
         ))}
       </View>
 
-      {/* Game cards */}
+      {/* game cards */}
       {data.map(game => {
         const book   = game.bookmakers[0];
         const market = book?.markets.find(m => m.key === betType);
@@ -91,6 +98,10 @@ export default function CollegePicksPage() {
 const styles = StyleSheet.create({
   center:      { flex:1, justifyContent:'center', alignItems:'center', padding:24 },
   container:   { padding:16, gap:12 },
+  /* header */
+  headerRow:   { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:10 },
+  title:       { fontSize:20, fontWeight:'600' },
+  switch:      { color:'#0a84ff', fontSize:16 },
   /* tabs */
   tabs:        { flexDirection:'row', marginBottom:12 },
   tab:         { flex:1, padding:8, borderWidth:1, borderColor:'#999', alignItems:'center' },
