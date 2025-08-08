@@ -9,7 +9,8 @@
     "web": "expo start --web",
     "test": "jest --watchAll",
     "build": "expo export --platform web",
-    "vercel-build": "expo export --platform web"
+    "vercel-build": "expo export --platform web",
+    "build:cfb-ids": "node scripts/build-cfb-ids.mjs"
   },
   "jest": {
     "preset": "jest-expo"

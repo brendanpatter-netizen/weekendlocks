@@ -1,22 +1,35 @@
 // lib/teamLogos.ts
+// Logo resolver for NFL + NCAA (FBS).
+// Requires: lib/cfbIds.json (generated) and tsconfig with "resolveJsonModule": true.
 
-type Sport = 'nfl' | 'ncaaf';
-type TeamCode = string | number; // NCAA supports numeric ESPN IDs
+import type { ImageSourcePropType } from 'react-native';
+import cfbRaw from './cfbIds.json';
 
-const NORMALIZE = (s: string) =>
-  s
-    .normalize('NFKD')
-    .replace(/\p{Diacritic}/gu, '')
-    .replace(/&/g, 'and')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
+export type Sport = 'nfl' | 'ncaaf';
+type StringMap = Record<string, string>;
 
 /* ──────────────────────────────────────────────────────────
-   NFL (all 32) — ESPN uses short lowercase codes in the path
-   Example: https://a.espncdn.com/i/teamlogos/nfl/500/dal.png
+   Normalizers
    ────────────────────────────────────────────────────────── */
-export const NFL_LOGOS: Record<string, string> = {
+function normalizeName(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '') // strip accents (e.g., Hawaiʻi → hawaii)
+    .replace(/&/g, 'and')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+function skinnyKey(s: string): string {
+  return normalizeName(s).replace(/[^a-z0-9]/g, '');
+}
+
+/* ──────────────────────────────────────────────────────────
+   NFL (all 32) — ESPN uses 2–3 letter codes in the CDN path
+   e.g. https://a.espncdn.com/i/teamlogos/nfl/500/dal.png
+   Keys are normalized, e.g. "arizona cardinals"
+   ────────────────────────────────────────────────────────── */
+export const NFL_LOGOS: StringMap = {
   'arizona cardinals': 'ari',
   'atlanta falcons': 'atl',
   'baltimore ravens': 'bal',
@@ -48,220 +61,100 @@ export const NFL_LOGOS: Record<string, string> = {
   'seattle seahawks': 'sea',
   'tampa bay buccaneers': 'tb',
   'tennessee titans': 'ten',
-  // Washington has been a moving target over the years; ESPN uses 'wsh' now.
   'washington commanders': 'wsh',
   'washington football team': 'wsh',
 };
 
 /* ──────────────────────────────────────────────────────────
-   NCAA (FBS) — ESPN typically uses numeric IDs:
-   https://a.espncdn.com/i/teamlogos/ncaa/500/87.png  ← (Notre Dame example)
-   BUT we’ll also accept string codes for convenience (temporary).
-   Fill in as needed; when you know the numeric ID for a school,
-   replace the string with the number — nothing else changes.
+   NCAA (FBS) — ESPN uses numeric team IDs in the CDN path
+   e.g. https://a.espncdn.com/i/teamlogos/ncaa/500/68.png
+   We import a big JSON map, then expand with normalized keys
+   and a few hand-crafted aliases.
    ────────────────────────────────────────────────────────── */
-export const CFB_LOGOS: Record<string, TeamCode> = {
-  // Independents
-  'notre dame fighting irish': 'ND', // replace with numeric when you have it (e.g. 87)
-  'army black knights': 'ARMY',
-  'navy midshipmen': 'NAVY',
-  'umass minutemen': 'UMASS',
-  'uconn huskies': 'UCONN',
-  'notre dame': 'ND',
-  'army': 'ARMY',
-  'navy': 'NAVY',
 
-  // AAC (sample set — add the rest as they show up)
-  'south florida bulls': 'USF',
-  'memphis tigers': 'MEM',
-  'smu mustangs': 'SMU',
-  'tulane green wave': 'TULANE',
-  'uab blazers': 'UAB',
-  'north texas mean green': 'UNT',
-  'charlotte 49ers': 'CHAR',
-  'florida atlantic owls': 'FAU',
-  'east carolina pirates': 'ECU',
-  'rice owls': 'RICE',
-  'temple owls': 'TEM',
-  'tulsa golden hurricane': 'TULSA',
-  'utsa roadrunners': 'UTSA',
+// Hand-crafted aliases where Odds API / ESPN names differ
+const NCAA_ALIAS_ENTRIES: ReadonlyArray<readonly [string, string]> = [
+  ['Miami (FL) Hurricanes', '2390'],
+  ['Miami Hurricanes', '2390'],
+  ['Miami (OH) RedHawks', '195'],
+  ['UTSA Roadrunners', '2636'],
+  ['Texas–San Antonio Roadrunners', '2636'],
+  ['UAB Blazers', '5'],
+  ['Appalachian State Mountaineers', '2026'],
+  ['Boise State Broncos', '68'],
+  ['BYU Cougars', '252'],
+  ['San José State Spartans', '23'],
+  ['San Jose State Spartans', '23'],
+  ['Hawaiʻi Rainbow Warriors', '62'],
+  ['Hawaii Rainbow Warriors', '62'],
+];
 
-  // ACC (sample set)
-  'florida state seminoles': 'FSU',
-  'clemson tigers': 'CLEM',
-  'miami hurricanes': 'MIA',
-  'north carolina tar heels': 'UNC',
-  'duke blue devils': 'DUKE',
-  'nc state wolfpack': 'NCST',
-  'virginia cavaliers': 'UVA',
-  'virginia tech hokies': 'VT',
-  'louisville cardinals': 'LOU',
-  'georgia tech yellow jackets': 'GT',
-  'syracuse orange': 'CUSE',
-  'boston college eagles': 'BC',
-  'pittsburgh panthers': 'PITT',
-  'wake forest demon deacons': 'WAKE',
+const NCAA_ALIASES: StringMap = Object.fromEntries(NCAA_ALIAS_ENTRIES);
 
-  // Big Ten (sample set)
-  'ohio state buckeyes': 'OSU',
-  'michigan wolverines': 'MICH',
-  'penn state nittany lions': 'PSU',
-  'michigan state spartans': 'MSU',
-  'wisconsin badgers': 'WISC',
-  'iowa hawkeyes': 'IOWA',
-  'illinois fighting illini': 'ILL',
-  'minnesota golden gophers': 'MINN',
-  'nebraska cornhuskers': 'NEB',
-  'northwestern wildcats': 'NU',
-  'indiana hoosiers': 'IND',
-  'purdue boilermakers': 'PUR',
-  'rutgers scarlet knights': 'RUTG',
-  'maryland terrapins': 'MD',
+/** Expand the imported JSON to include multiple key variants. */
+function expandCfbMap(base: Record<string, string | number>): StringMap {
+  const out: StringMap = {};
+  for (const [name, idAny] of Object.entries(base)) {
+    const id = String(idAny);
+    const k1 = name;
+    const k2 = normalizeName(name);
+    const k3 = skinnyKey(name);
+    out[k1] = id;
+    out[k2] = id;
+    out[k3] = id;
 
-  // Big 12 (sample set)
-  'oklahoma sooners': 'OU',
-  'texas longhorns': 'TEX',
-  'oklahoma state cowboys': 'OKST',
-  'kansas state wildcats': 'KSU',
-  'kansas jayhawks': 'KU',
-  'baylor bears': 'BU',
-  'texas tech red raiders': 'TTU',
-  'tcu horned frogs': 'TCU',
-  'west virginia mountaineers': 'WVU',
-  'iowa state cyclones': 'ISU',
-  'byu cougars': 'BYU',
-  'utah utes': 'UTAH',
-  'colorado buffaloes': 'COLO',
-  'arizona wildcats': 'ARIZ',
-  'arizona state sun devils': 'ASU',
-  'ucf knights': 'UCF',
-  'cincinnati bearcats': 'CIN',
-  'houston cougars': 'HOU',
+    // Also fix common punctuation variants
+    const simple = name
+      .replace(/St\./g, 'State')
+      .replace(/[’']/g, '')
+      .replace(/–/g, '-');
+    const simpleNorm = normalizeName(simple);
+    const simpleSkinny = skinnyKey(simple);
+    out[simple] ??= id;
+    out[simpleNorm] ??= id;
+    out[simpleSkinny] ??= id;
+  }
 
-  // SEC (sample set)
-  'alabama crimson tide': 'ALA',
-  'georgia bulldogs': 'UGA',
-  'lsu tigers': 'LSU',
-  'texas a&m aggies': 'TAMU',
-  'auburn tigers': 'AUB',
-  'florida gators': 'UF',
-  'tennessee volunteers': 'TENN',
-  'mississippi state bulldogs': 'MSST',
-  'ole miss rebels': 'MISS',
-  'kentucky wildcats': 'UK',
-  'south carolina gamecocks': 'SC',
-  'arkansas razorbacks': 'ARK',
-  'missouri tigers': 'MIZZ',
-  'vanderbilt commodores': 'VANDY',
-  'oklahoma sooners (sec)': 'OU',
-  'texas longhorns (sec)': 'TEX',
+  // Merge manual aliases last (last write wins)
+  for (const [k, id] of Object.entries(NCAA_ALIASES)) {
+    out[k] = id;
+    out[normalizeName(k)] = id;
+    out[skinnyKey(k)] = id;
+  }
+  return out;
+}
 
-  // Pac-12 / MWC / others (sample set)
-  'usc trojans': 'USC',
-  'ucla bruins': 'UCLA',
-  'oregon ducks': 'ORE',
-  'washington huskies': 'UW',
-  'washington state cougars': 'WSU',
-  'oregon state beavers': 'ORST',
-  'colorado state rams': 'CSU',
-  'boise state broncos': 'BOISE',
-  'fresno state bulldogs': 'FRES',
-  'san diego state aztecs': 'SDSU',
-  'san jose state spartans': 'SJSU',
-  'hawaii rainbow warriors': 'HAW',
-  'air force falcons': 'AF',
-  'utah state aggies': 'USU',
-  'wyoming cowboys': 'WYO',
-  'nevada wolf pack': 'NEV',
-  'unlv rebels': 'UNLV',
-  'new mexico lobos': 'UNM',
-
-  // Sun Belt (sample set)
-  'appalachian state mountaineers': 'APP',
-  'james madison dukes': 'JMU',
-  'coastal carolina chanticleers': 'CCU',
-  'marshall thundering herd': 'MRSH',
-  'georgia southern eagles': 'GASO',
-  'georgia state panthers': 'GAST',
-  'south alabama jaguars': 'USA',
-  'troy trojans': 'TROY',
-  'texas state bobcats': 'TXST',
-  'ul lafayette ragin cajuns': 'ULL',
-  'ul monroe warhawks': 'ULM',
-  'arkansas state red wolves': 'ARST',
-  'old dominion monarchs': 'ODU',
-
-  // MAC (sample set)
-  'toledo rockets': 'TOL',
-  'ohio bobcats': 'OHIO',
-  'miami (oh) redhawks': 'M-OH',
-  'akron zips': 'AKRON',
-  'kent state golden flashes': 'KENT',
-  'bowling green falcons': 'BGSU',
-  'buffalo bulls': 'BUFF',
-  'ball state cardinals': 'BALL',
-  'central michigan chippewas': 'CMU',
-  'eastern michigan eagles': 'EMU',
-  'western michigan broncos': 'WMU',
-  'northern illinois huskies': 'NIU',
-
-  // C-USA (sample set)
-  'liberty flames': 'LIB',
-  'jacksonville state gamecocks': 'JSU',
-  'new mexico state aggies': 'NMSU',
-  'sam houston bearkats': 'SHSU',
-  'louisiana tech bulldogs': 'LT',
-  'middle tennessee blue raiders': 'MTSU',
-  'western kentucky hilltoppers': 'WKU',
-  'uta road runners': 'UTSA', // keep if UTSA shows up in your feed for C-USA seasons
-  'utep miners': 'UTEP',
-  'fiu panthers': 'FIU',
-
-  // Aliases / tricky names
- 
-};
-
-/* Optional aliases for name quirks you see in your feed */
-const CFB_ALIASES: Record<string, string> = {
-  'miami redhawks': 'miami (oh) redhawks',
-  'miami (ohio) redhawks': 'miami (oh) redhawks',
-  'hawaii': 'hawaii rainbow warriors',
-  'hawaiʻi': 'hawaiʻi rainbow warriors',
-  'ul lafayette': 'ul lafayette ragin cajuns',
-  'louisiana-lafayette ragin cajuns': 'ul lafayette ragin cajuns',
-  'louisiana lafayette ragin cajuns': 'ul lafayette ragin cajuns',
-  'ul monroe': 'ul monroe warhawks',
-};
+export const CFB_LOGOS: StringMap = expandCfbMap(
+  cfbRaw as Record<string, string | number>
+);
 
 /* ──────────────────────────────────────────────────────────
-   Public helper
+   Public API
    ────────────────────────────────────────────────────────── */
-export function logoSrc(teamName: string, sport: Sport = 'nfl') {
-  const key = NORMALIZE(teamName);
-  if (sport === 'nfl') {
-    const code = NFL_LOGOS[key];
-    if (!code) {
-      console.warn(`[logos] NFL team not mapped: "${teamName}"`);
-      return { uri: 'about:blank' };
+export function logoUri(teamName: string, sport: Sport = 'nfl'): string {
+  if (sport === 'ncaaf') {
+    const id =
+      CFB_LOGOS[teamName] ??
+      CFB_LOGOS[normalizeName(teamName)] ??
+      CFB_LOGOS[skinnyKey(teamName)];
+
+    if (!id) {
+      console.warn(`[logos] NCAA team not mapped: "${teamName}"`);
+      return 'about:blank';
     }
-    return { uri: `https://a.espncdn.com/i/teamlogos/nfl/500/${code}.png` };
+    return `https://a.espncdn.com/i/teamlogos/ncaa/500/${id}.png`;
   }
 
-  // NCAA
-  const normalized =
-    CFB_LOGOS[key] ??
-    CFB_LOGOS[NORMALIZE(CFB_ALIASES[key] ?? '')] ??
-    null;
-
-  if (!normalized) {
-    console.warn(`[logos] NCAA team not mapped: "${teamName}"`);
-    return { uri: 'about:blank' };
+  // NFL
+  const key = normalizeName(teamName);
+  const code = NFL_LOGOS[key];
+  if (!code) {
+    console.warn(`[logos] NFL team not mapped: "${teamName}"`);
+    return 'about:blank';
   }
+  return `https://a.espncdn.com/i/teamlogos/nfl/500/${code}.png`;
+}
 
-  const path =
-    typeof normalized === 'number'
-      ? `https://a.espncdn.com/i/teamlogos/ncaa/500/${normalized}.png`
-      : `https://a.espncdn.com/i/teamlogos/ncaa/500/${normalized}.png`;
-
-  return { uri: path };
+export function logoSrc(teamName: string, sport: Sport = 'nfl'): ImageSourcePropType {
+  return { uri: logoUri(teamName, sport) };
 }
