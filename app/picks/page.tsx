@@ -1,4 +1,4 @@
-// app/picks/page.tsx
+// app/picks/page.tsx – NFL picks
 export const unstable_settings = { prerender: false };
 
 import { useState } from 'react';
@@ -12,6 +12,7 @@ import {
   Image,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
+import { Link } from 'expo-router';            // 👈 navigation
 import { getCurrentWeek } from '../../lib/nflWeeks';
 import { useOdds } from '../../lib/useOdds';
 import { logoSrc } from '../../lib/teamLogos';
@@ -40,6 +41,18 @@ export default function PicksPage() {
   /* -------- render -------- */
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      {/* header with cross‑link to college */}
+      <View style={styles.headerRow}>
+      <Text style={styles.title}>NFL Picks – Week {week}</Text>
+      <Link
+        href={{ pathname: '/picks/college' }}
+        style={styles.switch}
+  >
+    NCAA ↗︎
+  </Link>
+</View>
+
+
       {/* Week picker */}
       <Picker
         selectedValue={week}
@@ -120,6 +133,10 @@ export default function PicksPage() {
 const styles = StyleSheet.create({
   center:      { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   container:   { padding: 16, gap: 12 },
+  /* header */
+  headerRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  title:       { fontSize: 20, fontWeight: '600' },
+  switch:      { color: '#0a84ff', fontSize: 16 },
   /* tabs */
   tabs:        { flexDirection: 'row', marginBottom: 12 },
   tab:         { flex: 1, padding: 8, borderWidth: 1, borderColor: '#999', alignItems: 'center' },
