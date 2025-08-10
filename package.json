@@ -16,7 +16,9 @@
     "preset": "jest-expo"
   },
   "dependencies": {
+    "@expo-google-fonts/roboto-condensed": "^0.4.1",
     "@expo/vector-icons": "^14.1.0",
+    "@react-native-picker/picker": "2.11.1",
     "@react-navigation/native": "^7.1.6",
     "@supabase/supabase-js": "^2.53.0",
     "expo": "~53.0.20",
@@ -33,8 +35,7 @@
     "react-native-reanimated": "~3.17.4",
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",
-    "react-native-web": "~0.20.0",
-    "@react-native-picker/picker": "2.11.1"
+    "react-native-web": "~0.20.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
