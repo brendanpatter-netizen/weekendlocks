@@ -22,8 +22,15 @@ export default function RootLayout() {
 
   function handleRoute(hasSession: boolean, currentPath: string) {
     const inAuth = currentPath?.startsWith("/auth");
-    if (!hasSession && !inAuth) router.replace({ pathname: "/auth/login" });
-    // no auto-redirect away from "/"
+    const isHome = currentPath === "/" || currentPath === "/index";
+
+    // If NOT signed in and NOT on auth and NOT on public home, send to login
+    if (!hasSession && !inAuth && !isHome) {
+      router.replace({ pathname: "/auth/login" });
+      return;
+    }
+
+    // If signed in: do nothing (let pages decide navigation)
   }
 
   return (
