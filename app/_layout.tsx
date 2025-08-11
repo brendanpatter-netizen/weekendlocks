@@ -22,17 +22,28 @@ export default function RootLayout() {
       setReady(true);
     });
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange(async (_e, session) => {
       if (!mounted) return;
       setHasSession(!!session);
       setReady(true);
+
+      // First-time login check
+      if (session?.user) {
+        const { user_metadata } = session.user;
+        if (!user_metadata?.password_set) {
+          // Avoid infinite redirect if we're already on /account
+          if (pathname !== "/account") {
+            router.replace("/account");
+          }
+        }
+      }
     });
 
     return () => {
       mounted = false;
       sub.subscription.unsubscribe();
     };
-  }, []);
+  }, [pathname, router]);
 
   const isPublic = (p?: string) =>
     !!p && (p === "/" || p === "/index" || p.startsWith("/picks") || p.startsWith("/auth"));
@@ -57,4 +68,3 @@ export default function RootLayout() {
     </View>
   );
 }
-
