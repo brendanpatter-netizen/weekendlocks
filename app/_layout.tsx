@@ -17,19 +17,20 @@ export default function RootLayout() {
   useEffect(() => {
     let mounted = true;
 
+    // Initial session check
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;
       setHasSession(!!data.session);
       setReady(true);
     });
 
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_e, session) => {
+    // React only to SIGNED_IN so Home doesn't get hijacked
+    const { data: sub } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
       setHasSession(!!session);
       setReady(true);
 
-      // First-time login redirect to /account if no password_set flag yet
-      if (session?.user) {
+      if (event === "SIGNED_IN" && session?.user) {
         const { user_metadata } = session.user;
         if (!user_metadata?.password_set && pathname !== "/account") {
           router.replace("/account");
@@ -43,9 +44,11 @@ export default function RootLayout() {
     };
   }, [pathname, router]);
 
+  // Public routes
   const isPublic = (p?: string) =>
     !!p && (p === "/" || p === "/index" || p.startsWith("/picks") || p.startsWith("/auth"));
 
+  // Auth guard for private routes
   useEffect(() => {
     if (!ready) return;
     if (!hasSession && !isPublic(pathname)) {

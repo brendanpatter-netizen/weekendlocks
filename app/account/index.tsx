@@ -1,100 +1,80 @@
-// app/account/index.tsx
-import { useEffect, useState } from "react";
-import { View, Text, TextInput, StyleSheet, Pressable, Platform, Alert } from "react-native";
-import {
-  useFonts,
-  RobotoCondensed_400Regular,
-  RobotoCondensed_700Bold,
-} from "@expo-google-fonts/roboto-condensed";
+import { useState, useEffect } from "react";
+import { View, Text, TextInput, Button, Alert, StyleSheet } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "expo-router";
 
-const colors = {
-  primary: "#006241",
-  secondary: "#FFD700",
-  bg: "#F5F5F5",
-  text: "#222",
-  subtext: "#555",
-};
-
 export default function AccountPage() {
-  const router = useRouter();
-
-  const [loaded] = useFonts({
-    RobotoCondensed_400Regular,
-    RobotoCondensed_700Bold,
-  });
-
-  // Don’t block render on fonts
-  const ffBold = loaded ? "RobotoCondensed_700Bold" : undefined;
-  const ffReg = loaded ? "RobotoCondensed_400Regular" : undefined;
-
-  const [email, setEmail] = useState<string>("");
+  const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [savingProfile, setSavingProfile] = useState(false);
-
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [savingPassword, setSavingPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const router = useRouter();
 
   useEffect(() => {
-    let mounted = true;
-    supabase.auth.getUser().then(({ data }) => {
-      if (!mounted) return;
-      const user = data.user;
-      setEmail(user?.email ?? "");
-      setDisplayName((user?.user_metadata as any)?.display_name ?? "");
-    });
-    return () => {
-      mounted = false;
+    const getUser = async () => {
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser();
+      if (error) {
+        console.error(error);
+        return;
+      }
+      if (user) {
+        setEmail(user.email || "");
+        setDisplayName(user.user_metadata?.display_name || "");
+      }
     };
+    getUser();
   }, []);
 
   const saveProfile = async () => {
-    try {
-      setSavingProfile(true);
-      const { error } = await supabase.auth.updateUser({
-        data: { display_name: displayName || null },
-      });
-      if (error) throw error;
-      Alert.alert("Saved", "Profile updated.");
-    } catch (e: any) {
-      Alert.alert("Couldn’t save", e?.message ?? "Please try again.");
-    } finally {
-      setSavingProfile(false);
+    setLoading(true);
+    const { error } = await supabase.auth.updateUser({
+      data: { display_name: displayName },
+    });
+    setLoading(false);
+
+    if (error) {
+      Alert.alert("Error", error.message);
+    } else {
+      Alert.alert("Success", "Profile updated");
     }
   };
 
   const savePassword = async () => {
-    if (!newPassword || newPassword.length < 8) {
-      Alert.alert("Password too short", "Use at least 8 characters.");
-      return;
-    }
     if (newPassword !== confirmPassword) {
-      Alert.alert("Passwords don’t match", "Please re-enter.");
+      Alert.alert("Error", "Passwords do not match");
       return;
     }
-    try {
-      setSavingPassword(true);
 
-      // 1) Set the password
-      const { error: pwError } = await supabase.auth.updateUser({ password: newPassword });
-      if (pwError) throw pwError;
+    setLoading(true);
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
 
-      // 2) Mark password_set so the layout won’t keep redirecting to /account
-      const { error: metaError } = await supabase.auth.updateUser({
-        data: { password_set: true },
-      });
-      if (metaError) throw metaError;
-
-      setNewPassword("");
-      setConfirmPassword("");
-      Alert.alert("Password set", "You can now sign in with email + password.");
-    } catch (e: any) {
-      Alert.alert("Couldn’t update password", e?.message ?? "Please try again.");
-    } finally {
-      setSavingPassword(false);
+    if (error) {
+      setLoading(false);
+      Alert.alert("Error", error.message);
+      return;
     }
+
+    // Mark that password is set so we don't redirect again
+    const { error: metaError } = await supabase.auth.updateUser({
+      data: { password_set: true },
+    });
+
+    setLoading(false);
+
+    if (metaError) {
+      Alert.alert("Error", metaError.message);
+      return;
+    }
+
+    Alert.alert("Success", "Password updated");
+    router.replace("/"); // ✅ Send them home after saving
   };
 
   const signOut = async () => {
@@ -103,139 +83,75 @@ export default function AccountPage() {
   };
 
   return (
-    <View style={styles.screen}>
-      <View style={styles.card}>
-        <Text style={[styles.title, { fontFamily: ffBold }]}>My Account</Text>
+    <View style={styles.container}>
+      <Text style={styles.heading}>My Account</Text>
 
-        {/* Profile section */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { fontFamily: ffBold }]}>Profile</Text>
+      <Text style={styles.label}>Email</Text>
+      <Text style={styles.value}>{email}</Text>
 
-          <View style={styles.row}>
-            <Text style={[styles.label, { fontFamily: ffBold }]}>Email</Text>
-            <Text style={[styles.value, { fontFamily: ffReg }]}>{email || "—"}</Text>
-          </View>
+      <Text style={styles.label}>Display Name</Text>
+      <TextInput
+        style={styles.input}
+        value={displayName}
+        onChangeText={setDisplayName}
+      />
+      <Button
+        title={loading ? "Saving..." : "Save profile"}
+        onPress={saveProfile}
+        disabled={loading}
+      />
 
-          <View style={styles.row}>
-            <Text style={[styles.label, { fontFamily: ffBold }]}>Display name</Text>
-            <TextInput
-              placeholder="Your name"
-              value={displayName}
-              onChangeText={setDisplayName}
-              style={styles.input}
-            />
-            <Pressable onPress={saveProfile} disabled={savingProfile} style={styles.primaryBtn}>
-              <Text style={styles.primaryBtnText}>{savingProfile ? "Saving..." : "Save profile"}</Text>
-            </Pressable>
-          </View>
-        </View>
+      <Text style={[styles.label, { marginTop: 20 }]}>New Password</Text>
+      <TextInput
+        style={styles.input}
+        secureTextEntry
+        value={newPassword}
+        onChangeText={setNewPassword}
+      />
+      <Text style={styles.label}>Confirm New Password</Text>
+      <TextInput
+        style={styles.input}
+        secureTextEntry
+        value={confirmPassword}
+        onChangeText={setConfirmPassword}
+      />
+      <Button
+        title={loading ? "Updating..." : "Update password"}
+        onPress={savePassword}
+        disabled={loading}
+      />
 
-        {/* Password section */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { fontFamily: ffBold }]}>Security</Text>
-
-          <View style={styles.row}>
-            <Text style={[styles.label, { fontFamily: ffBold }]}>Set / change password</Text>
-            <TextInput
-              placeholder="New password"
-              secureTextEntry
-              value={newPassword}
-              onChangeText={setNewPassword}
-              style={styles.input}
-            />
-            <TextInput
-              placeholder="Confirm new password"
-              secureTextEntry
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              style={styles.input}
-            />
-            <Pressable onPress={savePassword} disabled={savingPassword} style={styles.primaryBtn}>
-              <Text style={styles.primaryBtnText}>
-                {savingPassword ? "Saving..." : "Update password"}
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-
-        <Pressable onPress={signOut} style={styles.signOutBtn}>
-          <Text style={[styles.signOutText, { fontFamily: ffBold }]}>Sign out</Text>
-        </Pressable>
+      <View style={{ marginTop: 20 }}>
+        <Button title="Sign out" onPress={signOut} color="#d9534f" />
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
+  container: {
     flex: 1,
-    backgroundColor: colors.bg,
     padding: 20,
-    alignItems: "center",
+    maxWidth: 500,
+    marginHorizontal: "auto",
   },
-  card: {
-    width: "100%",
-    maxWidth: 720,
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 20,
-    gap: 16,
-    ...Platform.select({
-      web: { boxShadow: "0 12px 28px rgba(0,0,0,0.12)" },
-      default: {
-        shadowColor: "#000",
-        shadowOpacity: 0.12,
-        shadowRadius: 14,
-        shadowOffset: { width: 0, height: 8 },
-        elevation: 8,
-      },
-    }),
+  heading: {
+    fontSize: 24,
+    fontWeight: "bold",
+    marginBottom: 20,
   },
-  title: { fontSize: 24, color: colors.primary, textTransform: "uppercase" },
-  section: { gap: 10 },
-  sectionTitle: { fontSize: 16, color: colors.primary, textTransform: "uppercase" },
-  row: {
-    backgroundColor: "#FAFAFA",
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#EEE",
-    gap: 8,
+  label: {
+    fontWeight: "bold",
+    marginTop: 10,
   },
-  label: { fontSize: 12, color: colors.subtext, textTransform: "uppercase", letterSpacing: 0.5 },
-  value: { fontSize: 16, color: colors.text },
+  value: {
+    marginBottom: 10,
+  },
   input: {
     borderWidth: 1,
-    borderColor: "#DDD",
-    borderRadius: 10,
+    borderColor: "#ccc",
     padding: 10,
-    backgroundColor: "#fff",
-    fontSize: 16,
+    marginBottom: 10,
+    borderRadius: 4,
   },
-  primaryBtn: {
-    alignSelf: "flex-start",
-    backgroundColor: colors.primary,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-  },
-  primaryBtnText: { color: "#fff", fontWeight: "800" },
-  signOutBtn: {
-    alignSelf: "flex-start",
-    backgroundColor: colors.secondary,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    ...Platform.select({
-      web: { boxShadow: "0 8px 18px rgba(0,0,0,0.1)" },
-      default: {
-        shadowColor: "#000",
-        shadowOpacity: 0.1,
-        shadowRadius: 10,
-        shadowOffset: { width: 0, height: 6 },
-        elevation: 6,
-      },
-    }),
-  },
-  signOutText: { color: colors.primary, fontSize: 16 },
 });
