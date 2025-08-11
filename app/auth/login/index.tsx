@@ -1,39 +1,28 @@
-// app/auth/login/index.tsx
-export const unstable_settings = { prerender: false };
-
-import { useState } from 'react';
-import { View, TextInput, Button, Alert, StyleSheet } from 'react-native';
-import { supabase } from '../../../lib/supabase';
+import { useEffect, useState } from "react";
+import { View, TextInput, Button, Alert, StyleSheet } from "react-native";
+import { supabase } from "@/lib/supabase";
+import { hardSignOut } from "@/lib/auth";
 
 const redirectTo =
-  process.env.NODE_ENV === 'development'
-    ? `${window.location.origin}/auth/callback`
-    : 'https://weekendlocks.com/auth/callback';
+  (typeof window !== "undefined" ? window.location.origin : "") + "/auth/callback";
 
 export default function Login() {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState("");
 
-  const sendMagicLink = async () => {
-    if (!email) {
-      Alert.alert('Please enter an email address');
-      return;
-    }
+  useEffect(() => { hardSignOut(); }, []);
 
+  async function sendLink() {
+    if (!email.trim()) return;
     const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: redirectTo },
+      email: email.trim(),
+      options: { shouldCreateUser: true, emailRedirectTo: redirectTo },
     });
-
-    if (error) {
-      Alert.alert('Login failed', error.message);
-    } else {
-      Alert.alert('Success', 'Check your e-mail for the login link!');
-      setEmail('');
-    }
-  };
+    if (error) Alert.alert("Login failed", error.message);
+    else Alert.alert("Check your email", "Tap the link to finish signing in.");
+  }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.box}>
       <TextInput
         placeholder="you@example.com"
         autoCapitalize="none"
@@ -42,18 +31,12 @@ export default function Login() {
         onChangeText={setEmail}
         style={styles.input}
       />
-      <Button title="Send Login Link" onPress={sendMagicLink} />
+      <Button title="Send login link" onPress={sendLink} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', padding: 24, gap: 16 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    padding: 12,
-    borderRadius: 6,
-    fontSize: 16,
-  },
+  box: { flex: 1, justifyContent: "center", padding: 24, gap: 16 },
+  input: { borderWidth: 1, borderColor: "#ccc", borderRadius: 10, padding: 12, fontSize: 16 },
 });
