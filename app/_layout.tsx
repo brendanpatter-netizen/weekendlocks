@@ -20,16 +20,20 @@ export default function RootLayout() {
     return () => sub.subscription.unsubscribe();
   }, [pathname]);
 
+  function isPublicPath(p: string) {
+    if (!p) return false;
+    // Public routes: home + all picks pages
+    return p === "/" || p === "/index" || p.startsWith("/picks");
+  }
+
   function handleRoute(hasSession: boolean, currentPath: string) {
     const inAuth = currentPath?.startsWith("/auth");
-    const isHome = currentPath === "/" || currentPath === "/index";
 
-    // If NOT signed in and NOT on auth and NOT on public home, send to login
-    if (!hasSession && !inAuth && !isHome) {
+    // If NOT signed in and NOT on auth AND NOT on a public path, send to login
+    if (!hasSession && !inAuth && !isPublicPath(currentPath)) {
       router.replace({ pathname: "/auth/login" });
       return;
     }
-
     // If signed in: do nothing (let pages decide navigation)
   }
 
