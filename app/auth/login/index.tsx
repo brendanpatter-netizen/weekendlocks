@@ -3,22 +3,29 @@ import { View, TextInput, Button, Alert, StyleSheet } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { hardSignOut } from "@/lib/auth";
 
-const redirectTo =
-  (typeof window !== "undefined" ? window.location.origin : "") + "/auth/callback";
-
 export default function Login() {
   const [email, setEmail] = useState("");
 
+  // guarantee fresh state
   useEffect(() => { hardSignOut(); }, []);
 
   async function sendLink() {
-    if (!email.trim()) return;
+    const addr = email.trim();
+    if (!addr) return;
+
+    const redirectTo =
+      (typeof window !== "undefined" ? window.location.origin : "") + "/auth/callback";
+
     const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
+      email: addr,
       options: { shouldCreateUser: true, emailRedirectTo: redirectTo },
     });
+
     if (error) Alert.alert("Login failed", error.message);
-    else Alert.alert("Check your email", "Tap the link to finish signing in.");
+    else {
+      Alert.alert("Check your email", "Tap the link to finish signing in.");
+      setEmail("");
+    }
   }
 
   return (

@@ -1,4 +1,3 @@
-// app/_layout.tsx
 import { useEffect, useRef, useState } from "react";
 import { View, Platform } from "react-native";
 import { Slot, usePathname, useRouter } from "expo-router";
@@ -12,7 +11,7 @@ export default function RootLayout() {
 
   const [ready, setReady] = useState(false);
   const [hasSession, setHasSession] = useState(false);
-  const lastRedirectRef = useRef<string | null>(null);
+  const lastRedirect = useRef<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -35,22 +34,20 @@ export default function RootLayout() {
     };
   }, []);
 
-  const isPublicPath = (p?: string) =>
+  const isPublic = (p?: string) =>
     !!p && (p === "/" || p === "/index" || p.startsWith("/picks") || p.startsWith("/auth"));
 
   useEffect(() => {
     if (!ready) return;
-
-    if (!hasSession && !isPublicPath(pathname)) {
+    if (!hasSession && !isPublic(pathname)) {
       const target = "/auth/login";
-      if (lastRedirectRef.current !== target) {
-        lastRedirectRef.current = target;
+      if (lastRedirect.current !== target) {
+        lastRedirect.current = target;
         router.replace({ pathname: target });
       }
       return;
     }
-
-    lastRedirectRef.current = null;
+    lastRedirect.current = null;
   }, [ready, hasSession, pathname, router]);
 
   return (
@@ -60,3 +57,4 @@ export default function RootLayout() {
     </View>
   );
 }
+
