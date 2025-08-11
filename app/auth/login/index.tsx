@@ -18,7 +18,9 @@ export default function Login() {
 
     const { error } = await supabase.auth.signInWithOtp({
       email: addr,
-      options: { shouldCreateUser: true, emailRedirectTo: redirectTo },
+      options: { 
+        shouldCreateUser: true, 
+        emailRedirectTo: redirectTo },
     });
 
     if (error) Alert.alert("Login failed", error.message);
