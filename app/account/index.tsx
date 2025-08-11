@@ -25,7 +25,6 @@ export default function AccountPage() {
     RobotoCondensed_700Bold,
   });
 
-  // don't block render on fonts
   const ffBold = loaded ? "RobotoCondensed_700Bold" : undefined;
   const ffReg = loaded ? "RobotoCondensed_400Regular" : undefined;
 
@@ -50,9 +49,7 @@ export default function AccountPage() {
       setDisplayName(meta.display_name ?? "");
       setUsername(meta.username ?? "");
     });
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, []);
 
   // Save display name + username to user_metadata
@@ -108,9 +105,28 @@ export default function AccountPage() {
     }
   };
 
+  // More robust sign-out for web
   const signOut = async () => {
-    await supabase.auth.signOut();
-    router.replace("/auth/login");
+    try {
+      // Try full/global sign-out first
+      const { error } = await supabase.auth.signOut({ scope: "global" } as any);
+      if (error) {
+        // Fallback: clear local session only (older browsers, odd states)
+        await supabase.auth.signOut({ scope: "local" } as any);
+      }
+    } catch {
+      // ignore
+    } finally {
+      // Best-effort: clear any sb-* localStorage keys
+      if (typeof window !== "undefined" && "localStorage" in window) {
+        try {
+          for (const k of Object.keys(localStorage)) {
+            if (k.startsWith("sb-")) localStorage.removeItem(k);
+          }
+        } catch {}
+      }
+      router.replace("/auth/login");
+    }
   };
 
   return (
@@ -152,7 +168,7 @@ export default function AccountPage() {
           </View>
 
           <Text style={{ fontSize: 12, color: colors.subtext }}>
-            Note: for true “sign in with username”, we’ll add a small lookup later. For now, username is stored in your profile.
+            Note: username is stored in your profile. (We can add “login by username” later.)
           </Text>
         </View>
 
@@ -216,11 +232,16 @@ const styles = StyleSheet.create({
   primaryBtn: { alignSelf: "flex-start", backgroundColor: colors.primary, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10 },
   primaryBtnText: { color: "#fff", fontWeight: "800" },
   signOutBtn: {
-    alignSelf: "flex-start", backgroundColor: colors.secondary, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12,
+    alignSelf: "flex-start",
+    backgroundColor: colors.secondary,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
     ...Platform.select({
       web: { boxShadow: "0 8px 18px rgba(0,0,0,0.1)" },
       default: {
-        shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 6 }, elevation: 6,
+        shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 10,
+        shadowOffset: { width: 0, height: 6 }, elevation: 6,
       },
     }),
   },
