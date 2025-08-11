@@ -1,3 +1,4 @@
+// app/_layout.tsx
 import { useEffect, useRef, useState } from "react";
 import { View, Platform } from "react-native";
 import { Slot, usePathname, useRouter } from "expo-router";
@@ -27,14 +28,11 @@ export default function RootLayout() {
       setHasSession(!!session);
       setReady(true);
 
-      // First-time login check
+      // First-time login redirect to /account if no password_set flag yet
       if (session?.user) {
         const { user_metadata } = session.user;
-        if (!user_metadata?.password_set) {
-          // Avoid infinite redirect if we're already on /account
-          if (pathname !== "/account") {
-            router.replace("/account");
-          }
+        if (!user_metadata?.password_set && pathname !== "/account") {
+          router.replace("/account");
         }
       }
     });
