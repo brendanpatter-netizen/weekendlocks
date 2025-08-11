@@ -28,7 +28,10 @@ export default function AccountPage() {
     supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? undefined));
   }, []);
 
-  if (!loaded) return null;
+// with:
+  const ffBold = loaded ? "RobotoCondensed_700Bold" : undefined;
+  const ffReg  = loaded ? "RobotoCondensed_400Regular" : undefined;
+
 
   const signOut = async () => {
     try {
@@ -82,7 +85,7 @@ const styles = StyleSheet.create({
     }),
   },
   title: {
-    fontFamily: "RobotoCondensed_700Bold",
+    fontFamily: "ffBold",
     fontSize: 24,
     color: colors.primary,
     textTransform: "uppercase",
@@ -96,7 +99,7 @@ const styles = StyleSheet.create({
     borderColor: "#EEE",
   },
   label: {
-    fontFamily: "RobotoCondensed_700Bold",
+    fontFamily: "ffBold",
     fontSize: 12,
     color: colors.subtext,
     textTransform: "uppercase",
@@ -104,7 +107,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   value: {
-    fontFamily: "RobotoCondensed_400Regular",
+    fontFamily: "ffReg",
     fontSize: 16,
     color: colors.text,
   },
@@ -127,7 +130,7 @@ const styles = StyleSheet.create({
     }),
   },
   signOutText: {
-    fontFamily: "RobotoCondensed_700Bold",
+    fontFamily: "ffBold",
     color: colors.primary,
     fontSize: 16,
   },

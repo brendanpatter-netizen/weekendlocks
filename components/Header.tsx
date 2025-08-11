@@ -81,8 +81,7 @@ export default function Header() {
       setMenuOpen(false);
       setCode("");
       setEmail("");
-      // Where to land after sign-in. If your entry is app/picks/page.tsx use "/picks/page"
-      router.replace("/picks/page");
+      router.replace("/picks/page"); // align with your preferred route
     } catch (e: any) {
       Alert.alert("Invalid code", e?.message ?? "Check the code and try again.");
     } finally {
@@ -96,8 +95,8 @@ export default function Header() {
     router.replace("/auth/login");
   }
 
-  // If you just click "Account" as a normal link:
-  const accountHref = isSignedIn ? "/account" : "/auth/login";
+  // Route targets
+  const accountHref = isSignedIn ? "/account/index" : "/auth/login";
 
   return (
     <View style={styles.wrapper}>
@@ -108,8 +107,8 @@ export default function Header() {
             <Pressable><Text style={styles.nav}>Home</Text></Pressable>
           </Link>
 
-          {/* Change pathname to "/picks" if your file is app/picks/index.tsx */}
-          <Link href={{ pathname: "/picks/page" }} asChild>
+          {/* Picks route (standardized to /picks/index) */}
+          <Link href="/picks/page" asChild>
             <Pressable><Text style={styles.nav}>Picks</Text></Pressable>
           </Link>
         </View>
@@ -158,12 +157,12 @@ export default function Header() {
                   </View>
 
                   <TextInput
-                    placeholder="123456"
-                    keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
-                    maxLength={6}                        // <-- correct
-                    value={code}
-                    onChangeText={(t) => setCode(t.replace(/\D/g, ""))}
-                    style={styles.codeInput} 
+                    placeholder="you@email.com"
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    value={email}
+                    onChangeText={setEmail}
+                    style={styles.input}
                   />
 
                   <Pressable
