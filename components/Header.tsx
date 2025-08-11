@@ -1,6 +1,6 @@
 // components/Header.tsx
 import { useEffect, useMemo, useState } from "react";
-import { View, Text, Pressable, StyleSheet, Platform, TextInput, Alert } from "react-native";
+import { View, Text, Pressable, StyleSheet, Platform, TextInput, Alert, ActivityIndicator } from "react-native";
 import { Link, router } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { hardSignOut } from "@/lib/auth";
@@ -14,12 +14,21 @@ const colors = {
   subtext: "#555",
 };
 
+type Mode = "code" | "link";
+
 export default function Header() {
   const [session, setSession] = useState<null | { user?: { email?: string } }>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [email, setEmail] = useState("");
 
-  const userEmail = session?.user?.email;
+  // inline auth state
+  const [mode, setMode] = useState<Mode>("code");
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [codeSent, setCodeSent] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const userEmail = session?.user?.email || undefined;
+  const isSignedIn = !!userEmail;
   const initials = useMemo(() => (userEmail ? userEmail[0].toUpperCase() : "?"), [userEmail]);
 
   useEffect(() => {
@@ -29,22 +38,55 @@ export default function Header() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  const isSignedIn = !!userEmail;
+  const redirectTo =
+    (typeof window !== "undefined" ? window.location.origin : "") + "/auth/callback";
 
-  async function sendMagicLink() {
-    if (!email.trim()) return;
-    const redirectTo =
-      (typeof window !== "undefined" ? window.location.origin : "") + "/auth/callback";
+  async function send() {
+    const addr = email.trim();
+    if (!addr) return;
+    try {
+      setLoading(true);
+      const { error } = await supabase.auth.signInWithOtp({
+        email: addr,
+        options: { shouldCreateUser: true, emailRedirectTo: redirectTo },
+      });
+      if (error) throw error;
+      if (mode === "code") {
+        setCodeSent(true);
+        Alert.alert("Code sent", "Enter the 6-digit code from your email.");
+      } else {
+        Alert.alert("Magic link sent", "Check your email to finish signing in.");
+        setMenuOpen(false);
+        setEmail("");
+      }
+    } catch (e: any) {
+      Alert.alert("Couldn’t send", e?.message ?? "Try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: { shouldCreateUser: true, emailRedirectTo: redirectTo },
-    });
-    if (error) Alert.alert("Login failed", error.message);
-    else {
-      Alert.alert("Check your email", "Tap the link to finish signing in.");
-      setEmail("");
+  async function verify() {
+    const addr = email.trim();
+    const token = code.trim();
+    if (!addr || token.length !== 6) return;
+    try {
+      setLoading(true);
+      const { error } = await supabase.auth.verifyOtp({
+        email: addr,
+        token,
+        type: "email",
+      });
+      if (error) throw error;
       setMenuOpen(false);
+      setCode("");
+      setEmail("");
+      // Where to land after sign-in. If your entry is app/picks/page.tsx use "/picks/page"
+      router.replace("/picks/page");
+    } catch (e: any) {
+      Alert.alert("Invalid code", e?.message ?? "Check the code and try again.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -54,7 +96,7 @@ export default function Header() {
     router.replace("/auth/login");
   }
 
-  // When you simply want to route: if signed in -> /account, else -> /auth/login
+  // If you just click "Account" as a normal link:
   const accountHref = isSignedIn ? "/account" : "/auth/login";
 
   return (
@@ -66,7 +108,7 @@ export default function Header() {
             <Pressable><Text style={styles.nav}>Home</Text></Pressable>
           </Link>
 
-          {/* Change pathname to "/picks" if your picks entry is app/picks/index.tsx */}
+          {/* Change pathname to "/picks" if your file is app/picks/index.tsx */}
           <Link href={{ pathname: "/picks/page" }} asChild>
             <Pressable><Text style={styles.nav}>Picks</Text></Pressable>
           </Link>
@@ -75,45 +117,97 @@ export default function Header() {
         {/* Center brand */}
         <Text style={styles.brand}>WEEKEND LOCKS</Text>
 
-        {/* Right: Account */}
+        {/* Right: Account + panel */}
         <View style={styles.right}>
-          {/* Avatar / initials (only when signed in) */}
           {isSignedIn && (
             <View style={styles.avatar}>
               <Text style={{ color: colors.primary, fontWeight: "800" }}>{initials}</Text>
             </View>
           )}
 
-          {/* Clickable account label toggles a small panel;
-              also acts as a normal link if you just want to navigate */}
           <Link href={accountHref as any} asChild>
             <Pressable onPress={() => setMenuOpen((v) => !v)}>
               <Text style={styles.nav}>Account</Text>
             </Pressable>
           </Link>
 
-          {/* Inline panel */}
           {menuOpen && (
-            <View style={styles.panel}>
+            <View style={styles.panelHelper}>
               {!isSignedIn ? (
                 <>
                   <Text style={styles.panelTitle}>Sign in</Text>
+
+                  {/* Toggle */}
+                  <View style={styles.toggleRow}>
+                    <Pressable
+                      onPress={() => setMode("code")}
+                      style={[styles.toggleBtn, mode === "code" && styles.toggleBtnActive]}
+                    >
+                      <Text style={[styles.toggleText, mode === "code" && styles.toggleTextActive]}>
+                        6-Digit Code
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => setMode("link")}
+                      style={[styles.toggleBtn, mode === "link" && styles.toggleBtnActive]}
+                    >
+                      <Text style={[styles.toggleText, mode === "link" && styles.toggleTextActive]}>
+                        Magic Link
+                      </Text>
+                    </Pressable>
+                  </View>
+
                   <TextInput
-                    placeholder="you@example.com"
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                    value={email}
-                    onChangeText={setEmail}
-                    style={styles.input}
+                    placeholder="123456"
+                    keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                    maxLength={6}                        // <-- correct
+                    value={code}
+                    onChangeText={(t) => setCode(t.replace(/\D/g, ""))}
+                    style={styles.codeInput} 
                   />
-                  <Pressable onPress={sendMagicLink} style={styles.panelBtn}>
-                    <Text style={styles.panelBtnText}>Send login link</Text>
+
+                  <Pressable
+                    onPress={send}
+                    disabled={loading || !email.trim()}
+                    style={[styles.panelBtn, (!email.trim() || loading) && styles.panelBtnDisabled]}
+                  >
+                    {loading ? <ActivityIndicator /> : (
+                      <Text style={styles.panelBtnText}>
+                        {mode === "code" ? (codeSent ? "Resend code" : "Send code") : "Send magic link"}
+                      </Text>
+                    )}
                   </Pressable>
 
-                  {/* Full-page login route as backup */}
+                  {mode === "code" && codeSent && (
+                    <>
+                      <Text style={styles.panelHelper}>Enter the 6-digit code</Text>
+                      <TextInput
+                        placeholder="123456"
+                        keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                        maxLength={6}
+                        value={code}
+                        onChangeText={(t) => setCode(t.replace(/\D/g, ""))}
+                        style={styles.codeInput}
+                      />
+                      <Pressable
+                        onPress={verify}
+                        disabled={loading || code.length !== 6}
+                        style={[
+                          styles.panelBtnOutline,
+                          (loading || code.length !== 6) && styles.panelBtnDisabled,
+                        ]}
+                      >
+                        {loading ? <ActivityIndicator /> : (
+                          <Text style={styles.panelBtnOutlineText}>Verify & Sign in</Text>
+                        )}
+                      </Pressable>
+                    </>
+                  )}
+
+                  {/* Full login page as backup */}
                   <Link href="/auth/login" asChild>
                     <Pressable>
-                      <Text style={styles.panelLink}>Open login page →</Text>
+                      <Text style={styles.panelLink}>Open full login page →</Text>
                     </Pressable>
                   </Link>
                 </>
@@ -123,10 +217,8 @@ export default function Header() {
                   <Text style={styles.panelText}>{userEmail}</Text>
 
                   <Link href="/account" asChild>
-                    <Pressable style={[styles.panelBtn, styles.accountBtn]}>
-                      <Text style={[styles.panelBtnText, { color: colors.primary }]}>
-                        Go to Account
-                      </Text>
+                    <Pressable style={[styles.panelBtn, { backgroundColor: colors.secondary }]}>
+                      <Text style={[styles.panelBtnText, { color: colors.primary }]}>Go to Account</Text>
                     </Pressable>
                   </Link>
 
@@ -182,18 +274,16 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   avatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 999,
-    backgroundColor: "#fff",
-    alignItems: "center",
-    justifyContent: "center",
+    width: 28, height: 28, borderRadius: 999, backgroundColor: "#fff",
+    alignItems: "center", justifyContent: "center",
   },
-  panel: {
+
+  /* Panel */
+  panelHelper: {
     position: "absolute",
     top: 44,
     right: 0,
-    width: 280,
+    width: 300,
     backgroundColor: "#fff",
     borderRadius: 12,
     padding: 14,
@@ -211,19 +301,34 @@ const styles = StyleSheet.create({
   },
   panelTitle: { fontWeight: "800", color: colors.primary },
   panelText: { color: colors.text },
+  panelLink: { color: colors.primary, textDecorationLine: "underline", marginTop: 6 },
+
+  /* Toggle */
+  toggleRow: { flexDirection: "row", gap: 8 },
+  toggleBtn: {
+    flex: 1, paddingVertical: 10, borderRadius: 10,
+    borderWidth: 1, borderColor: "#ddd", alignItems: "center", backgroundColor: "#fff",
+  },
+  toggleBtnActive: { borderColor: colors.primary, backgroundColor: colors.primary },
+  toggleText: { fontWeight: "700", color: colors.text },
+  toggleTextActive: { color: "#fff" },
+
+  /* Inputs & buttons */
   input: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 10,
-    padding: 10,
+    borderWidth: 1, borderColor: "#ddd", borderRadius: 12, padding: 10, fontSize: 16, backgroundColor: "#fff",
+  },
+  codeInput: {
+    borderWidth: 1, borderColor: "#ddd", borderRadius: 12, padding: 12,
+    fontSize: 22, letterSpacing: 4, textAlign: "center", backgroundColor: "#fff",
   },
   panelBtn: {
-    backgroundColor: colors.primary,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: "center",
+    backgroundColor: colors.primary, paddingVertical: 12, borderRadius: 12, alignItems: "center",
   },
-  panelBtnText: { color: "#fff", fontWeight: "800" },
-  accountBtn: { backgroundColor: colors.secondary },
-  panelLink: { color: colors.primary, textDecorationLine: "underline", marginTop: 6 },
+  panelBtnDisabled: { opacity: 0.6 },
+  panelBtnText: { color: "#fff", fontWeight: "800", letterSpacing: 0.2 },
+  panelBtnOutline: {
+    borderWidth: 2, borderColor: colors.primary, borderRadius: 12,
+    alignItems: "center", paddingVertical: 12, backgroundColor: "#fff",
+  },
+  panelBtnOutlineText: { color: colors.primary, fontWeight: "800", letterSpacing: 0.2 },
 });
