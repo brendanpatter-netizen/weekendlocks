@@ -25,26 +25,6 @@ const colors = {
   subtext: "#555",
 };
 
-// ✅ shadow helpers
-const webShadow = { boxShadow: "0 12px 28px rgba(0,0,0,0.12)" } as const;
-const webShadowSm = { boxShadow: "0 8px 18px rgba(0,0,0,0.10)" } as const;
-const nativeShadow = {
-  shadowColor: "#000",
-  shadowOpacity: 0.12,
-  shadowRadius: 14,
-  shadowOffset: { width: 0, height: 8 },
-  elevation: 8,
-} as const;
-const nativeShadowSm = {
-  shadowColor: "#000",
-  shadowOpacity: 0.1,
-  shadowRadius: 10,
-  shadowOffset: { width: 0, height: 6 },
-  elevation: 6,
-} as const;
-const cardShadow = Platform.OS === "web" ? webShadow : nativeShadow;
-const smallShadow = Platform.OS === "web" ? webShadowSm : nativeShadowSm;
-
 export default function AccountPage() {
   const router = useRouter();
 
@@ -53,17 +33,14 @@ export default function AccountPage() {
     RobotoCondensed_700Bold,
   });
 
-  // don't block render on fonts
   const ffBold = loaded ? "RobotoCondensed_700Bold" : undefined;
   const ffReg = loaded ? "RobotoCondensed_400Regular" : undefined;
 
-  // profile state
   const [email, setEmail] = useState<string>("");
   const [displayName, setDisplayName] = useState("");
   const [username, setUsername] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
 
-  // password state
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
@@ -83,7 +60,6 @@ export default function AccountPage() {
     };
   }, []);
 
-  // Save display name + username
   const saveProfile = async () => {
     try {
       setSavingProfile(true);
@@ -102,7 +78,6 @@ export default function AccountPage() {
     }
   };
 
-  // Set / change password
   const savePassword = async () => {
     if (!newPassword || newPassword.length < 8) {
       Alert.alert("Password too short", "Use at least 8 characters.");
@@ -115,11 +90,9 @@ export default function AccountPage() {
     try {
       setSavingPassword(true);
 
-      // 1) update password
       const { error: pwError } = await supabase.auth.updateUser({ password: newPassword });
       if (pwError) throw pwError;
 
-      // 2) mark that a password exists so the app won't keep redirecting
       const { error: metaError } = await supabase.auth.updateUser({
         data: { password_set: true },
       });
@@ -128,7 +101,7 @@ export default function AccountPage() {
       setNewPassword("");
       setConfirmPassword("");
       Alert.alert("Password set", "You can now sign in with email + password.");
-      router.replace("/"); // send them home after success
+      router.replace("/");
     } catch (e: any) {
       Alert.alert("Couldn’t update password", e?.message ?? "Please try again.");
     } finally {
@@ -136,7 +109,6 @@ export default function AccountPage() {
     }
   };
 
-  // Robust sign-out
   const signOut = async () => {
     try {
       await supabase.auth.signOut();
@@ -217,7 +189,7 @@ export default function AccountPage() {
         </View>
 
         <Pressable onPress={signOut} style={styles.signOutBtn}>
-          <Text style={[styles.signOutText, { fontFamily: ffBold }]}>Sign out</Text>
+          <Text style={styles.signOutText}>Sign out</Text>
         </Pressable>
       </View>
     </View>
@@ -238,7 +210,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     gap: 16,
-    ...cardShadow,
+    borderWidth: 1,
+    borderColor: "#eaeaea",
   },
   title: { fontSize: 24, color: colors.primary, textTransform: "uppercase" },
   section: { gap: 10 },
@@ -267,7 +240,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 10,
-    ...smallShadow,
   },
   primaryBtnText: { color: "#fff", fontWeight: "800" },
   signOutBtn: {
@@ -276,7 +248,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 12,
-    ...smallShadow,
   },
-  signOutText: { color: colors.primary, fontSize: 16 },
+  signOutText: { color: colors.primary, fontSize: 16, fontWeight: "800" },
 });

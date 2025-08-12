@@ -22,26 +22,6 @@ const colors = {
   subtext: "#555",
 };
 
-// ✅ shadow helpers (objects only)
-const webShadow = { boxShadow: "0 12px 28px rgba(0,0,0,0.12)" } as const;
-const webShadowSm = { boxShadow: "0 8px 18px rgba(0,0,0,0.10)" } as const;
-const nativeShadow = {
-  shadowColor: "#000",
-  shadowOpacity: 0.12,
-  shadowRadius: 14,
-  shadowOffset: { width: 0, height: 8 },
-  elevation: 8,
-} as const;
-const nativeShadowSm = {
-  shadowColor: "#000",
-  shadowOpacity: 0.1,
-  shadowRadius: 10,
-  shadowOffset: { width: 0, height: 6 },
-  elevation: 6,
-} as const;
-const cardShadow = Platform.OS === "web" ? webShadow : nativeShadow;
-const smallShadow = Platform.OS === "web" ? webShadowSm : nativeShadowSm;
-
 type Mode = "code" | "link";
 
 export default function Header() {
@@ -266,8 +246,6 @@ const styles = StyleSheet.create({
   wrapper: {
     width: "100%",
     backgroundColor: colors.primary,
-    ...smallShadow,
-    zIndex: 50,
   },
   bar: {
     height: 64,
@@ -310,7 +288,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     gap: 10,
-    ...cardShadow,
+    borderWidth: 1,
+    borderColor: "#eaeaea",
   },
   panelTitle: { fontWeight: "800", color: colors.primary },
   panelText: { color: colors.text },
@@ -356,7 +335,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: "center",
-    ...smallShadow,
   },
   panelBtnDisabled: { opacity: 0.6 },
   panelBtnText: { color: "#fff", fontWeight: "800", letterSpacing: 0.2 },
@@ -367,7 +345,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
     backgroundColor: "#fff",
-    ...smallShadow,
   },
   panelBtnOutlineText: { color: colors.primary, fontWeight: "800", letterSpacing: 0.2 },
 });
