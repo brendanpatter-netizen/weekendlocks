@@ -1,127 +1,203 @@
-// app/picks/page.tsx – NFL picks
+// app/picks/page.tsx – NFL picks with structured save
 export const unstable_settings = { prerender: false };
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from "react";
 import {
-  ScrollView,
-  View,
-  Text,
-  StyleSheet,
-  ActivityIndicator,
-  Pressable,
-  Image,
-} from 'react-native';
-import { Picker } from '@react-native-picker/picker';
-import { Link } from 'expo-router';            // 👈 navigation
-import { getCurrentWeek } from '../../lib/nflWeeks';
-import { useOdds } from '../../lib/useOdds';
-import { logoSrc } from '../../lib/teamLogos';
+  ScrollView, View, Text, StyleSheet, ActivityIndicator, Pressable, Image, Alert
+} from "react-native";
+import { Picker } from "@react-native-picker/picker";
+import { Link } from "expo-router";
+import { supabase } from "@/lib/supabase";
+import { getCurrentWeek } from "../../lib/nflWeeks";
+import { useOdds } from "../../lib/useOdds";
+import { logoSrc } from "../../lib/teamLogos";
 
-type BetType = 'spreads' | 'totals' | 'h2h';
+type BetType = "spreads" | "totals" | "h2h";
+type WeekRow = { id: number; league: "nfl"|"cfb"; season: number; week_num: number; opens_at: string; closes_at: string };
+type GameRow = { id: number; week_id: number; home: string; away: string; kickoff_at: string };
 
-export default function PicksPage() {
-  /* -------- state -------- */
-  const [week, setWeek]   = useState<number>(getCurrentWeek() || 1);
-  const [betType, setBetType] = useState<BetType>('spreads');
+const NFL_SPORT_KEY = "americanfootball_nfl";
+const SEASON = 2025;
 
-  /* -------- fetch -------- */
-  const { data, error, loading } = useOdds('americanfootball_nfl', week);
+const nick = (name: string) => {
+  const p = name.trim().split(/\s+/);
+  return (p[p.length - 1] || "").toLowerCase();
+};
 
-  /* -------- status UI -------- */
+export default function PicksNFL() {
+  const [week, setWeek] = useState<number>(getCurrentWeek() || 1);
+  const [betType, setBetType] = useState<BetType>("spreads");
+  const [userId, setUserId] = useState<string | null>(null);
+  const [weekRow, setWeekRow] = useState<WeekRow | null>(null);
+  const [gameMap, setGameMap] = useState<Record<string, number>>({});
+  const [myPicks, setMyPicks] = useState<Record<number, string>>({});
+  const [saving, setSaving] = useState<number | null>(null);
+
+  const { data, error, loading } = useOdds(NFL_SPORT_KEY, week);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        // Week row
+        const { data: w } = await supabase
+          .from("weeks").select("*")
+          .eq("league", "nfl").eq("season", SEASON).eq("week_num", week)
+          .maybeSingle();
+        setWeekRow(w as any);
+
+        // Games mapping for this week
+        if (w?.id) {
+          const { data: g } = await supabase
+            .from("games").select("id, home, away, week_id").eq("week_id", w.id);
+          const map: Record<string, number> = {};
+          (g ?? []).forEach((row: any) => {
+            map[`${row.away.toLowerCase()}@${row.home.toLowerCase()}`] = row.id;
+            map[`${nick(row.away)}@${nick(row.home)}`] = row.id; // nickname key
+          });
+          setGameMap(map);
+
+          // My existing picks
+          const ids = (g ?? []).map((r: any) => r.id);
+          if (ids.length) {
+            const { data: ps } = await supabase.from("picks").select("game_id, pick_team");
+            const mine: Record<number, string> = {};
+            (ps ?? []).forEach((r: any) => { if (ids.includes(r.game_id)) mine[r.game_id] = r.pick_team; });
+            setMyPicks(mine);
+          } else setMyPicks({});
+        } else {
+          setGameMap({});
+          setMyPicks({});
+        }
+      } catch {}
+    })();
+  }, [week]);
+
+  const isOpen = useMemo(() => {
+    if (!weekRow) return false;
+    const now = Date.now();
+    return now >= Date.parse(weekRow.opens_at) && now < Date.parse(weekRow.closes_at);
+  }, [weekRow]);
+
+  const labelFor = (type: BetType, o: any) => {
+    if (type === "spreads") return `${o.name} ${o.point}`;
+    if (type === "h2h")     return `${o.name} ML`;
+    return `${o.name} ${o.point}`;
+  };
+
+  const savePick = async (oddsGame: any, type: BetType, o: any) => {
+    if (!userId) return Alert.alert("Please sign in");
+    if (!isOpen)  return Alert.alert("Closed", "Picks are closed for this week.");
+
+    const mappedId =
+      gameMap[`${oddsGame.away_team.toLowerCase()}@${oddsGame.home_team.toLowerCase()}`] ??
+      gameMap[`${nick(oddsGame.away_team)}@${nick(oddsGame.home_team)}`];
+
+    if (!mappedId) return Alert.alert("Can’t save", "No internal game found for this matchup.");
+
+    const label = labelFor(type, o);
+    setSaving(mappedId);
+
+    try {
+      const payload = {
+        user_id: userId,
+        game_id: mappedId,
+        // pretty label for feed
+        pick_team: label,
+        // structured fields for grading
+        pick_market: type,                  // 'spreads' | 'totals' | 'h2h'
+        pick_side: String(o.name),          // 'Eagles' | 'Chiefs' | 'Over' | 'Under'
+        pick_line: typeof o.point === "number" ? o.point : (o.point ? Number(o.point) : null),
+        pick_price: typeof o.price === "number" ? o.price : null,
+        sport: "nfl",
+        week,
+        status: "pending",
+        created_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase
+        .from("picks")
+        .upsert(payload, { onConflict: "user_id,game_id" });
+      if (error) throw error;
+
+      setMyPicks((m) => ({ ...m, [mappedId]: label }));
+    } catch (e: any) {
+      Alert.alert("Couldn’t save pick", e?.message ?? "Try again.");
+    } finally {
+      setSaving(null);
+    }
+  };
+
   if (loading) return <ActivityIndicator style={styles.center} size="large" />;
   if (error)   return <Text style={styles.center}>Error: {error.message}</Text>;
-  if (!data?.length) {
-    return (
-      <View style={styles.center}>
-        <Text>No games found for week {week}.</Text>
-      </View>
-    );
-  }
+  if (!data?.length) return <View style={styles.center}><Text>No games found for week {week}.</Text></View>;
 
-  /* -------- render -------- */
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      {/* header with cross‑link to college */}
       <View style={styles.headerRow}>
-      <Text style={styles.title}>NFL Picks – Week {week}</Text>
-      <Link
-        href={{ pathname: '/picks/college' }}
-        style={styles.switch}
-  >
-    NCAA ↗︎
-  </Link>
-</View>
+        <Text style={styles.title}>NFL Picks — Week {week}</Text>
+        <Link href="/picks/college" style={styles.switch}>NCAA ↗︎</Link>
+      </View>
 
-
-      {/* Week picker */}
-      <Picker
-        selectedValue={week}
-        onValueChange={val => setWeek(Number(val))}
-        style={{ marginBottom: 12 }}
-      >
-        {[...Array(18)].map((_, i) => (
-          <Picker.Item key={i + 1} label={`Week ${i + 1}`} value={i + 1} />
-        ))}
+      <Picker selectedValue={week} onValueChange={(v) => setWeek(Number(v))} style={{ marginBottom: 12 }}>
+        {[...Array(18)].map((_, i) => <Picker.Item key={i+1} label={`Week ${i+1}`} value={i+1} />)}
       </Picker>
 
-      {/* Bet-type tabs */}
       <View style={styles.tabs}>
-        {(['spreads', 'totals', 'h2h'] as BetType[]).map(type => (
-          <Pressable
-            key={type}
-            onPress={() => setBetType(type)}
-            style={[styles.tab, betType === type && styles.tabActive]}
-          >
-            <Text style={betType === type && styles.tabActiveText}>
-              {type.toUpperCase()}
-            </Text>
+        {(["spreads","totals","h2h"] as BetType[]).map((t) => (
+          <Pressable key={t} onPress={() => setBetType(t)} style={[styles.tab, betType===t && styles.tabActive]}>
+            <Text style={betType===t && styles.tabActiveText}>{t.toUpperCase()}</Text>
           </Pressable>
         ))}
       </View>
 
-      {/* Game cards */}
-      {data.map(game => {
-        const book = game.bookmakers[0];
-        if (!book) return null;
-
-        const market = book.markets.find(m => m.key === betType);
+      {data.map((game: any) => {
+        const book = game.bookmakers?.[0];
+        const market = book?.markets?.find((m: any) => m.key === betType);
         if (!market) return null;
 
-        /* helpers based on bet type */
-        let lineText = '';
-
-        if (betType === 'spreads' || betType === 'h2h') {
-          const home = market.outcomes.find((o: any) => o.name === game.home_team);
-          const away = market.outcomes.find((o: any) => o.name === game.away_team);
-          if (!home || !away) return null;
-
-          lineText =
-            betType === 'spreads'
-              ? `${away.name} ${away.point} / ${home.name} ${home.point}`
-              : `ML: ${away.price} / ${home.price}`;
-        } else if (betType === 'totals') {
-          const over  = market.outcomes.find((o: any) => o.name === 'Over');
-          const under = market.outcomes.find((o: any) => o.name === 'Under');
-          if (!over || !under) return null;
-          lineText = `Total ${over.point}  Over ${over.price} / Under ${under.price}`;
-        }
+        const mappedId =
+          gameMap[`${game.away_team.toLowerCase()}@${game.home_team.toLowerCase()}`] ??
+          gameMap[`${nick(game.away_team)}@${nick(game.home_team)}`];
 
         return (
           <View key={game.id} style={styles.card}>
-            {/* Team logos graphic */}
             <View style={styles.logosRow}>
-              <Image source={logoSrc(game.away_team, 'nfl')} style={styles.logo} />
+              <Image source={logoSrc(game.away_team, "nfl")} style={styles.logo} />
               <Text style={styles.vs}>@</Text>
-              <Image source={logoSrc(game.home_team, 'nfl')} style={styles.logo} />
+              <Image source={logoSrc(game.home_team, "nfl")} style={styles.logo} />
+            </View>
+            <Text style={styles.match}>{game.away_team} @ {game.home_team}</Text>
+            <Text style={styles.kick}>{new Date(game.commence_time).toLocaleString()}</Text>
+
+            <View style={{ marginTop: 8, gap: 8 }}>
+              {(market.outcomes ?? []).map((o: any) => {
+                const label = labelFor(betType, o);
+                const isMine = mappedId ? myPicks[mappedId] === label : false;
+                return (
+                  <Pressable
+                    key={o.name + String(o.point ?? "")}
+                    disabled={!isOpen || !mappedId || saving === mappedId}
+                    onPress={() => savePick(game, betType, o)}
+                    style={[
+                      styles.pickBtn,
+                      isMine && styles.pickBtnActive,
+                      (!isOpen || !mappedId || saving === mappedId) && styles.pickBtnDisabled,
+                    ]}
+                  >
+                    <Text style={[styles.pickText, isMine && styles.pickTextActive]}>
+                      {label}
+                      {typeof o.price === "number" ? `  (${o.price > 0 ? `+${o.price}` : o.price})` : ""}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
 
-            <Text style={styles.match}>
-              {game.away_team} @ {game.home_team}
-            </Text>
-            <Text>{lineText}</Text>
-            <Text style={styles.kick}>
-              {new Date(game.commence_time).toLocaleString()}
-            </Text>
+            {!mappedId && <Text style={styles.note}>(No internal game found – check `games` table names.)</Text>}
           </View>
         );
       })}
@@ -129,25 +205,26 @@ export default function PicksPage() {
   );
 }
 
-/* -------- styles -------- */
 const styles = StyleSheet.create({
-  center:      { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
-  container:   { padding: 16, gap: 12 },
-  /* header */
-  headerRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  title:       { fontSize: 20, fontWeight: '600' },
-  switch:      { color: '#0a84ff', fontSize: 16 },
-  /* tabs */
-  tabs:        { flexDirection: 'row', marginBottom: 12 },
-  tab:         { flex: 1, padding: 8, borderWidth: 1, borderColor: '#999', alignItems: 'center' },
-  tabActive:   { backgroundColor: '#000' },
-  tabActiveText:{ color: '#fff' },
-  /* card */
-  card:        { padding: 12, borderWidth: 1, borderRadius: 8, borderColor: '#ccc' },
-  match:       { fontWeight: 'bold', marginBottom: 4, fontSize: 16 },
-  kick:        { marginTop: 4, fontSize: 12, opacity: 0.7 },
-  /* logos */
-  logosRow:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', columnGap: 8, marginBottom: 6 },
-  logo:        { width: 42, height: 42, borderRadius: 21 },
-  vs:          { fontWeight: 'bold', fontSize: 16 },
+  center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
+  container: { padding: 16, gap: 12 },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
+  title: { fontSize: 20, fontWeight: "600" },
+  switch: { color: "#0a84ff", fontSize: 16 },
+  tabs: { flexDirection: "row", marginBottom: 12, gap: 8 },
+  tab: { flex: 1, padding: 8, borderWidth: 1, borderColor: "#999", alignItems: "center" },
+  tabActive: { backgroundColor: "#000" },
+  tabActiveText: { color: "#fff" },
+  card: { padding: 12, borderWidth: 1, borderRadius: 8, borderColor: "#ccc" },
+  match: { fontWeight: "bold", marginBottom: 2, fontSize: 16 },
+  kick: { marginTop: 2, fontSize: 12, opacity: 0.7 },
+  logosRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", columnGap: 8, marginBottom: 6 },
+  logo: { width: 42, height: 42, borderRadius: 21 },
+  vs: { fontWeight: "bold", fontSize: 16 },
+  pickBtn: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: "#bbb", backgroundColor: "#fff" },
+  pickBtnActive: { borderColor: "#006241", backgroundColor: "#E9F4EF" },
+  pickBtnDisabled: { opacity: 0.5 },
+  pickText: { fontWeight: "800", color: "#222" },
+  pickTextActive: { color: "#006241" },
+  note: { marginTop: 6, fontSize: 12, color: "#9a6a00" },
 });
