@@ -1,7 +1,7 @@
-// app/index.tsx — Home: All Picks | Leaderboard | Live Picks
+// app/index.tsx — Home: Live Picks | All Picks | Leaderboard (web-safe styles)
 export const unstable_settings = { prerender: false };
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, FlatList } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { Link } from "expo-router";
@@ -39,7 +39,7 @@ type LiveRow = {
 
 /* ---------- Page ---------- */
 export default function Home() {
-  const [tab, setTab] = useState<"feed" | "board" | "live">("live");
+  const [tab, setTab] = useState<"live" | "feed" | "board">("live");
   const [league, setLeague] = useState<League>("nfl");
   const [loading, setLoading] = useState(true);
   const [feed, setFeed] = useState<FeedRow[]>([]);
@@ -47,13 +47,12 @@ export default function Home() {
   const [live, setLive] = useState<LiveRow[]>([]);
   const [loadingLive, setLoadingLive] = useState(true);
 
-  // Feed + leaderboard (same as before)
+  // Feed + leaderboard
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
         setLoading(true);
-
         const { data, error } = await supabase
           .from("picks")
           .select(`
@@ -80,7 +79,7 @@ export default function Home() {
     return () => { mounted = false; };
   }, [league]);
 
-  // Live picks (new)
+  // Live picks
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -96,27 +95,32 @@ export default function Home() {
       }
     })();
     return () => { mounted = false; };
-  }, []); // refresh on pull-to-refresh if you add it
+  }, []);
 
   return (
     <View style={s.screen}>
       {/* Tabs */}
       <View style={s.tabs}>
-        {(["live","feed","board"] as const).map((t) => (
-          <Pressable key={t} onPress={() => setTab(t)} style={[s.tab, tab === t && s.tabActive]}>
-            <Text style={[s.tabText, tab === t && s.tabTextActive]}>
-              {t === "live" ? "Live Picks" : t === "feed" ? "All Picks" : "Leaderboard"}
-            </Text>
-          </Pressable>
-        ))}
+        <Pressable onPress={() => setTab("live")} style={[s.tab, tab === "live" && s.tabActive]}>
+          <Text style={[s.tabText, tab === "live" && s.tabTextActive]}>Live Picks</Text>
+        </Pressable>
+        <View style={{ width: 8 }} />
+        <Pressable onPress={() => setTab("feed")} style={[s.tab, tab === "feed" && s.tabActive]}>
+          <Text style={[s.tabText, tab === "feed" && s.tabTextActive]}>All Picks</Text>
+        </Pressable>
+        <View style={{ width: 8 }} />
+        <Pressable onPress={() => setTab("board")} style={[s.tab, tab === "board" && s.tabActive]}>
+          <Text style={[s.tabText, tab === "board" && s.tabTextActive]}>Leaderboard</Text>
+        </Pressable>
       </View>
 
-      {/* Quick league toggle for Feed/Board */}
+      {/* League toggle for Feed/Board */}
       {tab !== "live" && (
         <View style={s.inlineLeague}>
           <Pressable onPress={() => setLeague("cfb")} style={[s.inlineChip, league === "cfb" && s.inlineChipActive]}>
             <Text style={[s.inlineChipText, league === "cfb" && s.inlineChipTextActive]}>CFB</Text>
           </Pressable>
+          <View style={{ width: 8 }} />
           <Pressable onPress={() => setLeague("nfl")} style={[s.inlineChip, league === "nfl" && s.inlineChipActive]}>
             <Text style={[s.inlineChipText, league === "nfl" && s.inlineChipTextActive]}>NFL</Text>
           </Pressable>
@@ -126,13 +130,16 @@ export default function Home() {
       {tab === "live" ? (
         <LivePicks loading={loadingLive} rows={live} />
       ) : tab === "feed" ? (
-        loading ? <ActivityIndicator style={{ marginTop: 24 }} /> : (
+        loading ? (
+          <ActivityIndicator style={{ marginTop: 24 }} />
+        ) : (
           <FlatList
             ListHeaderComponent={<MakeYourPicksBanner />}
             data={feed}
             keyExtractor={(r) => String(r.id)}
             renderItem={({ item }) => <FeedItem row={item} />}
-            contentContainerStyle={{ padding: 16, gap: 12 }}
+            contentContainerStyle={s.feedContainer}
+            ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
           />
         )
       ) : (
@@ -148,10 +155,11 @@ function MakeYourPicksBanner() {
   return (
     <View style={s.banner}>
       <Text style={s.bannerTitle}>Make Your Picks</Text>
-      <View style={s.leagueSwitch}>
+      <View style={s.leagueSwitchRow}>
         <Link href="/picks/college" asChild>
           <Pressable style={[s.chip, s.chipActive]}><Text style={[s.chipText, s.chipTextActive]}>College Football</Text></Pressable>
         </Link>
+        <View style={{ width: 8 }} />
         <Link href="/picks/page" asChild>
           <Pressable style={[s.chip, s.chipActive]}><Text style={[s.chipText, s.chipTextActive]}>NFL</Text></Pressable>
         </Link>
@@ -177,7 +185,11 @@ function FeedItem({ row }: { row: FeedRow }) {
       <Text style={s.main}>
         {row.pick_team}{g ? ` — ${g.away} vs ${g.home}` : ""}
       </Text>
-      {statusText ? <Text style={[s.pill, statusStyle]}>{statusText}</Text> : null}
+      {!!statusText && (
+        <View style={[s.pill, statusStyle]}>
+          <Text style={s.pillText}>{statusText}</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -185,10 +197,10 @@ function FeedItem({ row }: { row: FeedRow }) {
 function Leaderboard({ loading, rows }: { loading: boolean; rows: BoardRow[] }) {
   if (loading) return <ActivityIndicator style={{ marginTop: 24 }} />;
   return (
-    <View style={{ padding: 16, gap: 10 }}>
+    <View style={{ padding: 16 }}>
       {rows.length === 0 ? <Text style={s.dim}>No results yet.</Text> :
         rows.map((r) => (
-          <View key={r.user_id} style={s.leadRow}>
+          <View key={r.user_id} style={[s.leadRow, { marginBottom: 10 }]}>
             <Text style={s.user}>{r.username ?? "User"}</Text>
             <Text style={s.dim}>{r.wins}W–{r.losses}L</Text>
           </View>
@@ -201,18 +213,18 @@ function LivePicks({ loading, rows }: { loading: boolean; rows: LiveRow[] }) {
   if (loading) return <ActivityIndicator style={{ marginTop: 24 }} />;
 
   return (
-    <View style={{ padding: 16, gap: 10 }}>
+    <View style={{ padding: 16 }}>
       <Text style={s.sectionTitle}>This Week’s Picks</Text>
       <View style={s.legendRow}>
         <Text style={[s.legend, {flex: 2}]}>User</Text>
-        <Text style={[s.legend, {flex: 3}]}>CFB</Text>
-        <Text style={[s.legend, {flex: 3}]}>NFL</Text>
+        <Text style={[s.legend, {flex: 3, textAlign: "center"}]}>CFB</Text>
+        <Text style={[s.legend, {flex: 3, textAlign: "center"}]}>NFL</Text>
       </View>
 
       {rows.length === 0 ? (
         <Text style={s.dim}>No picks yet. Ask everyone to make their weekly picks!</Text>
       ) : rows.map((r) => (
-        <View key={r.user_id} style={s.liveRow}>
+        <View key={r.user_id} style={[s.liveRow, { marginBottom: 10 }]}>
           <Text style={[s.user, {flex: 2}]} numberOfLines={1}>{r.username ?? "User"}</Text>
 
           <View style={{flex: 3}}>
@@ -220,7 +232,11 @@ function LivePicks({ loading, rows }: { loading: boolean; rows: LiveRow[] }) {
               <>
                 <Text style={s.livePick} numberOfLines={1}>{r.cfb_pick}</Text>
                 <Text style={s.dim} numberOfLines={1}>{r.cfb_matchup}</Text>
-                {r.cfb_status ? <Text style={[s.pill, pillFor(r.cfb_status)]}>{r.cfb_status.toUpperCase()}</Text> : null}
+                {!!r.cfb_status && (
+                  <View style={[s.pill, pillFor(r.cfb_status)]}>
+                    <Text style={s.pillText}>{r.cfb_status.toUpperCase()}</Text>
+                  </View>
+                )}
               </>
             ) : <Text style={s.dim}>—</Text>}
           </View>
@@ -230,7 +246,11 @@ function LivePicks({ loading, rows }: { loading: boolean; rows: LiveRow[] }) {
               <>
                 <Text style={s.livePick} numberOfLines={1}>{r.nfl_pick}</Text>
                 <Text style={s.dim} numberOfLines={1}>{r.nfl_matchup}</Text>
-                {r.nfl_status ? <Text style={[s.pill, pillFor(r.nfl_status)]}>{r.nfl_status.toUpperCase()}</Text> : null}
+                {!!r.nfl_status && (
+                  <View style={[s.pill, pillFor(r.nfl_status)]}>
+                    <Text style={s.pillText}>{r.nfl_status.toUpperCase()}</Text>
+                  </View>
+                )}
               </>
             ) : <Text style={s.dim}>—</Text>}
           </View>
@@ -265,13 +285,13 @@ function timeAgo(iso: string) {
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#F5F5F5" },
 
-  tabs: { flexDirection: "row", marginTop: 8, paddingHorizontal: 16, gap: 8 },
+  tabs: { flexDirection: "row", marginTop: 8, paddingHorizontal: 16 },
   tab: { flex: 1, alignItems: "center", paddingVertical: 10, borderWidth: 1, borderColor: "#ddd", backgroundColor: "#fff" },
   tabActive: { backgroundColor: "#111" },
   tabText: { fontWeight: "800", color: "#222" },
   tabTextActive: { color: "#fff" },
 
-  inlineLeague: { flexDirection: "row", gap: 8, paddingHorizontal: 16, marginTop: 10 },
+  inlineLeague: { flexDirection: "row", paddingHorizontal: 16, marginTop: 10, alignItems: "center" },
   inlineChip: { paddingVertical: 6, paddingHorizontal: 12, borderWidth: 1, borderColor: "#ccc", borderRadius: 999, backgroundColor: "#fff" },
   inlineChipActive: { backgroundColor: "#E9F4EF", borderColor: "#006241" },
   inlineChipText: { fontWeight: "700", color: "#222" },
@@ -279,29 +299,32 @@ const s = StyleSheet.create({
 
   banner: { backgroundColor: "#fff", borderWidth: 1, borderColor: "#eee", borderRadius: 12, padding: 16, marginHorizontal: 16, marginTop: 12 },
   bannerTitle: { fontSize: 22, fontWeight: "900", marginBottom: 10 },
-  leagueSwitch: { flexDirection: "row", gap: 8 },
+  leagueSwitchRow: { flexDirection: "row", alignItems: "center" },
   chip: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: "#ddd", backgroundColor: "#fff" },
   chipActive: { backgroundColor: "#E9F4EF", borderColor: "#006241" },
   chipText: { fontWeight: "800", color: "#222" },
   chipTextActive: { color: "#006241" },
 
-  card: { marginTop: 12, backgroundColor: "#fff", borderRadius: 12, borderWidth: 1, borderColor: "#eee", padding: 12, marginHorizontal: 16, gap: 6 },
+  feedContainer: { padding: 16 },
+
+  card: { backgroundColor: "#fff", borderRadius: 12, borderWidth: 1, borderColor: "#eee", padding: 12 },
   userRow: { fontSize: 14 },
   user: { fontWeight: "900", color: "#111" },
   dim: { color: "#666" },
   main: { fontSize: 16, fontWeight: "600", color: "#222" },
 
-  pill: { alignSelf: "flex-start", marginTop: 4, paddingVertical: 3, paddingHorizontal: 8, borderRadius: 999, fontWeight: "800" } as any,
-  pillBlue:  { backgroundColor: "#E7F0FF", color: "#0055CC" },
-  pillGreen: { backgroundColor: "#E8F6EF", color: "#0F7B3E" },
-  pillRed:   { backgroundColor: "#FDECEA", color: "#B71C1C" },
-  pillGray:  { backgroundColor: "#EEE", color: "#444" },
+  pill: { alignSelf: "flex-start", marginTop: 4, borderRadius: 999, paddingVertical: 3, paddingHorizontal: 8 },
+  pillText: { fontWeight: "800" },
+  pillBlue:  { backgroundColor: "#E7F0FF" },
+  pillGreen: { backgroundColor: "#E8F6EF" },
+  pillRed:   { backgroundColor: "#FDECEA" },
+  pillGray:  { backgroundColor: "#EEE" },
 
-  leadRow: { backgroundColor: "#fff", borderRadius: 12, borderWidth: 1, borderColor: "#eee", padding: 12, marginHorizontal: 16, flexDirection: "row", justifyContent: "space-between" },
+  leadRow: { backgroundColor: "#fff", borderRadius: 12, borderWidth: 1, borderColor: "#eee", padding: 12, flexDirection: "row", justifyContent: "space-between" },
 
   sectionTitle: { fontWeight: "900", fontSize: 18, marginBottom: 6 },
   legendRow: { flexDirection: "row", paddingHorizontal: 4, marginBottom: 4 },
   legend: { color: "#666", fontWeight: "700" },
-  liveRow: { backgroundColor: "#fff", borderRadius: 12, borderWidth: 1, borderColor: "#eee", padding: 12, gap: 6, flexDirection: "row", alignItems: "flex-start" },
+  liveRow: { backgroundColor: "#fff", borderRadius: 12, borderWidth: 1, borderColor: "#eee", padding: 12, flexDirection: "row", alignItems: "flex-start" },
   livePick: { fontWeight: "800", color: "#222" },
 });
