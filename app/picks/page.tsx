@@ -5,15 +5,21 @@ import { ScrollView, View, Text, StyleSheet, ActivityIndicator, Pressable, Image
 import { Picker } from "@react-native-picker/picker";
 import { Link } from "expo-router";
 import { supabase } from "@/lib/supabase";
-import { getCurrentWeek } from "../../lib/nflWeeks";
-import { useOdds } from "../../lib/useOdds";
-import { logoSrc } from "../../lib/teamLogos";
+import { events } from "@/lib/events";
+import { useOdds } from "@/lib/useOdds";
+import { logoSrc } from "@/lib/teamLogos";
 
+// ---------- config ----------
 type BetType = "spreads" | "totals" | "h2h";
 const NFL_SPORT_KEY = "americanfootball_nfl";
 const SEASON = 2025;
 
-/** Robust normalize — last token + some common aliases */
+// If you have a util for current week, import that. Fallback to 1.
+function getCurrentWeek() {
+  return 1;
+}
+
+// ---------- team normalization ----------
 const NFL_ALIASES: Record<string, string> = {
   "dallas": "cowboys",
   "cowboys": "cowboys",
@@ -22,40 +28,96 @@ const NFL_ALIASES: Record<string, string> = {
   "san francisco": "49ers",
   "niners": "49ers",
   "49ers": "49ers",
-  "new york": "giants", // rough; adjust if you also have jets in same week
+  "new york": "giants",
   "giants": "giants",
   "jets": "jets",
+  "kansas": "chiefs",
   "kansas city": "chiefs",
   "chiefs": "chiefs",
-  // add more as needed
+  "green bay": "packers",
+  "packers": "packers",
+  "new england": "patriots",
+  "patriots": "patriots",
+  "pittsburgh": "steelers",
+  "steelers": "steelers",
+  "cleveland": "browns",
+  "browns": "browns",
+  "los angeles": "rams",
+  "rams": "rams",
+  "chargers": "chargers",
+  "seattle": "seahawks",
+  "seahawks": "seahawks",
+  "buffalo": "bills",
+  "bills": "bills",
+  "miami": "dolphins",
+  "dolphins": "dolphins",
+  "baltimore": "ravens",
+  "ravens": "ravens",
+  "houston": "texans",
+  "texans": "texans",
+  "jacksonville": "jaguars",
+  "jaguars": "jaguars",
+  "detroit": "lions",
+  "lions": "lions",
+  "minnesota": "vikings",
+  "vikings": "vikings",
+  "atlanta": "falcons",
+  "falcons": "falcons",
+  "new orleans": "saints",
+  "saints": "saints",
+  "tampa bay": "buccaneers",
+  "buccaneers": "buccaneers",
+  "chicago": "bears",
+  "bears": "bears",
+  "indianapolis": "colts",
+  "colts": "colts",
+  "tennessee": "titans",
+  "titans": "titans",
+  "cincinnati": "bengals",
+  "bengals": "bengals",
+  "carolina": "panthers",
+  "panthers": "panthers",
+  "washington": "commanders",
+  "commanders": "commanders",
+  "las vegas": "raiders",
+  "raiders": "raiders",
+  "denver": "broncos",
+  "broncos": "broncos",
+  "arizona": "cardinals",
+  "cardinals": "cardinals",
 };
 function normTeamNFL(name: string) {
-  const raw = name.toLowerCase().replace(/[^\w\s]/g, "").trim();
+  const raw = name.toLowerCase().replace(/[^\w\s-]/g, "").trim();
+  if (NFL_ALIASES[raw]) return NFL_ALIASES[raw];
   const parts = raw.split(/\s+/);
   const last = parts[parts.length - 1];
-  return NFL_ALIASES[raw] || NFL_ALIASES[last] || last;
+  return NFL_ALIASES[last] || last;
 }
 
+// ---------- component ----------
 export default function PicksNFL() {
-  const [week, setWeek] = useState<number>(getCurrentWeek() || 1);
+  const [week, setWeek] = useState<number>(getCurrentWeek());
   const [betType, setBetType] = useState<BetType>("spreads");
+
   const [userId, setUserId] = useState<string | null>(null);
   const [weekRow, setWeekRow] = useState<any>(null);
   const [gameMap, setGameMap] = useState<Record<string, number>>({});
   const [myPicks, setMyPicks] = useState<Record<number, string>>({});
   const [saving, setSaving] = useState<number | null>(null);
-  const [blockMsg, setBlockMsg] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
+  // odds
   const { data, error, loading } = useOdds(NFL_SPORT_KEY, week);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
   }, []);
 
+  // Pull weeks/games and build a mapping; also pre-load existing picks
   useEffect(() => {
     (async () => {
-      setBlockMsg(null);
-      // get the internal week row
+      setNotice(null);
+
       const { data: w, error: wErr } = await supabase
         .from("weeks")
         .select("*")
@@ -63,32 +125,33 @@ export default function PicksNFL() {
         .eq("season", SEASON)
         .eq("week_num", week)
         .maybeSingle();
-      if (wErr) setBlockMsg(`weeks query: ${wErr.message}`);
+
+      if (wErr) setNotice(`weeks: ${wErr.message}`);
       setWeekRow(w);
 
-      // build game map: away@home -> id (use normalized nicknames)
       if (w?.id) {
         const { data: g, error: gErr } = await supabase
           .from("games")
           .select("id, home, away, week_id")
           .eq("week_id", w.id);
-        if (gErr) setBlockMsg(`games query: ${gErr.message}`);
+
+        if (gErr) setNotice(`games: ${gErr.message}`);
 
         const map: Record<string, number> = {};
         (g ?? []).forEach((row: any) => {
-          const key = `${normTeamNFL(row.away)}@${normTeamNFL(row.home)}`;
-          map[key] = row.id;
+          map[`${normTeamNFL(row.away)}@${normTeamNFL(row.home)}`] = row.id;
         });
         setGameMap(map);
 
-        // my existing picks for these games
         const ids = (g ?? []).map((r: any) => r.id);
         if (ids.length) {
           const { data: ps, error: pErr } = await supabase
             .from("picks")
             .select("game_id, pick_team")
             .in("game_id", ids);
-          if (pErr) setBlockMsg(`picks query: ${pErr.message}`);
+
+          if (pErr) setNotice(`picks: ${pErr.message}`);
+
           const mine: Record<number, string> = {};
           (ps ?? []).forEach((r: any) => { mine[r.game_id] = r.pick_team; });
           setMyPicks(mine);
@@ -108,24 +171,34 @@ export default function PicksNFL() {
     return now >= Date.parse(weekRow.opens_at) && now < Date.parse(weekRow.closes_at);
   }, [weekRow]);
 
+  const openLabel = useMemo(() => {
+    if (!weekRow) return "";
+    const closes = new Date(weekRow.closes_at);
+    return isOpen ? `OPEN – closes ${closes.toLocaleString()}` : `CLOSED – closed ${closes.toLocaleString()}`;
+  }, [isOpen, weekRow]);
+
   const labelFor = (type: BetType, o: any) =>
-    type === "spreads" ? `${o.name} ${o.point}` : type === "h2h" ? `${o.name} ML` : `${o.name} ${o.point}`;
+    type === "spreads" ? `${o.name} ${o.point}` :
+    type === "h2h"     ? `${o.name} ML` :
+                         `${o.name} ${o.point}`;
 
   const savePick = async (oddsGame: any, type: BetType, o: any) => {
-    if (!userId) { Alert.alert("Please sign in to save picks."); return; }
-    if (!isOpen) { Alert.alert("Closed", "Picks are closed for this week."); return; }
+    if (!userId) { Alert.alert("Sign in required", "Please sign in to save picks."); return; }
+    if (!isOpen)  { Alert.alert("Picks closed", openLabel); return; }
 
-    const away = normTeamNFL(oddsGame.away_team);
-    const home = normTeamNFL(oddsGame.home_team);
-    const key = `${away}@${home}`;
+    const key = `${normTeamNFL(oddsGame.away_team)}@${normTeamNFL(oddsGame.home_team)}`;
     const mappedId = gameMap[key];
 
     if (!mappedId) {
-      Alert.alert("Can’t match game", `Couldn’t map "${oddsGame.away_team} @ ${oddsGame.home_team}" to an internal game.\n\nLookup key: ${key}`);
+      Alert.alert(
+        "Can’t match game",
+        `The odds game couldn't be matched to your internal 'games' row.\n\nLookup key used:\n${key}\n\nCheck 'games' (away/home) and 'weeks' linkage.`
+      );
       return;
     }
 
     const label = labelFor(type, o);
+
     setSaving(mappedId);
     try {
       const payload = {
@@ -141,14 +214,25 @@ export default function PicksNFL() {
         status: "pending",
         created_at: new Date().toISOString(),
       };
+
       const { error: upErr } = await supabase
         .from("picks")
-        .upsert(payload, { onConflict: "user_id,game_id" }); // requires unique(user_id,game_id)
+        .upsert(payload, { onConflict: "user_id,game_id" });
+
       if (upErr) {
+        // If this fires, it’s usually an RLS policy blocking the insert
         Alert.alert("Save failed", upErr.message);
         return;
       }
+
+      // local echo
       setMyPicks((m) => ({ ...m, [mappedId]: label }));
+
+      // notify Home (same tab)
+      events.emitPickSaved({
+        league: "nfl", week, game_id: mappedId, user_id: userId!, pick_team: label,
+      });
+
       Alert.alert("Saved", `Your pick: ${label}`);
     } catch (e: any) {
       Alert.alert("Error", String(e?.message || e));
@@ -158,7 +242,7 @@ export default function PicksNFL() {
   };
 
   if (loading) return <ActivityIndicator style={styles.center} size="large" />;
-  if (error) return <Text style={styles.center}>Error: {error.message}</Text>;
+  if (error)   return <Text style={styles.center}>Error: {error.message}</Text>;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -167,22 +251,26 @@ export default function PicksNFL() {
         <Link href="/picks/college" style={styles.switch}>NCAA ↗︎</Link>
       </View>
 
+      <Text style={[styles.badge, isOpen ? styles.badgeOpen : styles.badgeClosed]}>{openLabel}</Text>
+
       <Picker selectedValue={week} onValueChange={(v) => setWeek(Number(v))} style={{ marginBottom: 12 }}>
         {Array.from({ length: 18 }).map((_, i) => (
           <Picker.Item key={i + 1} label={`Week ${i + 1}`} value={i + 1} />
         ))}
       </Picker>
 
-      {!!blockMsg && <Text style={styles.warn}>{blockMsg}</Text>}
+      {!!notice && <Text style={styles.warn}>{notice}</Text>}
 
       {!data?.length ? (
         <View style={styles.center}><Text>No games found for week {week}.</Text></View>
-      ) : data.map((game: any) => {
+      ) : (
+        data.map((game: any) => {
           const book = game.bookmakers?.[0];
           const market = book?.markets?.find((m: any) => m.key === betType);
           if (!market) return null;
 
           const mappedId = gameMap[`${normTeamNFL(game.away_team)}@${normTeamNFL(game.home_team)}`];
+          const disabledWholeCard = !isOpen || !mappedId;
 
           return (
             <View key={game.id} style={styles.card}>
@@ -191,14 +279,23 @@ export default function PicksNFL() {
                 <Text style={styles.vs}>@</Text>
                 <Image source={logoSrc(game.home_team, "nfl")} style={styles.logo} />
               </View>
+
               <Text style={styles.match}>{game.away_team} @ {game.home_team}</Text>
               <Text style={styles.kick}>{new Date(game.commence_time).toLocaleString()}</Text>
 
-              <View style={{ marginTop: 8 }}>
+              {/* Bet type row (optional; keep spreads default) */}
+              {/* <View style={styles.typeRow}>
+                <Chip active={betType === "spreads"} onPress={() => setBetType("spreads")} label="Spreads" />
+                <Chip active={betType === "h2h"} onPress={() => setBetType("h2h")} label="Moneyline" />
+                <Chip active={betType === "totals"} onPress={() => setBetType("totals")} label="Totals" />
+              </View> */}
+
+              <View style={{ marginTop: 8, opacity: disabledWholeCard ? 0.6 : 1 }}>
                 {(market.outcomes ?? []).map((o: any, idx: number) => {
                   const label = labelFor(betType, o);
                   const isMine = mappedId ? myPicks[mappedId] === label : false;
-                  const disabled = !isOpen || !mappedId || saving === mappedId;
+                  const disabled = disabledWholeCard || saving === mappedId;
+
                   return (
                     <View key={o.name + String(o.point ?? "") + idx} style={{ marginTop: idx ? 8 : 0 }}>
                       <Pressable
@@ -221,23 +318,31 @@ export default function PicksNFL() {
 
               {!mappedId && (
                 <Text style={styles.note}>
-                  (No internal game matched — key tried: {`${normTeamNFL(game.away_team)}@${normTeamNFL(game.home_team)}`})
+                  Not clickable: this odds matchup didn’t map to a row in your <Text style={{fontWeight: "700"}}>games</Text> table.
+                  {"\n"}Lookup key tried: <Text style={{fontWeight:"700"}}>{`${normTeamNFL(game.away_team)}@${normTeamNFL(game.home_team)}`}</Text>
                 </Text>
               )}
             </View>
           );
-        })}
+        })
+      )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
-  warn: { color: "#7a4", marginBottom: 8 },
   container: { padding: 16 },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
   title: { fontSize: 20, fontWeight: "600" },
   switch: { color: "#0a84ff", fontSize: 16 },
+
+  // ✅ add this:
+  warn: { color: "#7a4", marginBottom: 8 },
+
+  badge: { alignSelf: "flex-start", paddingVertical: 4, paddingHorizontal: 10, borderRadius: 999, fontWeight: "800", marginBottom: 8 },
+  badgeOpen: { backgroundColor: "#E9F4EF", color: "#006241" },
+  badgeClosed: { backgroundColor: "#FDECEA", color: "#A4000F" },
 
   card: { padding: 12, borderWidth: 1, borderRadius: 8, borderColor: "#ccc", backgroundColor: "#fff", marginBottom: 12 },
   logosRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginBottom: 6 },
@@ -253,5 +358,6 @@ const styles = StyleSheet.create({
   pickText: { fontWeight: "800", color: "#222" },
   pickTextActive: { color: "#006241" },
 
-  note: { marginTop: 6, fontSize: 12, color: "#9a6a00" },
+  note: { marginTop: 8, fontSize: 12, color: "#9a6a00" },
+  typeRow: { flexDirection: "row", gap: 8, marginTop: 8 },
 });
