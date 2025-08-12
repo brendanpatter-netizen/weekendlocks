@@ -1,6 +1,15 @@
 // components/Header.tsx
 import { useEffect, useMemo, useState } from "react";
-import { View, Text, Pressable, StyleSheet, Platform, TextInput, Alert, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  Platform,
+  TextInput,
+  Alert,
+  ActivityIndicator,
+} from "react-native";
 import { Link, router } from "expo-router";
 import { supabase } from "@/lib/supabase";
 
@@ -13,13 +22,33 @@ const colors = {
   subtext: "#555",
 };
 
+// ✅ shadow helpers (objects only)
+const webShadow = { boxShadow: "0 12px 28px rgba(0,0,0,0.12)" } as const;
+const webShadowSm = { boxShadow: "0 8px 18px rgba(0,0,0,0.10)" } as const;
+const nativeShadow = {
+  shadowColor: "#000",
+  shadowOpacity: 0.12,
+  shadowRadius: 14,
+  shadowOffset: { width: 0, height: 8 },
+  elevation: 8,
+} as const;
+const nativeShadowSm = {
+  shadowColor: "#000",
+  shadowOpacity: 0.1,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 6 },
+  elevation: 6,
+} as const;
+const cardShadow = Platform.OS === "web" ? webShadow : nativeShadow;
+const smallShadow = Platform.OS === "web" ? webShadowSm : nativeShadowSm;
+
 type Mode = "code" | "link";
 
 export default function Header() {
   const [session, setSession] = useState<null | { user?: { email?: string } }>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // inline auth state
+  // inline auth state for quick sign-in
   const [mode, setMode] = useState<Mode>("code");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -97,7 +126,6 @@ export default function Header() {
     }
   }
 
-  // Route targets
   const accountHref = isSignedIn ? "/account" : "/auth/login";
 
   return (
@@ -109,7 +137,6 @@ export default function Header() {
             <Pressable><Text style={styles.nav}>Home</Text></Pressable>
           </Link>
 
-          {/* Picks */}
           <Link href="/picks/page" asChild>
             <Pressable><Text style={styles.nav}>Picks</Text></Pressable>
           </Link>
@@ -133,7 +160,7 @@ export default function Header() {
           </Link>
 
           {menuOpen && (
-            <View style={styles.panelHelper}>
+            <View style={styles.panelContainer}>
               {!isSignedIn ? (
                 <>
                   <Text style={styles.panelTitle}>Sign in</Text>
@@ -181,7 +208,7 @@ export default function Header() {
 
                   {mode === "code" && codeSent && (
                     <>
-                      <Text style={styles.panelHelper}>Enter the 6-digit code</Text>
+                      <Text style={styles.panelNote}>Enter the 6-digit code</Text>
                       <TextInput
                         placeholder="123456"
                         keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
@@ -205,7 +232,6 @@ export default function Header() {
                     </>
                   )}
 
-                  {/* Full login page as backup */}
                   <Link href="/auth/login" asChild>
                     <Pressable>
                       <Text style={styles.panelLink}>Open full login page →</Text>
@@ -240,16 +266,7 @@ const styles = StyleSheet.create({
   wrapper: {
     width: "100%",
     backgroundColor: colors.primary,
-    ...Platform.select({
-      web: { boxShadow: "0 2px 12px rgba(0,0,0,0.18)" },
-      default: {
-        shadowColor: "#000",
-        shadowOpacity: 0.18,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 3 },
-        elevation: 6,
-      },
-    }),
+    ...smallShadow,
     zIndex: 50,
   },
   bar: {
@@ -275,12 +292,16 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   avatar: {
-    width: 28, height: 28, borderRadius: 999, backgroundColor: "#fff",
-    alignItems: "center", justifyContent: "center",
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   /* Panel */
-  panelHelper: {
+  panelContainer: {
     position: "absolute",
     top: 44,
     right: 0,
@@ -289,26 +310,23 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     gap: 10,
-    ...Platform.select({
-      web: { boxShadow: "0 16px 32px rgba(0,0,0,0.18)" },
-      default: {
-        shadowColor: "#000",
-        shadowOpacity: 0.18,
-        shadowRadius: 12,
-        shadowOffset: { width: 0, height: 8 },
-        elevation: 10,
-      },
-    }),
+    ...cardShadow,
   },
   panelTitle: { fontWeight: "800", color: colors.primary },
   panelText: { color: colors.text },
   panelLink: { color: colors.primary, textDecorationLine: "underline", marginTop: 6 },
+  panelNote: { color: colors.subtext, marginTop: 4 },
 
   /* Toggle */
   toggleRow: { flexDirection: "row", gap: 8 },
   toggleBtn: {
-    flex: 1, paddingVertical: 10, borderRadius: 10,
-    borderWidth: 1, borderColor: "#ddd", alignItems: "center", backgroundColor: "#fff",
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    alignItems: "center",
+    backgroundColor: "#fff",
   },
   toggleBtnActive: { borderColor: colors.primary, backgroundColor: colors.primary },
   toggleText: { fontWeight: "700", color: colors.text },
@@ -316,20 +334,40 @@ const styles = StyleSheet.create({
 
   /* Inputs & buttons */
   input: {
-    borderWidth: 1, borderColor: "#ddd", borderRadius: 12, padding: 10, fontSize: 16, backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 12,
+    padding: 10,
+    fontSize: 16,
+    backgroundColor: "#fff",
   },
   codeInput: {
-    borderWidth: 1, borderColor: "#ddd", borderRadius: 12, padding: 12,
-    fontSize: 22, letterSpacing: 4, textAlign: "center", backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 22,
+    letterSpacing: 4,
+    textAlign: "center",
+    backgroundColor: "#fff",
   },
   panelBtn: {
-    backgroundColor: colors.primary, paddingVertical: 12, borderRadius: 12, alignItems: "center",
+    backgroundColor: colors.primary,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    ...smallShadow,
   },
   panelBtnDisabled: { opacity: 0.6 },
   panelBtnText: { color: "#fff", fontWeight: "800", letterSpacing: 0.2 },
   panelBtnOutline: {
-    borderWidth: 2, borderColor: colors.primary, borderRadius: 12,
-    alignItems: "center", paddingVertical: 12, backgroundColor: "#fff",
+    borderWidth: 2,
+    borderColor: colors.primary,
+    borderRadius: 12,
+    alignItems: "center",
+    paddingVertical: 12,
+    backgroundColor: "#fff",
+    ...smallShadow,
   },
   panelBtnOutlineText: { color: colors.primary, fontWeight: "800", letterSpacing: 0.2 },
 });

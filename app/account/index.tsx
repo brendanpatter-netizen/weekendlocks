@@ -1,6 +1,14 @@
 // app/account/index.tsx
 import { useEffect, useState } from "react";
-import { View, Text, TextInput, StyleSheet, Pressable, Platform, Alert } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  Pressable,
+  Platform,
+  Alert,
+} from "react-native";
 import {
   useFonts,
   RobotoCondensed_400Regular,
@@ -16,6 +24,26 @@ const colors = {
   text: "#222",
   subtext: "#555",
 };
+
+// ✅ shadow helpers
+const webShadow = { boxShadow: "0 12px 28px rgba(0,0,0,0.12)" } as const;
+const webShadowSm = { boxShadow: "0 8px 18px rgba(0,0,0,0.10)" } as const;
+const nativeShadow = {
+  shadowColor: "#000",
+  shadowOpacity: 0.12,
+  shadowRadius: 14,
+  shadowOffset: { width: 0, height: 8 },
+  elevation: 8,
+} as const;
+const nativeShadowSm = {
+  shadowColor: "#000",
+  shadowOpacity: 0.1,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 6 },
+  elevation: 6,
+} as const;
+const cardShadow = Platform.OS === "web" ? webShadow : nativeShadow;
+const smallShadow = Platform.OS === "web" ? webShadowSm : nativeShadowSm;
 
 export default function AccountPage() {
   const router = useRouter();
@@ -50,7 +78,9 @@ export default function AccountPage() {
       setDisplayName(meta.display_name ?? "");
       setUsername(meta.username ?? "");
     });
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   // Save display name + username
@@ -196,26 +226,49 @@ export default function AccountPage() {
 
 const styles = StyleSheet.create({
   screen: {
-    flex: 1, backgroundColor: colors.bg, padding: 20, alignItems: "center",
+    flex: 1,
+    backgroundColor: colors.bg,
+    padding: 20,
+    alignItems: "center",
   },
   card: {
-    width: "100%", maxWidth: 720, backgroundColor: "#fff", borderRadius: 16, padding: 20, gap: 16,
-    ...Platform.select({
-      web: { boxShadow: "0 12px 28px rgba(0,0,0,0.12)" },
-      default: {
-        shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 14,
-        shadowOffset: { width: 0, height: 8 }, elevation: 8,
-      },
-    }),
+    width: "100%",
+    maxWidth: 720,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 20,
+    gap: 16,
+    ...cardShadow,
   },
   title: { fontSize: 24, color: colors.primary, textTransform: "uppercase" },
   section: { gap: 10 },
   sectionTitle: { fontSize: 16, color: colors.primary, textTransform: "uppercase" },
-  row: { backgroundColor: "#FAFAFA", borderRadius: 12, padding: 14, borderWidth: 1, borderColor: "#EEE", gap: 8 },
+  row: {
+    backgroundColor: "#FAFAFA",
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#EEE",
+    gap: 8,
+  },
   label: { fontSize: 12, color: colors.subtext, textTransform: "uppercase", letterSpacing: 0.5 },
   value: { fontSize: 16, color: colors.text },
-  input: { borderWidth: 1, borderColor: "#DDD", borderRadius: 10, padding: 10, backgroundColor: "#fff", fontSize: 16 },
-  primaryBtn: { alignSelf: "flex-start", backgroundColor: colors.primary, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10 },
+  input: {
+    borderWidth: 1,
+    borderColor: "#DDD",
+    borderRadius: 10,
+    padding: 10,
+    backgroundColor: "#fff",
+    fontSize: 16,
+  },
+  primaryBtn: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    ...smallShadow,
+  },
   primaryBtnText: { color: "#fff", fontWeight: "800" },
   signOutBtn: {
     alignSelf: "flex-start",
@@ -223,13 +276,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 12,
-    ...Platform.select({
-      web: { boxShadow: "0 8px 18px rgba(0,0,0,0.1)" },
-      default: {
-        shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 10,
-        shadowOffset: { width: 0, height: 6 }, elevation: 6,
-      },
-    }),
+    ...smallShadow,
   },
   signOutText: { color: colors.primary, fontSize: 16 },
 });
