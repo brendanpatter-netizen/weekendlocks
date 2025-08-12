@@ -1,10 +1,11 @@
-// app/index.tsx — Home: Live Picks + Leaderboard (with Refresh), no 'chip' styles
+// app/index.tsx — Home: Live Picks + Leaderboard (refreshes when picks are saved)
 export const unstable_settings = { prerender: false };
 
 import { useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from "react-native";
 import { Link } from "expo-router";
 import { supabase } from "@/lib/supabase";
+import { events } from "@/lib/events";
 
 type League = "nfl" | "cfb";
 
@@ -64,6 +65,23 @@ export default function Home() {
   useEffect(() => { fetchLive(); }, []);
   useEffect(() => { fetchBoard(boardLeague); }, [boardLeague]);
 
+  // 🔔 same-tab instant update when a pick is saved on a Picks page
+  useEffect(() => {
+    const off = events.onPickSaved(() => { fetchLive(); });
+    return off;
+  }, []);
+
+  // 🔁 optional: cross-tab / other users via Supabase Realtime
+  useEffect(() => {
+    const ch = supabase
+      .channel("picks-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "picks" }, () => {
+        fetchLive();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []);
+
   const updatedAgo = useMemo(() => {
     if (!liveUpdatedAt) return null;
     const m = Math.floor((Date.now() - liveUpdatedAt) / 60000);
@@ -87,31 +105,16 @@ export default function Home() {
       </View>
 
       {tab === "live" ? (
-        <LivePicks
-          loading={loadingLive}
-          rows={live}
-          onRefresh={fetchLive}
-          updatedAgo={updatedAgo}
-        />
+        <LivePicks loading={loadingLive} rows={live} onRefresh={fetchLive} updatedAgo={updatedAgo} />
       ) : (
         <>
           <View style={s.inlineLeague}>
-            <Pressable
-              onPress={() => setBoardLeague("cfb")}
-              style={boardLeague === "cfb" ? [s.inlineChip, s.inlineChipActive] : s.inlineChip}
-            >
-              <Text style={boardLeague === "cfb" ? [s.inlineChipText, s.inlineChipTextActive] : s.inlineChipText}>
-                CFB
-              </Text>
+            <Pressable onPress={() => setBoardLeague("cfb")} style={boardLeague === "cfb" ? [s.inlineChip, s.inlineChipActive] : s.inlineChip}>
+              <Text style={boardLeague === "cfb" ? [s.inlineChipText, s.inlineChipTextActive] : s.inlineChipText}>CFB</Text>
             </Pressable>
             <View style={{ width: 8 }} />
-            <Pressable
-              onPress={() => setBoardLeague("nfl")}
-              style={boardLeague === "nfl" ? [s.inlineChip, s.inlineChipActive] : s.inlineChip}
-            >
-              <Text style={boardLeague === "nfl" ? [s.inlineChipText, s.inlineChipTextActive] : s.inlineChipText}>
-                NFL
-              </Text>
+            <Pressable onPress={() => setBoardLeague("nfl")} style={boardLeague === "nfl" ? [s.inlineChip, s.inlineChipActive] : s.inlineChip}>
+              <Text style={boardLeague === "nfl" ? [s.inlineChipText, s.inlineChipTextActive] : s.inlineChipText}>NFL</Text>
             </Pressable>
           </View>
           <Leaderboard loading={loadingBoard} rows={board} />
@@ -137,13 +140,13 @@ function LivePicks({
       <View style={s.banner}>
         <Text style={s.bannerTitle}>Make Your Picks</Text>
         <View style={s.leagueSwitchRow}>
-          <Link href="/picks/college" asChild>
+          <Link href="/picks/college" prefetch={false} asChild>
             <Pressable style={s.ctaBtnPrimary}>
               <Text style={s.ctaBtnPrimaryText}>College Football</Text>
             </Pressable>
           </Link>
           <View style={{ width: 8 }} />
-          <Link href="/picks/page" asChild>
+          <Link href="/picks/page" prefetch={false} asChild>
             <Pressable style={s.ctaBtnPrimary}>
               <Text style={s.ctaBtnPrimaryText}>NFL</Text>
             </Pressable>
@@ -255,7 +258,7 @@ const s = StyleSheet.create({
   bannerTitle: { fontSize: 22, fontWeight: "900", marginBottom: 10 },
   leagueSwitchRow: { flexDirection: "row", alignItems: "center" },
 
-  // CTA buttons used in the banner (replaces old 'chip' styles)
+  // CTA buttons
   ctaBtnPrimary: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: "#006241", backgroundColor: "#E9F4EF" },
   ctaBtnPrimaryText: { fontWeight: "800", color: "#006241" },
 

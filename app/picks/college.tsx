@@ -8,40 +8,26 @@ import { supabase } from "@/lib/supabase";
 import { useOdds } from "../../lib/useOdds";
 import { logoSrc } from "../../lib/teamLogos";
 import { getCurrentCfbWeek, CFB_WEEKS } from "../../lib/cfbWeeks";
+import { events } from "@/lib/events";
 
 type BetType = "spreads" | "totals" | "h2h";
 const CFB_SPORT_KEY = "americanfootball_ncaaf";
 const SEASON = 2025;
 
-/** Normalize team names (last token + some handy aliases). Extend as you see mismatches. */
+/** Normalize team names (last token + aliases). Extend as needed. */
 const CFB_ALIASES: Record<string, string> = {
-  "miami": "hurricanes",
-  "miami fl": "hurricanes",
-  "miami (fl)": "hurricanes",
-  "miami oh": "redhawks",
-  "miami (oh)": "redhawks",
-  "texas a&m": "aggies",
-  "texas am": "aggies",
-  "florida state": "seminoles",
-  "florida": "gators",
-  "georgia": "bulldogs",
-  "alabama": "crimson",
-  "crimson tide": "crimson",
-  "ucf": "knights",
-  "byu": "cougars",
-  "lsu": "tigers",
-  "usc": "trojans",
-  "ole miss": "rebels",
-  "washington": "huskies",
-  "penn state": "nittany",
-  "notre dame": "irish",
-  "tcu": "horned",
-  "texas": "longhorns",
+  "miami": "hurricanes", "miami fl": "hurricanes", "miami (fl)": "hurricanes",
+  "miami oh": "redhawks", "miami (oh)": "redhawks",
+  "texas a&m": "aggies", "texas am": "aggies",
+  "florida state": "seminoles", "florida": "gators",
+  "georgia": "bulldogs", "alabama": "crimson", "crimson tide": "crimson",
+  "ucf": "knights", "byu": "cougars", "lsu": "tigers", "usc": "trojans",
+  "ole miss": "rebels", "washington": "huskies", "penn state": "nittany",
+  "notre dame": "irish", "tcu": "horned", "texas": "longhorns",
 };
 function normTeamCFB(name: string) {
   const raw = name.toLowerCase().replace(/[^\w\s()&-]/g, "").trim();
   if (CFB_ALIASES[raw]) return CFB_ALIASES[raw];
-  // take last token (e.g., "Georgia Bulldogs" -> "bulldogs")
   const parts = raw.replace(/[()]/g, "").replace(/&/g, "and").split(/\s+/);
   const last = parts[parts.length - 1];
   return CFB_ALIASES[last] || last;
@@ -55,7 +41,7 @@ export default function PicksCFB() {
   const [gameMap, setGameMap] = useState<Record<string, number>>({});
   const [myPicks, setMyPicks] = useState<Record<number, string>>({});
   const [saving, setSaving] = useState<number | null>(null);
-  const [blockMsg, setBlockMsg] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const { data, error, loading } = useOdds(CFB_SPORT_KEY, week);
 
@@ -65,45 +51,35 @@ export default function PicksCFB() {
 
   useEffect(() => {
     (async () => {
-      setBlockMsg(null);
+      setNotice(null);
 
       const { data: w, error: wErr } = await supabase
-        .from("weeks")
-        .select("*")
-        .eq("league", "cfb")
-        .eq("season", SEASON)
-        .eq("week_num", week)
+        .from("weeks").select("*")
+        .eq("league", "cfb").eq("season", SEASON).eq("week_num", week)
         .maybeSingle();
-      if (wErr) setBlockMsg(`weeks query: ${wErr.message}`);
+      if (wErr) setNotice(`weeks: ${wErr.message}`);
       setWeekRow(w);
 
       if (w?.id) {
         const { data: g, error: gErr } = await supabase
-          .from("games")
-          .select("id, home, away, week_id")
-          .eq("week_id", w.id);
-        if (gErr) setBlockMsg(`games query: ${gErr.message}`);
+          .from("games").select("id, home, away").eq("week_id", w.id);
+        if (gErr) setNotice(`games: ${gErr.message}`);
 
         const map: Record<string, number> = {};
         (g ?? []).forEach((row: any) => {
-          const key = `${normTeamCFB(row.away)}@${normTeamCFB(row.home)}`;
-          map[key] = row.id;
+          map[`${normTeamCFB(row.away)}@${normTeamCFB(row.home)}`] = row.id;
         });
         setGameMap(map);
 
         const ids = (g ?? []).map((r: any) => r.id);
         if (ids.length) {
           const { data: ps, error: pErr } = await supabase
-            .from("picks")
-            .select("game_id, pick_team")
-            .in("game_id", ids);
-          if (pErr) setBlockMsg(`picks query: ${pErr.message}`);
+            .from("picks").select("game_id, pick_team").in("game_id", ids);
+          if (pErr) setNotice(`picks: ${pErr.message}`);
           const mine: Record<number, string> = {};
           (ps ?? []).forEach((r: any) => { mine[r.game_id] = r.pick_team; });
           setMyPicks(mine);
-        } else {
-          setMyPicks({});
-        }
+        } else setMyPicks({});
       } else {
         setGameMap({});
         setMyPicks({});
@@ -122,17 +98,11 @@ export default function PicksCFB() {
 
   const savePick = async (oddsGame: any, type: BetType, o: any) => {
     if (!userId) { Alert.alert("Please sign in to save picks."); return; }
-    if (!isOpen) { Alert.alert("Closed", "Picks are closed for this week."); return; }
+    if (!isOpen)  { Alert.alert("Closed", "Picks are closed for this week."); return; }
 
-    const away = normTeamCFB(oddsGame.away_team);
-    const home = normTeamCFB(oddsGame.home_team);
-    const key = `${away}@${home}`;
+    const key = `${normTeamCFB(oddsGame.away_team)}@${normTeamCFB(oddsGame.home_team)}`;
     const mappedId = gameMap[key];
-
-    if (!mappedId) {
-      Alert.alert("Can’t match game", `Couldn’t map "${oddsGame.away_team} @ ${oddsGame.home_team}" to an internal game.\n\nLookup key: ${key}`);
-      return;
-    }
+    if (!mappedId) { Alert.alert("Can’t match game", `Lookup key: ${key}`); return; }
 
     const label = labelFor(type, o);
     setSaving(mappedId);
@@ -153,11 +123,11 @@ export default function PicksCFB() {
       const { error: upErr } = await supabase
         .from("picks")
         .upsert(payload, { onConflict: "user_id,game_id" });
-      if (upErr) {
-        Alert.alert("Save failed", upErr.message);
-        return;
-      }
+      if (upErr) { Alert.alert("Save failed", upErr.message); return; }
+
       setMyPicks((m) => ({ ...m, [mappedId]: label }));
+      // Notify Home to refresh Live Picks
+      events.emitPickSaved({ league: "cfb", week, game_id: mappedId, user_id: userId!, pick_team: label });
       Alert.alert("Saved", `Your pick: ${label}`);
     } catch (e: any) {
       Alert.alert("Error", String(e?.message || e));
@@ -167,7 +137,7 @@ export default function PicksCFB() {
   };
 
   if (loading) return <ActivityIndicator style={styles.center} size="large" />;
-  if (error) return <Text style={styles.center}>Error: {error.message}</Text>;
+  if (error)   return <Text style={styles.center}>Error: {error.message}</Text>;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -182,7 +152,7 @@ export default function PicksCFB() {
         ))}
       </Picker>
 
-      {!!blockMsg && <Text style={styles.warn}>{blockMsg}</Text>}
+      {!!notice && <Text style={styles.warn}>{notice}</Text>}
 
       {!data?.length ? (
         <View style={styles.center}><Text>No games found for week {week}.</Text></View>
@@ -228,11 +198,7 @@ export default function PicksCFB() {
                 })}
               </View>
 
-              {!mappedId && (
-                <Text style={styles.note}>
-                  (No internal game matched — key tried: {`${normTeamCFB(game.away_team)}@${normTeamCFB(game.home_team)}`})
-                </Text>
-              )}
+              {!mappedId && <Text style={styles.note}>(No internal game matched — check names.)</Text>}
             </View>
           );
         })}
@@ -241,26 +207,26 @@ export default function PicksCFB() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
-  warn: { color: "#7a4", marginBottom: 8 },
-  container: { padding: 16 },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
-  title: { fontSize: 20, fontWeight: "600" },
-  switch: { color: "#0a84ff", fontSize: 16 },
+  center: { flex:1, justifyContent:"center", alignItems:"center", padding:24 },
+  warn: { color:"#7a4", marginBottom:8 },
+  container: { padding:16 },
+  headerRow: { flexDirection:"row", justifyContent:"space-between", alignItems:"center", marginBottom:10 },
+  title: { fontSize:20, fontWeight:"600" },
+  switch: { color:"#0a84ff", fontSize:16 },
 
-  card: { padding: 12, borderWidth: 1, borderRadius: 8, borderColor: "#ccc", backgroundColor: "#fff", marginBottom: 12 },
-  logosRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginBottom: 6 },
-  logo: { width: 42, height: 42, borderRadius: 21 },
-  vs: { fontWeight: "bold", fontSize: 16, marginHorizontal: 8 },
+  card: { padding:12, borderWidth:1, borderRadius:8, borderColor:"#ccc", backgroundColor:"#fff", marginBottom:12 },
+  logosRow: { flexDirection:"row", alignItems:"center", justifyContent:"center", marginBottom:6 },
+  logo: { width:42, height:42, borderRadius:21 },
+  vs: { fontWeight:"bold", fontSize:16, marginHorizontal:8 },
 
-  match: { fontWeight: "bold", marginBottom: 2, fontSize: 16 },
-  kick: { marginTop: 2, fontSize: 12, opacity: 0.7 },
+  match: { fontWeight:"bold", marginBottom:2, fontSize:16 },
+  kick: { marginTop:2, fontSize:12, opacity:0.7 },
 
-  pickBtn: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: "#bbb", backgroundColor: "#fff" },
-  pickBtnActive: { borderColor: "#006241", backgroundColor: "#E9F4EF" },
-  pickBtnDisabled: { opacity: 0.5 },
-  pickText: { fontWeight: "800", color: "#222" },
-  pickTextActive: { color: "#006241" },
+  pickBtn: { paddingVertical:10, paddingHorizontal:12, borderRadius:8, borderWidth:1, borderColor:"#bbb", backgroundColor:"#fff" },
+  pickBtnActive: { borderColor:"#006241", backgroundColor:"#E9F4EF" },
+  pickBtnDisabled: { opacity:0.5 },
+  pickText: { fontWeight:"800", color:"#222" },
+  pickTextActive: { color:"#006241" },
 
-  note: { marginTop: 6, fontSize: 12, color: "#9a6a00" },
+  note: { marginTop:6, fontSize:12, color:"#9a6a00" },
 });
