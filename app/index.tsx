@@ -1,26 +1,13 @@
-// app/index.tsx — Home: Live Picks | All Picks | Leaderboard (web-safe styles)
+// app/index.tsx — Home: Live Picks + Leaderboard
 export const unstable_settings = { prerender: false };
 
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, FlatList } from "react-native";
-import { supabase } from "@/lib/supabase";
+import { View, Text, StyleSheet, Pressable, ActivityIndicator } from "react-native";
 import { Link } from "expo-router";
+import { supabase } from "@/lib/supabase";
 
 /* ---------- Types ---------- */
 type League = "nfl" | "cfb";
-
-type FeedRow = {
-  id: number | string;
-  created_at: string;
-  pick_team: string | null;
-  sport: string | null;
-  week: number | null;
-  status: string | null;
-  profiles?: { username?: string | null } | null;
-  games?: { home: string; away: string; kickoff_at: string; status: "scheduled"|"in_progress"|"final" } | null;
-};
-
-type BoardRow = { user_id: string; username: string | null; wins: number; losses: number };
 
 type LiveRow = {
   user_id: string;
@@ -37,49 +24,22 @@ type LiveRow = {
   cfb_kickoff: string | null;
 };
 
+type BoardRow = { user_id: string; username: string | null; wins: number; losses: number };
+
 /* ---------- Page ---------- */
 export default function Home() {
-  const [tab, setTab] = useState<"live" | "feed" | "board">("live");
-  const [league, setLeague] = useState<League>("nfl");
-  const [loading, setLoading] = useState(true);
-  const [feed, setFeed] = useState<FeedRow[]>([]);
-  const [board, setBoard] = useState<BoardRow[]>([]);
+  const [tab, setTab] = useState<"live" | "board">("live");
+
+  // Live picks
   const [live, setLive] = useState<LiveRow[]>([]);
   const [loadingLive, setLoadingLive] = useState(true);
 
-  // Feed + leaderboard
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        setLoading(true);
-        const { data, error } = await supabase
-          .from("picks")
-          .select(`
-            id, created_at, pick_team, sport, week, status,
-            profiles:profiles!picks_user_id_fkey ( username ),
-            games:games!picks_game_id_fkey ( home, away, kickoff_at, status )
-          `)
-          .eq("sport", league)
-          .order("created_at", { ascending: false })
-          .limit(50);
-        if (error) throw error;
-        if (mounted) setFeed((data || []) as any[]);
+  // Leaderboard
+  const [boardLeague, setBoardLeague] = useState<League>("nfl");
+  const [board, setBoard] = useState<BoardRow[]>([]);
+  const [loadingBoard, setLoadingBoard] = useState(true);
 
-        const { data: boardRows } = await supabase.rpc("leaderboard_simple", {
-          p_league: league,
-        });
-        if (mounted) setBoard((boardRows || []) as any[]);
-      } catch (e) {
-        console.warn(e);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => { mounted = false; };
-  }, [league]);
-
-  // Live picks
+  // Fetch live picks (current open week(s))
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -97,6 +57,26 @@ export default function Home() {
     return () => { mounted = false; };
   }, []);
 
+  // Fetch leaderboard for selected league
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        setLoadingBoard(true);
+        const { data, error } = await supabase.rpc("leaderboard_simple", {
+          p_league: boardLeague,
+        });
+        if (error) throw error;
+        if (mounted) setBoard((data || []) as BoardRow[]);
+      } catch (e) {
+        console.warn(e);
+      } finally {
+        if (mounted) setLoadingBoard(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [boardLeague]);
+
   return (
     <View style={s.screen}>
       {/* Tabs */}
@@ -105,162 +85,128 @@ export default function Home() {
           <Text style={[s.tabText, tab === "live" && s.tabTextActive]}>Live Picks</Text>
         </Pressable>
         <View style={{ width: 8 }} />
-        <Pressable onPress={() => setTab("feed")} style={[s.tab, tab === "feed" && s.tabActive]}>
-          <Text style={[s.tabText, tab === "feed" && s.tabTextActive]}>All Picks</Text>
-        </Pressable>
-        <View style={{ width: 8 }} />
         <Pressable onPress={() => setTab("board")} style={[s.tab, tab === "board" && s.tabActive]}>
           <Text style={[s.tabText, tab === "board" && s.tabTextActive]}>Leaderboard</Text>
         </Pressable>
       </View>
 
-      {/* League toggle for Feed/Board */}
-      {tab !== "live" && (
-        <View style={s.inlineLeague}>
-          <Pressable onPress={() => setLeague("cfb")} style={[s.inlineChip, league === "cfb" && s.inlineChipActive]}>
-            <Text style={[s.inlineChipText, league === "cfb" && s.inlineChipTextActive]}>CFB</Text>
-          </Pressable>
-          <View style={{ width: 8 }} />
-          <Pressable onPress={() => setLeague("nfl")} style={[s.inlineChip, league === "nfl" && s.inlineChipActive]}>
-            <Text style={[s.inlineChipText, league === "nfl" && s.inlineChipTextActive]}>NFL</Text>
-          </Pressable>
-        </View>
-      )}
-
       {tab === "live" ? (
         <LivePicks loading={loadingLive} rows={live} />
-      ) : tab === "feed" ? (
-        loading ? (
-          <ActivityIndicator style={{ marginTop: 24 }} />
-        ) : (
-          <FlatList
-            ListHeaderComponent={<MakeYourPicksBanner />}
-            data={feed}
-            keyExtractor={(r) => String(r.id)}
-            renderItem={({ item }) => <FeedItem row={item} />}
-            contentContainerStyle={s.feedContainer}
-            ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-          />
-        )
       ) : (
-        <Leaderboard loading={loading} rows={board} />
-      )}
-    </View>
-  );
-}
-
-/* ---------- Components ---------- */
-
-function MakeYourPicksBanner() {
-  return (
-    <View style={s.banner}>
-      <Text style={s.bannerTitle}>Make Your Picks</Text>
-      <View style={s.leagueSwitchRow}>
-        <Link href="/picks/college" asChild>
-          <Pressable style={[s.chip, s.chipActive]}><Text style={[s.chipText, s.chipTextActive]}>College Football</Text></Pressable>
-        </Link>
-        <View style={{ width: 8 }} />
-        <Link href="/picks/page" asChild>
-          <Pressable style={[s.chip, s.chipActive]}><Text style={[s.chipText, s.chipTextActive]}>NFL</Text></Pressable>
-        </Link>
-      </View>
-    </View>
-  );
-}
-
-function FeedItem({ row }: { row: FeedRow }) {
-  const user = row.profiles?.username ?? "Someone";
-  const g = row.games;
-  const when = timeAgo(row.created_at);
-  let statusText = "";
-  let statusStyle = s.pillGray;
-  if (g?.status === "in_progress") { statusText = "LIVE"; statusStyle = s.pillBlue; }
-  else if (row.status === "win")   { statusText = "WON";  statusStyle = s.pillGreen; }
-  else if (row.status === "loss")  { statusText = "LOST"; statusStyle = s.pillRed; }
-  else if (g?.kickoff_at)         { statusText = new Date(g.kickoff_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); }
-
-  return (
-    <View style={s.card}>
-      <Text style={s.userRow}><Text style={s.user}>{user}</Text><Text style={s.dim}>  {when}</Text></Text>
-      <Text style={s.main}>
-        {row.pick_team}{g ? ` — ${g.away} vs ${g.home}` : ""}
-      </Text>
-      {!!statusText && (
-        <View style={[s.pill, statusStyle]}>
-          <Text style={s.pillText}>{statusText}</Text>
-        </View>
-      )}
-    </View>
-  );
-}
-
-function Leaderboard({ loading, rows }: { loading: boolean; rows: BoardRow[] }) {
-  if (loading) return <ActivityIndicator style={{ marginTop: 24 }} />;
-  return (
-    <View style={{ padding: 16 }}>
-      {rows.length === 0 ? <Text style={s.dim}>No results yet.</Text> :
-        rows.map((r) => (
-          <View key={r.user_id} style={[s.leadRow, { marginBottom: 10 }]}>
-            <Text style={s.user}>{r.username ?? "User"}</Text>
-            <Text style={s.dim}>{r.wins}W–{r.losses}L</Text>
+        <>
+          <View style={s.inlineLeague}>
+            <Pressable onPress={() => setBoardLeague("cfb")} style={[s.inlineChip, boardLeague === "cfb" && s.inlineChipActive]}>
+              <Text style={[s.inlineChipText, boardLeague === "cfb" && s.inlineChipTextActive]}>CFB</Text>
+            </Pressable>
+            <View style={{ width: 8 }} />
+            <Pressable onPress={() => setBoardLeague("nfl")} style={[s.inlineChip, boardLeague === "nfl" && s.inlineChipActive]}>
+              <Text style={[s.inlineChipText, boardLeague === "nfl" && s.inlineChipTextActive]}>NFL</Text>
+            </Pressable>
           </View>
-      ))}
+          <Leaderboard loading={loadingBoard} rows={board} />
+        </>
+      )}
     </View>
   );
 }
+
+/* ---------------- Live Picks ---------------- */
 
 function LivePicks({ loading, rows }: { loading: boolean; rows: LiveRow[] }) {
-  if (loading) return <ActivityIndicator style={{ marginTop: 24 }} />;
-
   return (
     <View style={{ padding: 16 }}>
-      <Text style={s.sectionTitle}>This Week’s Picks</Text>
+      {/* Make your picks banner */}
+      <View style={s.banner}>
+        <Text style={s.bannerTitle}>Make Your Picks</Text>
+        <View style={s.leagueSwitchRow}>
+          <Link href="/picks/college" asChild>
+            <Pressable style={[s.chip, s.chipActive]}>
+              <Text style={[s.chipText, s.chipTextActive]}>College Football</Text>
+            </Pressable>
+          </Link>
+          <View style={{ width: 8 }} />
+          <Link href="/picks/page" asChild>
+            <Pressable style={[s.chip, s.chipActive]}>
+              <Text style={[s.chipText, s.chipTextActive]}>NFL</Text>
+            </Pressable>
+          </Link>
+        </View>
+      </View>
+
+      <Text style={[s.sectionTitle, { marginTop: 12 }]}>This Week’s Picks</Text>
+
       <View style={s.legendRow}>
         <Text style={[s.legend, {flex: 2}]}>User</Text>
         <Text style={[s.legend, {flex: 3, textAlign: "center"}]}>CFB</Text>
         <Text style={[s.legend, {flex: 3, textAlign: "center"}]}>NFL</Text>
       </View>
 
-      {rows.length === 0 ? (
+      {loading ? (
+        <ActivityIndicator style={{ marginTop: 24 }} />
+      ) : rows.length === 0 ? (
         <Text style={s.dim}>No picks yet. Ask everyone to make their weekly picks!</Text>
-      ) : rows.map((r) => (
-        <View key={r.user_id} style={[s.liveRow, { marginBottom: 10 }]}>
-          <Text style={[s.user, {flex: 2}]} numberOfLines={1}>{r.username ?? "User"}</Text>
+      ) : (
+        rows.map((r) => (
+          <View key={r.user_id} style={[s.liveRow, { marginBottom: 10 }]}>
+            <Text style={[s.user, {flex: 2}]} numberOfLines={1}>{r.username ?? "User"}</Text>
 
-          <View style={{flex: 3}}>
-            {r.cfb_pick ? (
-              <>
-                <Text style={s.livePick} numberOfLines={1}>{r.cfb_pick}</Text>
-                <Text style={s.dim} numberOfLines={1}>{r.cfb_matchup}</Text>
-                {!!r.cfb_status && (
-                  <View style={[s.pill, pillFor(r.cfb_status)]}>
-                    <Text style={s.pillText}>{r.cfb_status.toUpperCase()}</Text>
-                  </View>
-                )}
-              </>
-            ) : <Text style={s.dim}>—</Text>}
-          </View>
+            <View style={{flex: 3}}>
+              {r.cfb_pick ? (
+                <>
+                  <Text style={s.livePick} numberOfLines={1}>{r.cfb_pick}</Text>
+                  <Text style={s.dim} numberOfLines={1}>{r.cfb_matchup}</Text>
+                  {!!r.cfb_status && (
+                    <View style={[s.pill, pillFor(r.cfb_status)]}>
+                      <Text style={s.pillText}>{r.cfb_status.toUpperCase()}</Text>
+                    </View>
+                  )}
+                </>
+              ) : <Text style={s.dim}>—</Text>}
+            </View>
 
-          <View style={{flex: 3}}>
-            {r.nfl_pick ? (
-              <>
-                <Text style={s.livePick} numberOfLines={1}>{r.nfl_pick}</Text>
-                <Text style={s.dim} numberOfLines={1}>{r.nfl_matchup}</Text>
-                {!!r.nfl_status && (
-                  <View style={[s.pill, pillFor(r.nfl_status)]}>
-                    <Text style={s.pillText}>{r.nfl_status.toUpperCase()}</Text>
-                  </View>
-                )}
-              </>
-            ) : <Text style={s.dim}>—</Text>}
+            <View style={{flex: 3}}>
+              {r.nfl_pick ? (
+                <>
+                  <Text style={s.livePick} numberOfLines={1}>{r.nfl_pick}</Text>
+                  <Text style={s.dim} numberOfLines={1}>{r.nfl_matchup}</Text>
+                  {!!r.nfl_status && (
+                    <View style={[s.pill, pillFor(r.nfl_status)]}>
+                      <Text style={s.pillText}>{r.nfl_status.toUpperCase()}</Text>
+                    </View>
+                  )}
+                </>
+              ) : <Text style={s.dim}>—</Text>}
+            </View>
           </View>
-        </View>
-      ))}
+        ))
+      )}
     </View>
   );
 }
 
-/* ---------- helpers ---------- */
+/* ---------------- Leaderboard ---------------- */
+
+function Leaderboard({ loading, rows }: { loading: boolean; rows: BoardRow[] }) {
+  if (loading) return <ActivityIndicator style={{ marginTop: 24 }} />;
+
+  return (
+    <View style={{ padding: 16 }}>
+      {rows.length === 0 ? (
+        <Text style={s.dim}>No results yet.</Text>
+      ) : (
+        rows.map((r) => (
+          <View key={r.user_id} style={[s.leadRow, { marginBottom: 10 }]}>
+            <Text style={s.user}>{r.username ?? "User"}</Text>
+            <Text style={s.dim}>{r.wins}W–{r.losses}L</Text>
+          </View>
+        ))
+      )}
+    </View>
+  );
+}
+
+/* ---------------- helpers + styles ---------------- */
+
 function pillFor(status?: string | null) {
   if (!status) return s.pillGray;
   const v = status.toLowerCase();
@@ -270,18 +216,6 @@ function pillFor(status?: string | null) {
   return s.pillGray;
 }
 
-function timeAgo(iso: string) {
-  const d = Date.now() - Date.parse(iso);
-  const m = Math.floor(d / 60000);
-  if (m < 1) return "now";
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h`;
-  const days = Math.floor(h / 24);
-  return `${days}d`;
-}
-
-/* ---------- styles ---------- */
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#F5F5F5" },
 
@@ -297,21 +231,26 @@ const s = StyleSheet.create({
   inlineChipText: { fontWeight: "700", color: "#222" },
   inlineChipTextActive: { color: "#006241" },
 
-  banner: { backgroundColor: "#fff", borderWidth: 1, borderColor: "#eee", borderRadius: 12, padding: 16, marginHorizontal: 16, marginTop: 12 },
+  banner: { backgroundColor: "#fff", borderWidth: 1, borderColor: "#eee", borderRadius: 12, padding: 16 },
   bannerTitle: { fontSize: 22, fontWeight: "900", marginBottom: 10 },
   leagueSwitchRow: { flexDirection: "row", alignItems: "center" },
+
+  // 🔽 These were missing in your file; they fix the TS errors
   chip: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: "#ddd", backgroundColor: "#fff" },
   chipActive: { backgroundColor: "#E9F4EF", borderColor: "#006241" },
   chipText: { fontWeight: "800", color: "#222" },
   chipTextActive: { color: "#006241" },
 
-  feedContainer: { padding: 16 },
+  sectionTitle: { fontWeight: "900", fontSize: 18, marginBottom: 6 },
+  legendRow: { flexDirection: "row", paddingHorizontal: 4, marginBottom: 4 },
+  legend: { color: "#666", fontWeight: "700" },
 
-  card: { backgroundColor: "#fff", borderRadius: 12, borderWidth: 1, borderColor: "#eee", padding: 12 },
-  userRow: { fontSize: 14 },
+  liveRow: { backgroundColor: "#fff", borderRadius: 12, borderWidth: 1, borderColor: "#eee", padding: 12, flexDirection: "row", alignItems: "flex-start" },
   user: { fontWeight: "900", color: "#111" },
   dim: { color: "#666" },
-  main: { fontSize: 16, fontWeight: "600", color: "#222" },
+  livePick: { fontWeight: "800", color: "#222" },
+
+  leadRow: { backgroundColor: "#fff", borderRadius: 12, borderWidth: 1, borderColor: "#eee", padding: 12, flexDirection: "row", justifyContent: "space-between" },
 
   pill: { alignSelf: "flex-start", marginTop: 4, borderRadius: 999, paddingVertical: 3, paddingHorizontal: 8 },
   pillText: { fontWeight: "800" },
@@ -319,12 +258,4 @@ const s = StyleSheet.create({
   pillGreen: { backgroundColor: "#E8F6EF" },
   pillRed:   { backgroundColor: "#FDECEA" },
   pillGray:  { backgroundColor: "#EEE" },
-
-  leadRow: { backgroundColor: "#fff", borderRadius: 12, borderWidth: 1, borderColor: "#eee", padding: 12, flexDirection: "row", justifyContent: "space-between" },
-
-  sectionTitle: { fontWeight: "900", fontSize: 18, marginBottom: 6 },
-  legendRow: { flexDirection: "row", paddingHorizontal: 4, marginBottom: 4 },
-  legend: { color: "#666", fontWeight: "700" },
-  liveRow: { backgroundColor: "#fff", borderRadius: 12, borderWidth: 1, borderColor: "#eee", padding: 12, flexDirection: "row", alignItems: "flex-start" },
-  livePick: { fontWeight: "800", color: "#222" },
 });
