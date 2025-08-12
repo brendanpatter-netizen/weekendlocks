@@ -1,12 +1,11 @@
-// app/index.tsx — Home: Live Picks + Leaderboard
+// app/index.tsx — Home: Live Picks + Leaderboard (with Refresh), no 'chip' styles
 export const unstable_settings = { prerender: false };
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from "react-native";
 import { Link } from "expo-router";
 import { supabase } from "@/lib/supabase";
 
-/* ---------- Types ---------- */
 type League = "nfl" | "cfb";
 
 type LiveRow = {
@@ -26,81 +25,93 @@ type LiveRow = {
 
 type BoardRow = { user_id: string; username: string | null; wins: number; losses: number };
 
-/* ---------- Page ---------- */
 export default function Home() {
   const [tab, setTab] = useState<"live" | "board">("live");
 
   // Live picks
   const [live, setLive] = useState<LiveRow[]>([]);
   const [loadingLive, setLoadingLive] = useState(true);
+  const [liveUpdatedAt, setLiveUpdatedAt] = useState<number | null>(null);
 
   // Leaderboard
   const [boardLeague, setBoardLeague] = useState<League>("nfl");
   const [board, setBoard] = useState<BoardRow[]>([]);
   const [loadingBoard, setLoadingBoard] = useState(true);
 
-  // Fetch live picks (current open week(s))
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        setLoadingLive(true);
-        const { data, error } = await supabase.rpc("live_picks_both");
-        if (error) throw error;
-        if (mounted) setLive((data || []) as LiveRow[]);
-      } catch (e) {
-        console.warn(e);
-      } finally {
-        if (mounted) setLoadingLive(false);
-      }
-    })();
-    return () => { mounted = false; };
-  }, []);
+  const fetchLive = async () => {
+    setLoadingLive(true);
+    try {
+      const { data, error } = await supabase.rpc("live_picks_both");
+      if (error) throw error;
+      setLive((data || []) as LiveRow[]);
+      setLiveUpdatedAt(Date.now());
+    } finally {
+      setLoadingLive(false);
+    }
+  };
 
-  // Fetch leaderboard for selected league
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        setLoadingBoard(true);
-        const { data, error } = await supabase.rpc("leaderboard_simple", {
-          p_league: boardLeague,
-        });
-        if (error) throw error;
-        if (mounted) setBoard((data || []) as BoardRow[]);
-      } catch (e) {
-        console.warn(e);
-      } finally {
-        if (mounted) setLoadingBoard(false);
-      }
-    })();
-    return () => { mounted = false; };
-  }, [boardLeague]);
+  const fetchBoard = async (league: League) => {
+    setLoadingBoard(true);
+    try {
+      const { data, error } = await supabase.rpc("leaderboard_simple", { p_league: league });
+      if (error) throw error;
+      setBoard((data || []) as BoardRow[]);
+    } finally {
+      setLoadingBoard(false);
+    }
+  };
+
+  useEffect(() => { fetchLive(); }, []);
+  useEffect(() => { fetchBoard(boardLeague); }, [boardLeague]);
+
+  const updatedAgo = useMemo(() => {
+    if (!liveUpdatedAt) return null;
+    const m = Math.floor((Date.now() - liveUpdatedAt) / 60000);
+    if (m < 1) return "just now";
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    return `${h}h ago`;
+  }, [liveUpdatedAt]);
 
   return (
     <View style={s.screen}>
       {/* Tabs */}
       <View style={s.tabs}>
-        <Pressable onPress={() => setTab("live")} style={[s.tab, tab === "live" && s.tabActive]}>
-          <Text style={[s.tabText, tab === "live" && s.tabTextActive]}>Live Picks</Text>
+        <Pressable onPress={() => setTab("live")} style={tab === "live" ? [s.tab, s.tabActive] : s.tab}>
+          <Text style={tab === "live" ? [s.tabText, s.tabTextActive] : s.tabText}>Live Picks</Text>
         </Pressable>
         <View style={{ width: 8 }} />
-        <Pressable onPress={() => setTab("board")} style={[s.tab, tab === "board" && s.tabActive]}>
-          <Text style={[s.tabText, tab === "board" && s.tabTextActive]}>Leaderboard</Text>
+        <Pressable onPress={() => setTab("board")} style={tab === "board" ? [s.tab, s.tabActive] : s.tab}>
+          <Text style={tab === "board" ? [s.tabText, s.tabTextActive] : s.tabText}>Leaderboard</Text>
         </Pressable>
       </View>
 
       {tab === "live" ? (
-        <LivePicks loading={loadingLive} rows={live} />
+        <LivePicks
+          loading={loadingLive}
+          rows={live}
+          onRefresh={fetchLive}
+          updatedAgo={updatedAgo}
+        />
       ) : (
         <>
           <View style={s.inlineLeague}>
-            <Pressable onPress={() => setBoardLeague("cfb")} style={[s.inlineChip, boardLeague === "cfb" && s.inlineChipActive]}>
-              <Text style={[s.inlineChipText, boardLeague === "cfb" && s.inlineChipTextActive]}>CFB</Text>
+            <Pressable
+              onPress={() => setBoardLeague("cfb")}
+              style={boardLeague === "cfb" ? [s.inlineChip, s.inlineChipActive] : s.inlineChip}
+            >
+              <Text style={boardLeague === "cfb" ? [s.inlineChipText, s.inlineChipTextActive] : s.inlineChipText}>
+                CFB
+              </Text>
             </Pressable>
             <View style={{ width: 8 }} />
-            <Pressable onPress={() => setBoardLeague("nfl")} style={[s.inlineChip, boardLeague === "nfl" && s.inlineChipActive]}>
-              <Text style={[s.inlineChipText, boardLeague === "nfl" && s.inlineChipTextActive]}>NFL</Text>
+            <Pressable
+              onPress={() => setBoardLeague("nfl")}
+              style={boardLeague === "nfl" ? [s.inlineChip, s.inlineChipActive] : s.inlineChip}
+            >
+              <Text style={boardLeague === "nfl" ? [s.inlineChipText, s.inlineChipTextActive] : s.inlineChipText}>
+                NFL
+              </Text>
             </Pressable>
           </View>
           <Leaderboard loading={loadingBoard} rows={board} />
@@ -110,37 +121,53 @@ export default function Home() {
   );
 }
 
-/* ---------------- Live Picks ---------------- */
+/* -------- Live Picks -------- */
 
-function LivePicks({ loading, rows }: { loading: boolean; rows: LiveRow[] }) {
+function LivePicks({
+  loading, rows, onRefresh, updatedAgo,
+}: {
+  loading: boolean;
+  rows: LiveRow[];
+  onRefresh: () => void;
+  updatedAgo: string | null;
+}) {
   return (
     <View style={{ padding: 16 }}>
-      {/* Make your picks banner */}
+      {/* Banner */}
       <View style={s.banner}>
         <Text style={s.bannerTitle}>Make Your Picks</Text>
         <View style={s.leagueSwitchRow}>
           <Link href="/picks/college" asChild>
-            <Pressable style={[s.chip, s.chipActive]}>
-              <Text style={[s.chipText, s.chipTextActive]}>College Football</Text>
+            <Pressable style={s.ctaBtnPrimary}>
+              <Text style={s.ctaBtnPrimaryText}>College Football</Text>
             </Pressable>
           </Link>
           <View style={{ width: 8 }} />
           <Link href="/picks/page" asChild>
-            <Pressable style={[s.chip, s.chipActive]}>
-              <Text style={[s.chipText, s.chipTextActive]}>NFL</Text>
+            <Pressable style={s.ctaBtnPrimary}>
+              <Text style={s.ctaBtnPrimaryText}>NFL</Text>
             </Pressable>
           </Link>
         </View>
       </View>
 
-      <Text style={[s.sectionTitle, { marginTop: 12 }]}>This Week’s Picks</Text>
+      {/* Header + refresh */}
+      <View style={s.refreshRow}>
+        <Text style={s.sectionTitle}>This Week’s Picks</Text>
+        <Pressable onPress={onRefresh} disabled={loading} style={loading ? [s.refreshBtn, s.refreshBtnDisabled] : s.refreshBtn}>
+          <Text style={s.refreshBtnText}>{loading ? "Refreshing…" : "Refresh ↻"}</Text>
+        </Pressable>
+      </View>
+      {updatedAgo && <Text style={[s.dim, { marginBottom: 8 }]}>Updated {updatedAgo}</Text>}
 
+      {/* Table header */}
       <View style={s.legendRow}>
         <Text style={[s.legend, {flex: 2}]}>User</Text>
         <Text style={[s.legend, {flex: 3, textAlign: "center"}]}>CFB</Text>
         <Text style={[s.legend, {flex: 3, textAlign: "center"}]}>NFL</Text>
       </View>
 
+      {/* Rows */}
       {loading ? (
         <ActivityIndicator style={{ marginTop: 24 }} />
       ) : rows.length === 0 ? (
@@ -155,11 +182,9 @@ function LivePicks({ loading, rows }: { loading: boolean; rows: LiveRow[] }) {
                 <>
                   <Text style={s.livePick} numberOfLines={1}>{r.cfb_pick}</Text>
                   <Text style={s.dim} numberOfLines={1}>{r.cfb_matchup}</Text>
-                  {!!r.cfb_status && (
-                    <View style={[s.pill, pillFor(r.cfb_status)]}>
-                      <Text style={s.pillText}>{r.cfb_status.toUpperCase()}</Text>
-                    </View>
-                  )}
+                  {r.cfb_status ? (
+                    <View style={[s.pill, pillFor(r.cfb_status)]}><Text style={s.pillText}>{r.cfb_status.toUpperCase()}</Text></View>
+                  ) : null}
                 </>
               ) : <Text style={s.dim}>—</Text>}
             </View>
@@ -169,11 +194,9 @@ function LivePicks({ loading, rows }: { loading: boolean; rows: LiveRow[] }) {
                 <>
                   <Text style={s.livePick} numberOfLines={1}>{r.nfl_pick}</Text>
                   <Text style={s.dim} numberOfLines={1}>{r.nfl_matchup}</Text>
-                  {!!r.nfl_status && (
-                    <View style={[s.pill, pillFor(r.nfl_status)]}>
-                      <Text style={s.pillText}>{r.nfl_status.toUpperCase()}</Text>
-                    </View>
-                  )}
+                  {r.nfl_status ? (
+                    <View style={[s.pill, pillFor(r.nfl_status)]}><Text style={s.pillText}>{r.nfl_status.toUpperCase()}</Text></View>
+                  ) : null}
                 </>
               ) : <Text style={s.dim}>—</Text>}
             </View>
@@ -184,33 +207,30 @@ function LivePicks({ loading, rows }: { loading: boolean; rows: LiveRow[] }) {
   );
 }
 
-/* ---------------- Leaderboard ---------------- */
+/* -------- Leaderboard -------- */
 
 function Leaderboard({ loading, rows }: { loading: boolean; rows: BoardRow[] }) {
   if (loading) return <ActivityIndicator style={{ marginTop: 24 }} />;
-
   return (
     <View style={{ padding: 16 }}>
       {rows.length === 0 ? (
         <Text style={s.dim}>No results yet.</Text>
-      ) : (
-        rows.map((r) => (
-          <View key={r.user_id} style={[s.leadRow, { marginBottom: 10 }]}>
-            <Text style={s.user}>{r.username ?? "User"}</Text>
-            <Text style={s.dim}>{r.wins}W–{r.losses}L</Text>
-          </View>
-        ))
-      )}
+      ) : rows.map((r) => (
+        <View key={r.user_id} style={[s.leadRow, { marginBottom: 10 }]}>
+          <Text style={s.user}>{r.username ?? "User"}</Text>
+          <Text style={s.dim}>{r.wins}W–{r.losses}L</Text>
+        </View>
+      ))}
     </View>
   );
 }
 
-/* ---------------- helpers + styles ---------------- */
+/* -------- helpers + styles -------- */
 
 function pillFor(status?: string | null) {
   if (!status) return s.pillGray;
   const v = status.toLowerCase();
-  if (v === "win")  return s.pillGreen;
+  if (v === "win") return s.pillGreen;
   if (v === "loss") return s.pillRed;
   if (v === "live" || v === "in_progress") return s.pillBlue;
   return s.pillGray;
@@ -235,14 +255,18 @@ const s = StyleSheet.create({
   bannerTitle: { fontSize: 22, fontWeight: "900", marginBottom: 10 },
   leagueSwitchRow: { flexDirection: "row", alignItems: "center" },
 
-  // 🔽 These were missing in your file; they fix the TS errors
-  chip: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: "#ddd", backgroundColor: "#fff" },
-  chipActive: { backgroundColor: "#E9F4EF", borderColor: "#006241" },
-  chipText: { fontWeight: "800", color: "#222" },
-  chipTextActive: { color: "#006241" },
+  // CTA buttons used in the banner (replaces old 'chip' styles)
+  ctaBtnPrimary: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: "#006241", backgroundColor: "#E9F4EF" },
+  ctaBtnPrimaryText: { fontWeight: "800", color: "#006241" },
 
-  sectionTitle: { fontWeight: "900", fontSize: 18, marginBottom: 6 },
-  legendRow: { flexDirection: "row", paddingHorizontal: 4, marginBottom: 4 },
+  refreshRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 12 },
+  refreshBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: "#ccc", backgroundColor: "#fff" },
+  refreshBtnDisabled: { opacity: 0.5 },
+  refreshBtnText: { fontWeight: "800", color: "#222" },
+
+  sectionTitle: { fontWeight: "900", fontSize: 18 },
+
+  legendRow: { flexDirection: "row", paddingHorizontal: 4, marginTop: 8, marginBottom: 4 },
   legend: { color: "#666", fontWeight: "700" },
 
   liveRow: { backgroundColor: "#fff", borderRadius: 12, borderWidth: 1, borderColor: "#eee", padding: 12, flexDirection: "row", alignItems: "flex-start" },
