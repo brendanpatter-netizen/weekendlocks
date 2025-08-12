@@ -1,10 +1,7 @@
-// app/picks/page.tsx – NFL picks with structured save
 export const unstable_settings = { prerender: false };
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  ScrollView, View, Text, StyleSheet, ActivityIndicator, Pressable, Image, Alert
-} from "react-native";
+import { ScrollView, View, Text, StyleSheet, ActivityIndicator, Pressable, Image, Alert } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import { Link } from "expo-router";
 import { supabase } from "@/lib/supabase";
@@ -13,25 +10,41 @@ import { useOdds } from "../../lib/useOdds";
 import { logoSrc } from "../../lib/teamLogos";
 
 type BetType = "spreads" | "totals" | "h2h";
-type WeekRow = { id: number; league: "nfl"|"cfb"; season: number; week_num: number; opens_at: string; closes_at: string };
-type GameRow = { id: number; week_id: number; home: string; away: string; kickoff_at: string };
-
 const NFL_SPORT_KEY = "americanfootball_nfl";
 const SEASON = 2025;
 
-const nick = (name: string) => {
-  const p = name.trim().split(/\s+/);
-  return (p[p.length - 1] || "").toLowerCase();
+/** Robust normalize — last token + some common aliases */
+const NFL_ALIASES: Record<string, string> = {
+  "dallas": "cowboys",
+  "cowboys": "cowboys",
+  "philadelphia": "eagles",
+  "eagles": "eagles",
+  "san francisco": "49ers",
+  "niners": "49ers",
+  "49ers": "49ers",
+  "new york": "giants", // rough; adjust if you also have jets in same week
+  "giants": "giants",
+  "jets": "jets",
+  "kansas city": "chiefs",
+  "chiefs": "chiefs",
+  // add more as needed
 };
+function normTeamNFL(name: string) {
+  const raw = name.toLowerCase().replace(/[^\w\s]/g, "").trim();
+  const parts = raw.split(/\s+/);
+  const last = parts[parts.length - 1];
+  return NFL_ALIASES[raw] || NFL_ALIASES[last] || last;
+}
 
 export default function PicksNFL() {
   const [week, setWeek] = useState<number>(getCurrentWeek() || 1);
   const [betType, setBetType] = useState<BetType>("spreads");
   const [userId, setUserId] = useState<string | null>(null);
-  const [weekRow, setWeekRow] = useState<WeekRow | null>(null);
+  const [weekRow, setWeekRow] = useState<any>(null);
   const [gameMap, setGameMap] = useState<Record<string, number>>({});
   const [myPicks, setMyPicks] = useState<Record<number, string>>({});
   const [saving, setSaving] = useState<number | null>(null);
+  const [blockMsg, setBlockMsg] = useState<string | null>(null);
 
   const { data, error, loading } = useOdds(NFL_SPORT_KEY, week);
 
@@ -41,38 +54,51 @@ export default function PicksNFL() {
 
   useEffect(() => {
     (async () => {
-      try {
-        // Week row
-        const { data: w } = await supabase
-          .from("weeks").select("*")
-          .eq("league", "nfl").eq("season", SEASON).eq("week_num", week)
-          .maybeSingle();
-        setWeekRow(w as any);
+      setBlockMsg(null);
+      // get the internal week row
+      const { data: w, error: wErr } = await supabase
+        .from("weeks")
+        .select("*")
+        .eq("league", "nfl")
+        .eq("season", SEASON)
+        .eq("week_num", week)
+        .maybeSingle();
+      if (wErr) setBlockMsg(`weeks query: ${wErr.message}`);
+      setWeekRow(w);
 
-        // Games mapping for this week
-        if (w?.id) {
-          const { data: g } = await supabase
-            .from("games").select("id, home, away, week_id").eq("week_id", w.id);
-          const map: Record<string, number> = {};
-          (g ?? []).forEach((row: any) => {
-            map[`${row.away.toLowerCase()}@${row.home.toLowerCase()}`] = row.id;
-            map[`${nick(row.away)}@${nick(row.home)}`] = row.id; // nickname key
-          });
-          setGameMap(map);
+      // build game map: away@home -> id (use normalized nicknames)
+      if (w?.id) {
+        const { data: g, error: gErr } = await supabase
+          .from("games")
+          .select("id, home, away, week_id")
+          .eq("week_id", w.id);
+        if (gErr) setBlockMsg(`games query: ${gErr.message}`);
 
-          // My existing picks
-          const ids = (g ?? []).map((r: any) => r.id);
-          if (ids.length) {
-            const { data: ps } = await supabase.from("picks").select("game_id, pick_team");
-            const mine: Record<number, string> = {};
-            (ps ?? []).forEach((r: any) => { if (ids.includes(r.game_id)) mine[r.game_id] = r.pick_team; });
-            setMyPicks(mine);
-          } else setMyPicks({});
+        const map: Record<string, number> = {};
+        (g ?? []).forEach((row: any) => {
+          const key = `${normTeamNFL(row.away)}@${normTeamNFL(row.home)}`;
+          map[key] = row.id;
+        });
+        setGameMap(map);
+
+        // my existing picks for these games
+        const ids = (g ?? []).map((r: any) => r.id);
+        if (ids.length) {
+          const { data: ps, error: pErr } = await supabase
+            .from("picks")
+            .select("game_id, pick_team")
+            .in("game_id", ids);
+          if (pErr) setBlockMsg(`picks query: ${pErr.message}`);
+          const mine: Record<number, string> = {};
+          (ps ?? []).forEach((r: any) => { mine[r.game_id] = r.pick_team; });
+          setMyPicks(mine);
         } else {
-          setGameMap({});
           setMyPicks({});
         }
-      } catch {}
+      } else {
+        setGameMap({});
+        setMyPicks({});
+      }
     })();
   }, [week]);
 
@@ -82,58 +108,57 @@ export default function PicksNFL() {
     return now >= Date.parse(weekRow.opens_at) && now < Date.parse(weekRow.closes_at);
   }, [weekRow]);
 
-  const labelFor = (type: BetType, o: any) => {
-    if (type === "spreads") return `${o.name} ${o.point}`;
-    if (type === "h2h")     return `${o.name} ML`;
-    return `${o.name} ${o.point}`;
-  };
+  const labelFor = (type: BetType, o: any) =>
+    type === "spreads" ? `${o.name} ${o.point}` : type === "h2h" ? `${o.name} ML` : `${o.name} ${o.point}`;
 
   const savePick = async (oddsGame: any, type: BetType, o: any) => {
-    if (!userId) return Alert.alert("Please sign in");
-    if (!isOpen)  return Alert.alert("Closed", "Picks are closed for this week.");
+    if (!userId) { Alert.alert("Please sign in to save picks."); return; }
+    if (!isOpen) { Alert.alert("Closed", "Picks are closed for this week."); return; }
 
-    const mappedId =
-      gameMap[`${oddsGame.away_team.toLowerCase()}@${oddsGame.home_team.toLowerCase()}`] ??
-      gameMap[`${nick(oddsGame.away_team)}@${nick(oddsGame.home_team)}`];
+    const away = normTeamNFL(oddsGame.away_team);
+    const home = normTeamNFL(oddsGame.home_team);
+    const key = `${away}@${home}`;
+    const mappedId = gameMap[key];
 
-    if (!mappedId) return Alert.alert("Can’t save", "No internal game found for this matchup.");
+    if (!mappedId) {
+      Alert.alert("Can’t match game", `Couldn’t map "${oddsGame.away_team} @ ${oddsGame.home_team}" to an internal game.\n\nLookup key: ${key}`);
+      return;
+    }
 
     const label = labelFor(type, o);
     setSaving(mappedId);
-
     try {
       const payload = {
         user_id: userId,
         game_id: mappedId,
-        // pretty label for feed
         pick_team: label,
-        // structured fields for grading
-        pick_market: type,                  // 'spreads' | 'totals' | 'h2h'
-        pick_side: String(o.name),          // 'Eagles' | 'Chiefs' | 'Over' | 'Under'
-        pick_line: typeof o.point === "number" ? o.point : (o.point ? Number(o.point) : null),
+        pick_market: type,
+        pick_side: String(o.name),
+        pick_line: o.point != null ? Number(o.point) : null,
         pick_price: typeof o.price === "number" ? o.price : null,
         sport: "nfl",
         week,
         status: "pending",
         created_at: new Date().toISOString(),
       };
-
-      const { error } = await supabase
+      const { error: upErr } = await supabase
         .from("picks")
-        .upsert(payload, { onConflict: "user_id,game_id" });
-      if (error) throw error;
-
+        .upsert(payload, { onConflict: "user_id,game_id" }); // requires unique(user_id,game_id)
+      if (upErr) {
+        Alert.alert("Save failed", upErr.message);
+        return;
+      }
       setMyPicks((m) => ({ ...m, [mappedId]: label }));
+      Alert.alert("Saved", `Your pick: ${label}`);
     } catch (e: any) {
-      Alert.alert("Couldn’t save pick", e?.message ?? "Try again.");
+      Alert.alert("Error", String(e?.message || e));
     } finally {
       setSaving(null);
     }
   };
 
   if (loading) return <ActivityIndicator style={styles.center} size="large" />;
-  if (error)   return <Text style={styles.center}>Error: {error.message}</Text>;
-  if (!data?.length) return <View style={styles.center}><Text>No games found for week {week}.</Text></View>;
+  if (error) return <Text style={styles.center}>Error: {error.message}</Text>;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -143,88 +168,90 @@ export default function PicksNFL() {
       </View>
 
       <Picker selectedValue={week} onValueChange={(v) => setWeek(Number(v))} style={{ marginBottom: 12 }}>
-        {[...Array(18)].map((_, i) => <Picker.Item key={i+1} label={`Week ${i+1}`} value={i+1} />)}
+        {Array.from({ length: 18 }).map((_, i) => (
+          <Picker.Item key={i + 1} label={`Week ${i + 1}`} value={i + 1} />
+        ))}
       </Picker>
 
-      <View style={styles.tabs}>
-        {(["spreads","totals","h2h"] as BetType[]).map((t) => (
-          <Pressable key={t} onPress={() => setBetType(t)} style={[styles.tab, betType===t && styles.tabActive]}>
-            <Text style={betType===t && styles.tabActiveText}>{t.toUpperCase()}</Text>
-          </Pressable>
-        ))}
-      </View>
+      {!!blockMsg && <Text style={styles.warn}>{blockMsg}</Text>}
 
-      {data.map((game: any) => {
-        const book = game.bookmakers?.[0];
-        const market = book?.markets?.find((m: any) => m.key === betType);
-        if (!market) return null;
+      {!data?.length ? (
+        <View style={styles.center}><Text>No games found for week {week}.</Text></View>
+      ) : data.map((game: any) => {
+          const book = game.bookmakers?.[0];
+          const market = book?.markets?.find((m: any) => m.key === betType);
+          if (!market) return null;
 
-        const mappedId =
-          gameMap[`${game.away_team.toLowerCase()}@${game.home_team.toLowerCase()}`] ??
-          gameMap[`${nick(game.away_team)}@${nick(game.home_team)}`];
+          const mappedId = gameMap[`${normTeamNFL(game.away_team)}@${normTeamNFL(game.home_team)}`];
 
-        return (
-          <View key={game.id} style={styles.card}>
-            <View style={styles.logosRow}>
-              <Image source={logoSrc(game.away_team, "nfl")} style={styles.logo} />
-              <Text style={styles.vs}>@</Text>
-              <Image source={logoSrc(game.home_team, "nfl")} style={styles.logo} />
+          return (
+            <View key={game.id} style={styles.card}>
+              <View style={styles.logosRow}>
+                <Image source={logoSrc(game.away_team, "nfl")} style={styles.logo} />
+                <Text style={styles.vs}>@</Text>
+                <Image source={logoSrc(game.home_team, "nfl")} style={styles.logo} />
+              </View>
+              <Text style={styles.match}>{game.away_team} @ {game.home_team}</Text>
+              <Text style={styles.kick}>{new Date(game.commence_time).toLocaleString()}</Text>
+
+              <View style={{ marginTop: 8 }}>
+                {(market.outcomes ?? []).map((o: any, idx: number) => {
+                  const label = labelFor(betType, o);
+                  const isMine = mappedId ? myPicks[mappedId] === label : false;
+                  const disabled = !isOpen || !mappedId || saving === mappedId;
+                  return (
+                    <View key={o.name + String(o.point ?? "") + idx} style={{ marginTop: idx ? 8 : 0 }}>
+                      <Pressable
+                        disabled={disabled}
+                        onPress={() => savePick(game, betType, o)}
+                        style={
+                          isMine
+                            ? [styles.pickBtn, styles.pickBtnActive]
+                            : disabled ? [styles.pickBtn, styles.pickBtnDisabled] : styles.pickBtn
+                        }
+                      >
+                        <Text style={isMine ? [styles.pickText, styles.pickTextActive] : styles.pickText}>
+                          {label}{typeof o.price === "number" ? `  (${o.price > 0 ? `+${o.price}` : o.price})` : ""}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  );
+                })}
+              </View>
+
+              {!mappedId && (
+                <Text style={styles.note}>
+                  (No internal game matched — key tried: {`${normTeamNFL(game.away_team)}@${normTeamNFL(game.home_team)}`})
+                </Text>
+              )}
             </View>
-            <Text style={styles.match}>{game.away_team} @ {game.home_team}</Text>
-            <Text style={styles.kick}>{new Date(game.commence_time).toLocaleString()}</Text>
-
-            <View style={{ marginTop: 8, gap: 8 }}>
-              {(market.outcomes ?? []).map((o: any) => {
-                const label = labelFor(betType, o);
-                const isMine = mappedId ? myPicks[mappedId] === label : false;
-                return (
-                  <Pressable
-                    key={o.name + String(o.point ?? "")}
-                    disabled={!isOpen || !mappedId || saving === mappedId}
-                    onPress={() => savePick(game, betType, o)}
-                    style={[
-                      styles.pickBtn,
-                      isMine && styles.pickBtnActive,
-                      (!isOpen || !mappedId || saving === mappedId) && styles.pickBtnDisabled,
-                    ]}
-                  >
-                    <Text style={[styles.pickText, isMine && styles.pickTextActive]}>
-                      {label}
-                      {typeof o.price === "number" ? `  (${o.price > 0 ? `+${o.price}` : o.price})` : ""}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {!mappedId && <Text style={styles.note}>(No internal game found – check `games` table names.)</Text>}
-          </View>
-        );
-      })}
+          );
+        })}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
-  container: { padding: 16, gap: 12 },
+  warn: { color: "#7a4", marginBottom: 8 },
+  container: { padding: 16 },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
   title: { fontSize: 20, fontWeight: "600" },
   switch: { color: "#0a84ff", fontSize: 16 },
-  tabs: { flexDirection: "row", marginBottom: 12, gap: 8 },
-  tab: { flex: 1, padding: 8, borderWidth: 1, borderColor: "#999", alignItems: "center" },
-  tabActive: { backgroundColor: "#000" },
-  tabActiveText: { color: "#fff" },
-  card: { padding: 12, borderWidth: 1, borderRadius: 8, borderColor: "#ccc" },
+
+  card: { padding: 12, borderWidth: 1, borderRadius: 8, borderColor: "#ccc", backgroundColor: "#fff", marginBottom: 12 },
+  logosRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginBottom: 6 },
+  logo: { width: 42, height: 42, borderRadius: 21 },
+  vs: { fontWeight: "bold", fontSize: 16, marginHorizontal: 8 },
+
   match: { fontWeight: "bold", marginBottom: 2, fontSize: 16 },
   kick: { marginTop: 2, fontSize: 12, opacity: 0.7 },
-  logosRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", columnGap: 8, marginBottom: 6 },
-  logo: { width: 42, height: 42, borderRadius: 21 },
-  vs: { fontWeight: "bold", fontSize: 16 },
+
   pickBtn: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: "#bbb", backgroundColor: "#fff" },
   pickBtnActive: { borderColor: "#006241", backgroundColor: "#E9F4EF" },
   pickBtnDisabled: { opacity: 0.5 },
   pickText: { fontWeight: "800", color: "#222" },
   pickTextActive: { color: "#006241" },
+
   note: { marginTop: 6, fontSize: 12, color: "#9a6a00" },
 });
