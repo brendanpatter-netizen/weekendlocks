@@ -1,5 +1,5 @@
 // app/auth/login/index.tsx
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   View, Text, TextInput, Pressable, ActivityIndicator,
   StyleSheet, Alert, Platform,
@@ -20,31 +20,34 @@ const colors = {
 export default function Login() {
   const router = useRouter();
 
-  const [mode, setMode] = useState<Mode>("code");
+  const [mode, setMode] = useState<Mode>("password"); // default to password for now
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [codeSent, setCodeSent] = useState(false);
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [fatal, setFatal] = useState<string | null>(null);
 
-  // Optional: clear any ghost session on entry
+  const mountedRef = useRef(true);
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) return;
-      // no session → nothing to do
-    });
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
   }, []);
 
-  const redirectBase =
-    (typeof window !== "undefined" ? window.location.origin : "");
-  const callbackUrl = redirectBase + "/auth/callback";
-  const resetUrl = redirectBase + "/auth/reset";
+  const origin =
+    typeof window !== "undefined" && window.location ? window.location.origin : "";
+  const callbackUrl = origin + "/auth/callback";
+  const resetUrl = origin + "/auth/reset";
+
+  function setSafe(setter: (v: any) => void, val: any) {
+    if (mountedRef.current) setter(val);
+  }
 
   // OTP / Magic link
   async function send() {
     const addr = email.trim();
     if (!addr) return;
-    setLoading(true);
+    setSafe(setLoading, true);
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email: addr,
@@ -52,15 +55,17 @@ export default function Login() {
       });
       if (error) throw error;
       if (mode === "code") {
-        setCodeSent(true);
+        setSafe(setCodeSent, true);
         Alert.alert("Code sent", "Enter the 6-digit code from your email.");
       } else {
         Alert.alert("Magic link sent", "Check your email to finish signing in.");
       }
     } catch (e: any) {
+      console.error(e);
+      setSafe(setFatal, e?.message ?? "Couldn’t send code/link.");
       Alert.alert("Couldn’t send", e?.message ?? "Try again.");
     } finally {
-      setLoading(false);
+      setSafe(setLoading, false);
     }
   }
 
@@ -68,15 +73,17 @@ export default function Login() {
     const addr = email.trim();
     const token = code.trim();
     if (!addr || token.length !== 6) return;
-    setLoading(true);
+    setSafe(setLoading, true);
     try {
       const { error } = await supabase.auth.verifyOtp({ email: addr, token, type: "email" });
       if (error) throw error;
-      router.replace("/account"); // nudge to account (first-time flow handles itself)
+      router.replace("/account"); // first-time flow will nudge here anyway
     } catch (e: any) {
+      console.error(e);
+      setSafe(setFatal, e?.message ?? "Couldn’t verify code.");
       Alert.alert("Invalid code", e?.message ?? "Check the code and try again.");
     } finally {
-      setLoading(false);
+      setSafe(setLoading, false);
     }
   }
 
@@ -84,15 +91,17 @@ export default function Login() {
   async function signInWithPassword() {
     const addr = email.trim();
     if (!addr || !password) return;
-    setLoading(true);
+    setSafe(setLoading, true);
     try {
       const { error } = await supabase.auth.signInWithPassword({ email: addr, password });
       if (error) throw error;
       router.replace("/picks/page");
     } catch (e: any) {
+      console.error(e);
+      setSafe(setFatal, e?.message ?? "Sign in failed.");
       Alert.alert("Sign in failed", e?.message ?? "Check your email/password and try again.");
     } finally {
-      setLoading(false);
+      setSafe(setLoading, false);
     }
   }
 
@@ -103,7 +112,7 @@ export default function Login() {
       Alert.alert("Password too short", "Use at least 8 characters.");
       return;
     }
-    setLoading(true);
+    setSafe(setLoading, true);
     try {
       const { error } = await supabase.auth.signUp({
         email: addr,
@@ -113,25 +122,28 @@ export default function Login() {
       if (error) throw error;
       Alert.alert("Check your email", "Confirm your email, then sign in with your password.");
     } catch (e: any) {
+      console.error(e);
+      setSafe(setFatal, e?.message ?? "Couldn’t create account.");
       Alert.alert("Couldn’t create account", e?.message ?? "Please try again.");
     } finally {
-      setLoading(false);
+      setSafe(setLoading, false);
     }
   }
 
-  // Forgot password
   async function sendReset() {
     const addr = email.trim();
     if (!addr) return;
-    setLoading(true);
+    setSafe(setLoading, true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(addr, { redirectTo: resetUrl });
       if (error) throw error;
       Alert.alert("Password reset sent", "Check your email for the reset link.");
     } catch (e: any) {
+      console.error(e);
+      setSafe(setFatal, e?.message ?? "Couldn’t send reset.");
       Alert.alert("Couldn’t send reset", e?.message ?? "Try again.");
     } finally {
-      setLoading(false);
+      setSafe(setLoading, false);
     }
   }
 
@@ -231,6 +243,12 @@ export default function Login() {
               </>
             )}
           </>
+        )}
+
+        {!!fatal && (
+          <Text selectable style={{ marginTop: 10, color: "#c00" }}>
+            {fatal}
+          </Text>
         )}
       </View>
     </View>
