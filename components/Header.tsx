@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from "react";
 import { View, Text, Pressable, StyleSheet, Platform, TextInput, Alert, ActivityIndicator } from "react-native";
 import { Link, router } from "expo-router";
 import { supabase } from "@/lib/supabase";
-import { hardSignOut } from "@/lib/auth";
 
 const colors = {
   primary: "#006241",
@@ -81,7 +80,7 @@ export default function Header() {
       setMenuOpen(false);
       setCode("");
       setEmail("");
-      router.replace("/picks/page"); // align with your preferred route
+      router.replace("/picks/page");
     } catch (e: any) {
       Alert.alert("Invalid code", e?.message ?? "Check the code and try again.");
     } finally {
@@ -90,13 +89,16 @@ export default function Header() {
   }
 
   async function signOut() {
-    await hardSignOut();
-    setMenuOpen(false);
-    router.replace("/auth/login");
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      setMenuOpen(false);
+      if (typeof window !== "undefined") window.location.assign("/auth/login");
+    }
   }
 
   // Route targets
-  const accountHref = isSignedIn ? "/account/index" : "/auth/login";
+  const accountHref = isSignedIn ? "/account" : "/auth/login";
 
   return (
     <View style={styles.wrapper}>
@@ -107,7 +109,7 @@ export default function Header() {
             <Pressable><Text style={styles.nav}>Home</Text></Pressable>
           </Link>
 
-          {/* Picks route (standardized to /picks/index) */}
+          {/* Picks */}
           <Link href="/picks/page" asChild>
             <Pressable><Text style={styles.nav}>Picks</Text></Pressable>
           </Link>

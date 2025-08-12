@@ -24,17 +24,23 @@ export default function RootLayout() {
       setReady(true);
     });
 
-    // React only to SIGNED_IN so Home doesn't get hijacked
     const { data: sub } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
       setHasSession(!!session);
       setReady(true);
 
+      // First-time nudge to /account (only right when signing in)
       if (event === "SIGNED_IN" && session?.user) {
         const { user_metadata } = session.user;
         if (!user_metadata?.password_set && pathname !== "/account") {
           router.replace("/account");
+          return;
         }
+      }
+
+      // Always send signed-out users to login
+      if (event === "SIGNED_OUT" && pathname !== "/auth/login") {
+        router.replace("/auth/login");
       }
     });
 
@@ -48,7 +54,7 @@ export default function RootLayout() {
   const isPublic = (p?: string) =>
     !!p && (p === "/" || p === "/index" || p.startsWith("/picks") || p.startsWith("/auth"));
 
-  // Auth guard for private routes
+  // Guard private routes
   useEffect(() => {
     if (!ready) return;
     if (!hasSession && !isPublic(pathname)) {

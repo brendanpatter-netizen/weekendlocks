@@ -25,6 +25,7 @@ export default function AccountPage() {
     RobotoCondensed_700Bold,
   });
 
+  // don't block render on fonts
   const ffBold = loaded ? "RobotoCondensed_700Bold" : undefined;
   const ffReg = loaded ? "RobotoCondensed_400Regular" : undefined;
 
@@ -52,7 +53,7 @@ export default function AccountPage() {
     return () => { mounted = false; };
   }, []);
 
-  // Save display name + username to user_metadata
+  // Save display name + username
   const saveProfile = async () => {
     try {
       setSavingProfile(true);
@@ -105,27 +106,12 @@ export default function AccountPage() {
     }
   };
 
-  // More robust sign-out for web
+  // Robust sign-out
   const signOut = async () => {
     try {
-      // Try full/global sign-out first
-      const { error } = await supabase.auth.signOut({ scope: "global" } as any);
-      if (error) {
-        // Fallback: clear local session only (older browsers, odd states)
-        await supabase.auth.signOut({ scope: "local" } as any);
-      }
-    } catch {
-      // ignore
+      await supabase.auth.signOut();
     } finally {
-      // Best-effort: clear any sb-* localStorage keys
-      if (typeof window !== "undefined" && "localStorage" in window) {
-        try {
-          for (const k of Object.keys(localStorage)) {
-            if (k.startsWith("sb-")) localStorage.removeItem(k);
-          }
-        } catch {}
-      }
-      router.replace("/auth/login");
+      if (typeof window !== "undefined") window.location.assign("/auth/login");
     }
   };
 

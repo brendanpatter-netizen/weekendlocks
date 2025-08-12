@@ -1,13 +1,13 @@
-// app/account/index.tsx
+// app/auth/login/index.tsx
 import { useEffect, useState } from "react";
-import { View, Text, TextInput, StyleSheet, Pressable, Platform, Alert } from "react-native";
 import {
-  useFonts,
-  RobotoCondensed_400Regular,
-  RobotoCondensed_700Bold,
-} from "@expo-google-fonts/roboto-condensed";
-import { supabase } from "@/lib/supabase";
+  View, Text, TextInput, Pressable, ActivityIndicator,
+  StyleSheet, Alert, Platform,
+} from "react-native";
 import { useRouter } from "expo-router";
+import { supabase } from "@/lib/supabase";
+
+type Mode = "code" | "link" | "password";
 
 const colors = {
   primary: "#006241",
@@ -17,174 +17,257 @@ const colors = {
   subtext: "#555",
 };
 
-export default function AccountPage() {
+export default function Login() {
   const router = useRouter();
 
-  const [loaded] = useFonts({
-    RobotoCondensed_400Regular,
-    RobotoCondensed_700Bold,
-  });
+  const [mode, setMode] = useState<Mode>("code");
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [codeSent, setCodeSent] = useState(false);
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const ffBold = loaded ? "RobotoCondensed_700Bold" : undefined;
-  const ffReg = loaded ? "RobotoCondensed_400Regular" : undefined;
-
-  const [email, setEmail] = useState<string>("");
-  const [displayName, setDisplayName] = useState("");
-  const [savingProfile, setSavingProfile] = useState(false);
-
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [savingPassword, setSavingPassword] = useState(false);
-
+  // Optional: clear any ghost session on entry
   useEffect(() => {
-    let mounted = true;
-    supabase.auth.getUser().then(({ data }) => {
-      if (!mounted) return;
-      const user = data.user;
-      setEmail(user?.email ?? "");
-      setDisplayName((user?.user_metadata as any)?.display_name ?? "");
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) return;
+      // no session → nothing to do
     });
-    return () => { mounted = false; };
   }, []);
 
-  const saveProfile = async () => {
+  const redirectBase =
+    (typeof window !== "undefined" ? window.location.origin : "");
+  const callbackUrl = redirectBase + "/auth/callback";
+  const resetUrl = redirectBase + "/auth/reset";
+
+  // OTP / Magic link
+  async function send() {
+    const addr = email.trim();
+    if (!addr) return;
+    setLoading(true);
     try {
-      setSavingProfile(true);
-      const { error } = await supabase.auth.updateUser({
-        data: { display_name: displayName || null },
+      const { error } = await supabase.auth.signInWithOtp({
+        email: addr,
+        options: { shouldCreateUser: true, emailRedirectTo: callbackUrl },
       });
       if (error) throw error;
-      Alert.alert("Saved", "Profile updated.");
+      if (mode === "code") {
+        setCodeSent(true);
+        Alert.alert("Code sent", "Enter the 6-digit code from your email.");
+      } else {
+        Alert.alert("Magic link sent", "Check your email to finish signing in.");
+      }
     } catch (e: any) {
-      Alert.alert("Couldn’t save", e?.message ?? "Please try again.");
+      Alert.alert("Couldn’t send", e?.message ?? "Try again.");
     } finally {
-      setSavingProfile(false);
+      setLoading(false);
     }
-  };
+  }
 
-  const savePassword = async () => {
-    if (!newPassword || newPassword.length < 8) {
+  async function verify() {
+    const addr = email.trim();
+    const token = code.trim();
+    if (!addr || token.length !== 6) return;
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.verifyOtp({ email: addr, token, type: "email" });
+      if (error) throw error;
+      router.replace("/account"); // nudge to account (first-time flow handles itself)
+    } catch (e: any) {
+      Alert.alert("Invalid code", e?.message ?? "Check the code and try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Password auth
+  async function signInWithPassword() {
+    const addr = email.trim();
+    if (!addr || !password) return;
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email: addr, password });
+      if (error) throw error;
+      router.replace("/picks/page");
+    } catch (e: any) {
+      Alert.alert("Sign in failed", e?.message ?? "Check your email/password and try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function createWithPassword() {
+    const addr = email.trim();
+    if (!addr || !password) return;
+    if (password.length < 8) {
       Alert.alert("Password too short", "Use at least 8 characters.");
       return;
     }
-    if (newPassword !== confirmPassword) {
-      Alert.alert("Passwords don’t match", "Please re-enter.");
-      return;
-    }
+    setLoading(true);
     try {
-      setSavingPassword(true);
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      const { error } = await supabase.auth.signUp({
+        email: addr,
+        password,
+        options: { emailRedirectTo: callbackUrl },
+      });
       if (error) throw error;
-      setNewPassword("");
-      setConfirmPassword("");
-      Alert.alert("Password set", "You can now sign in with email + password.");
+      Alert.alert("Check your email", "Confirm your email, then sign in with your password.");
     } catch (e: any) {
-      Alert.alert("Couldn’t update password", e?.message ?? "Please try again.");
+      Alert.alert("Couldn’t create account", e?.message ?? "Please try again.");
     } finally {
-      setSavingPassword(false);
+      setLoading(false);
     }
-  };
+  }
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    router.replace("/auth/login");
-  };
+  // Forgot password
+  async function sendReset() {
+    const addr = email.trim();
+    if (!addr) return;
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(addr, { redirectTo: resetUrl });
+      if (error) throw error;
+      Alert.alert("Password reset sent", "Check your email for the reset link.");
+    } catch (e: any) {
+      Alert.alert("Couldn’t send reset", e?.message ?? "Try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <View style={styles.screen}>
       <View style={styles.card}>
-        <Text style={[styles.title, { fontFamily: ffBold }]}>My Account</Text>
+        <Text style={styles.title}>Sign in</Text>
+        <Text style={styles.subtitle}>Enter your email and choose a sign-in method.</Text>
 
-        {/* Profile section */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { fontFamily: ffBold }]}>Profile</Text>
-
-          <View style={styles.row}>
-            <Text style={[styles.label, { fontFamily: ffBold }]}>Email</Text>
-            <Text style={[styles.value, { fontFamily: ffReg }]}>{email || "—"}</Text>
-          </View>
-
-          <View style={styles.row}>
-            <Text style={[styles.label, { fontFamily: ffBold }]}>Display name</Text>
-            <TextInput
-              placeholder="Your name"
-              value={displayName}
-              onChangeText={setDisplayName}
-              style={styles.input}
-            />
-            <Pressable onPress={saveProfile} disabled={savingProfile} style={styles.primaryBtn}>
-              <Text style={styles.primaryBtnText}>{savingProfile ? "Saving..." : "Save profile"}</Text>
-            </Pressable>
-          </View>
+        {/* Mode toggle */}
+        <View style={styles.toggleRow}>
+          <Pressable onPress={() => setMode("code")} style={[styles.toggleBtn, mode === "code" && styles.toggleBtnActive]}>
+            <Text style={[styles.toggleText, mode === "code" && styles.toggleTextActive]}>6-Digit Code</Text>
+          </Pressable>
+          <Pressable onPress={() => setMode("link")} style={[styles.toggleBtn, mode === "link" && styles.toggleBtnActive]}>
+            <Text style={[styles.toggleText, mode === "link" && styles.toggleTextActive]}>Magic Link</Text>
+          </Pressable>
+          <Pressable onPress={() => setMode("password")} style={[styles.toggleBtn, mode === "password" && styles.toggleBtnActive]}>
+            <Text style={[styles.toggleText, mode === "password" && styles.toggleTextActive]}>Password</Text>
+          </Pressable>
         </View>
 
-        {/* Password section */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { fontFamily: ffBold }]}>Security</Text>
+        {/* Shared email input */}
+        <TextInput
+          placeholder="you@example.com"
+          autoCapitalize="none"
+          keyboardType="email-address"
+          value={email}
+          onChangeText={setEmail}
+          style={styles.input}
+        />
 
-          <View style={styles.row}>
-            <Text style={[styles.label, { fontFamily: ffBold }]}>Set / change password</Text>
+        {mode === "password" ? (
+          <>
             <TextInput
-              placeholder="New password"
+              placeholder="Password"
               secureTextEntry
-              value={newPassword}
-              onChangeText={setNewPassword}
+              value={password}
+              onChangeText={setPassword}
               style={styles.input}
             />
-            <TextInput
-              placeholder="Confirm new password"
-              secureTextEntry
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              style={styles.input}
-            />
-            <Pressable onPress={savePassword} disabled={savingPassword} style={styles.primaryBtn}>
-              <Text style={styles.primaryBtnText}>
-                {savingPassword ? "Saving..." : "Update password"}
+
+            <Pressable
+              onPress={signInWithPassword}
+              disabled={loading || !email.trim() || !password}
+              style={[styles.cta, (!email.trim() || !password || loading) && styles.ctaDisabled]}
+            >
+              {loading ? <ActivityIndicator /> : <Text style={styles.ctaText}>Sign in</Text>}
+            </Pressable>
+
+            <Pressable
+              onPress={createWithPassword}
+              disabled={loading || !email.trim() || !password}
+              style={[styles.ctaOutline, (!email.trim() || !password || loading) && styles.ctaOutlineDisabled]}
+            >
+              {loading ? <ActivityIndicator /> : <Text style={styles.ctaOutlineText}>Create account</Text>}
+            </Pressable>
+
+            <Pressable onPress={sendReset} disabled={loading || !email.trim()}>
+              <Text style={{ color: colors.primary, textDecorationLine: "underline", textAlign: "center", marginTop: 8 }}>
+                Forgot password?
               </Text>
             </Pressable>
-          </View>
-        </View>
+          </>
+        ) : (
+          <>
+            <Pressable
+              onPress={send}
+              disabled={loading || !email.trim()}
+              style={[styles.cta, (!email.trim() || loading) && styles.ctaDisabled]}
+            >
+              {loading ? <ActivityIndicator /> : (
+                <Text style={styles.ctaText}>
+                  {mode === "code" ? (codeSent ? "Resend code" : "Send code") : "Send magic link"}
+                </Text>
+              )}
+            </Pressable>
 
-        <Pressable onPress={signOut} style={styles.signOutBtn}>
-          <Text style={[styles.signOutText, { fontFamily: ffBold }]}>Sign out</Text>
-        </Pressable>
+            {mode === "code" && codeSent && (
+              <>
+                <Text style={styles.helper}>Enter the 6-digit code</Text>
+                <TextInput
+                  placeholder="123456"
+                  keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                  maxLength={6}
+                  value={code}
+                  onChangeText={(t) => setCode(t.replace(/\D/g, ""))}
+                  style={styles.codeInput}
+                />
+                <Pressable
+                  onPress={verify}
+                  disabled={loading || code.length !== 6}
+                  style={[styles.ctaOutline, (loading || code.length !== 6) && styles.ctaOutlineDisabled]}
+                >
+                  {loading ? <ActivityIndicator /> : <Text style={styles.ctaOutlineText}>Verify & Sign in</Text>}
+                </Pressable>
+              </>
+            )}
+          </>
+        )}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1, backgroundColor: colors.bg, padding: 20, alignItems: "center",
-  },
+  screen: { flex: 1, backgroundColor: colors.bg, padding: 20, alignItems: "center", justifyContent: "center" },
   card: {
-    width: "100%", maxWidth: 720, backgroundColor: "#fff", borderRadius: 16, padding: 20, gap: 16,
+    width: "100%", maxWidth: 520, backgroundColor: "#fff", borderRadius: 16, padding: 20, gap: 14,
     ...Platform.select({
       web: { boxShadow: "0 12px 28px rgba(0,0,0,0.12)" },
-      default: {
-        shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 14,
-        shadowOffset: { width: 0, height: 8 }, elevation: 8,
-      },
+      default: { shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
     }),
   },
-  title: { fontSize: 24, color: colors.primary, textTransform: "uppercase" },
-  section: { gap: 10 },
-  sectionTitle: { fontSize: 16, color: colors.primary, textTransform: "uppercase" },
-  row: { backgroundColor: "#FAFAFA", borderRadius: 12, padding: 14, borderWidth: 1, borderColor: "#EEE", gap: 8 },
-  label: { fontSize: 12, color: colors.subtext, textTransform: "uppercase", letterSpacing: 0.5 },
-  value: { fontSize: 16, color: colors.text },
-  input: { borderWidth: 1, borderColor: "#DDD", borderRadius: 10, padding: 10, backgroundColor: "#fff", fontSize: 16 },
-  primaryBtn: { alignSelf: "flex-start", backgroundColor: colors.primary, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10 },
-  primaryBtnText: { color: "#fff", fontWeight: "800" },
-  signOutBtn: {
-    alignSelf: "flex-start", backgroundColor: colors.secondary, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12,
-    ...Platform.select({
-      web: { boxShadow: "0 8px 18px rgba(0,0,0,0.1)" },
-      default: {
-        shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 6 }, elevation: 6,
-      },
-    }),
+  title: { fontSize: 24, fontWeight: "800", color: colors.primary, textTransform: "uppercase" },
+  subtitle: { color: colors.subtext, marginBottom: 6 },
+  toggleRow: { flexDirection: "row", gap: 8 },
+  toggleBtn: {
+    flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: "#ddd", alignItems: "center", backgroundColor: "#fff",
   },
-  signOutText: { color: colors.primary, fontSize: 16 },
+  toggleBtnActive: { borderColor: colors.primary, backgroundColor: colors.primary },
+  toggleText: { fontWeight: "700", color: colors.text },
+  toggleTextActive: { color: "#fff" },
+  input: { borderWidth: 1, borderColor: "#ddd", borderRadius: 12, padding: 12, fontSize: 16, backgroundColor: "#fff" },
+  cta: { marginTop: 4, backgroundColor: colors.primary, paddingVertical: 12, borderRadius: 12, alignItems: "center" },
+  ctaDisabled: { opacity: 0.6 },
+  ctaText: { color: "#fff", fontWeight: "800", letterSpacing: 0.2 },
+  helper: { marginTop: 6, color: colors.subtext },
+  codeInput: {
+    borderWidth: 1, borderColor: "#ddd", borderRadius: 12, padding: 12,
+    fontSize: 22, letterSpacing: 4, textAlign: "center", backgroundColor: "#fff",
+  },
+  ctaOutline: {
+    marginTop: 4, borderWidth: 2, borderColor: colors.primary, borderRadius: 12,
+    alignItems: "center", paddingVertical: 12, backgroundColor: "#fff",
+  },
+  ctaOutlineDisabled: { opacity: 0.6 },
+  ctaOutlineText: { color: colors.primary, fontWeight: "800", letterSpacing: 0.2 },
 });
