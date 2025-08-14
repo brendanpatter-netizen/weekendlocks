@@ -1,22 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, FlatList, ActivityIndicator, StyleSheet, Alert } from "react-native";
 import { Link, router } from "expo-router";
-import { createClient } from "@supabase/supabase-js";
-import Constants from "expo-constants";
+import { supabase } from "@/lib/supabase";
 
 type Group = { id: string; name: string; invite_code: string | null; owner_user_id: string; created_at: string };
-
-const SUPABASE_URL =
-  (process.env.EXPO_PUBLIC_SUPABASE_URL as string) ||
-  (process.env.NEXT_PUBLIC_SUPABASE_URL as string) ||
-  (Constants.expoConfig?.extra as any)?.supabaseUrl;
-
-const SUPABASE_ANON_KEY =
-  (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY as string) ||
-  (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string) ||
-  (Constants.expoConfig?.extra as any)?.supabaseAnonKey;
-
-const supabase = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
 
 export default function GroupsIndex() {
   const [loading, setLoading] = useState(true);
@@ -29,46 +16,74 @@ export default function GroupsIndex() {
     [groups]
   );
 
+  async function load() {
+    setLoading(true);
+    const { data: { user }, error: authErr } = await supabase.auth.getUser();
+    if (authErr) { Alert.alert("Auth error", authErr.message); setLoading(false); return; }
+    if (!user) { setGroups([]); setLoading(false); return; }
+
+    // 1) groups where I'm a member
+    const { data: mm, error: mmErr } = await supabase
+      .from("group_members")
+      .select("groups!inner(id, name, invite_code, owner_user_id, created_at)")
+      .eq("user_id", user.id)
+      .order("joined_at", { ascending: false });
+
+    if (mmErr) { Alert.alert("Load error (members)", mmErr.message); setLoading(false); return; }
+
+    const memberGroups: Group[] = (mm || []).map((r: any) => r.groups);
+
+    // 2) groups I own (fallback if trigger hasn’t added me as a member yet)
+    const { data: owned, error: ownedErr } = await supabase
+      .from("groups")
+      .select("id, name, invite_code, owner_user_id, created_at")
+      .eq("owner_user_id", user.id)
+      .order("created_at", { ascending: false });
+
+    if (ownedErr) { Alert.alert("Load error (owned)", ownedErr.message); setLoading(false); return; }
+
+    // merge by id (avoid dupes)
+    const map = new Map<string, Group>();
+    [...memberGroups, ...(owned || [])].forEach(g => map.set(g.id, g));
+    setGroups(Array.from(map.values()));
+    setLoading(false);
+  }
+
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      const { data: { user }, error: authErr } = await supabase.auth.getUser();
-      if (authErr) { Alert.alert("Error", authErr.message); setLoading(false); return; }
-      if (!user) { setGroups([]); setLoading(false); return; }
+    let channel: any;
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      await load();
 
-      const { data, error } = await supabase
-        .from("group_members")
-        .select("group_id, groups!inner(id, name, invite_code, owner_user_id, created_at)")
-        .eq("user_id", user.id)
-        .order("joined_at", { ascending: false });
+      // realtime: refresh when my memberships change or I create/rename groups I own
+      channel = supabase
+        .channel("groups-index")
+        .on("postgres_changes", { event: "*", schema: "public", table: "group_members" }, load)
+        .on("postgres_changes", { event: "*", schema: "public", table: "groups", filter: user ? `owner_user_id=eq.${user.id}` : undefined }, load)
+        .subscribe();
+    })();
 
-      if (error) Alert.alert("Error", error.message);
-      else setGroups((data || []).map((r: any) => r.groups as Group));
-      setLoading(false);
-    };
-
-    const sub = supabase
-      .channel("groups-index")
-      .on("postgres_changes", { event: "*", schema: "public", table: "group_members" }, load)
-      .subscribe();
-
-    load();
-    return () => { supabase.removeChannel(sub); };
+    return () => { if (channel) supabase.removeChannel(channel); };
   }, []);
 
   const createGroup = async () => {
-    if (!createName.trim()) return Alert.alert("Missing name", "Give your group a name.");
+    const name = createName.trim();
+    if (!name) return Alert.alert("Missing name", "Give your group a name.");
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return Alert.alert("Sign in required");
 
     const { data, error } = await supabase
       .from("groups")
-      .insert({ name: createName.trim(), owner_user_id: user.id })
+      .insert({ name, owner_user_id: user.id })
       .select("id")
       .single();
 
-    if (error) return Alert.alert("Error", error.message);
+    if (error) {
+      return Alert.alert("Create failed", error.message);
+    }
+
     setCreateName("");
+    // navigate right away; detail page will load members & invite code
     router.push({ pathname: "/groups/[id]", params: { id: data!.id } });
   };
 
@@ -78,11 +93,20 @@ export default function GroupsIndex() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return Alert.alert("Sign in required");
 
-    const { data: g, error: gErr } = await supabase.from("groups").select("id, invite_code").eq("invite_code", code).single();
+    const { data: g, error: gErr } = await supabase
+      .from("groups")
+      .select("id, invite_code")
+      .eq("invite_code", code)
+      .single();
+
     if (gErr || !g) return Alert.alert("Not found", "No group found for that invite code.");
 
-    const { error: mErr } = await supabase.from("group_members").insert({ group_id: g.id, user_id: user.id });
-    if (mErr) return Alert.alert("Error", mErr.message);
+    const { error: mErr } = await supabase
+      .from("group_members")
+      .insert({ group_id: g.id, user_id: user.id });
+
+    if (mErr) return Alert.alert("Join failed", mErr.message);
+
     setJoinCode("");
     router.push({ pathname: "/groups/[id]", params: { id: g.id } });
   };
