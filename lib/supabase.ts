@@ -1,20 +1,33 @@
 // lib/supabase.ts
 import { createClient } from "@supabase/supabase-js";
+import Constants from "expo-constants";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// Use env vars in both Expo + Vercel web builds
-const supabaseUrl =
-  process.env.EXPO_PUBLIC_SUPABASE_URL || "https://atgkuhppxugkvehmdhhz.supabase.co";
-const supabaseAnonKey =
-  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0Z2t1aHBweHVna3ZlaG1kaGh6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM4MzI4NzEsImV4cCI6MjA2OTQwODg3MX0.lZ1icv_D8Ahglst07HWCqep_HpTqSXekxFyMsyhJNZs";
+// Resolve env for Expo (native + web) and Vercel web
+const SUPABASE_URL =
+  process.env.EXPO_PUBLIC_SUPABASE_URL ||
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  (Constants.expoConfig?.extra as any)?.supabaseUrl;
 
-// Explicit storage control on web so we can reliably wipe it in hardSignOut()
-const isBrowser = typeof window !== "undefined";
+const SUPABASE_ANON_KEY =
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  (Constants.expoConfig?.extra as any)?.supabaseAnonKey;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  throw new Error("Supabase env vars are missing");
+}
+
+const isWeb = typeof window !== "undefined";
+
+// On web: localStorage. On native: AsyncStorage.
+const storage = isWeb ? window.localStorage : AsyncStorage;
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    storage: isBrowser ? window.localStorage : undefined,
+    storage: storage as any,
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true, // enables magic-link/callback handling on web
+    detectSessionInUrl: isWeb, // only needed on web
   },
 });
