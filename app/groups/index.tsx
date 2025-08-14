@@ -1,4 +1,3 @@
-// app/groups/index.tsx
 import { useEffect, useMemo, useState } from "react";
 import {
   View,
@@ -112,7 +111,6 @@ export default function GroupsIndex() {
             event: "*",
             schema: "public",
             table: "group_members",
-            // keep it scoped to my membership rows
             filter: user ? `user_id=eq.${user.id}` : undefined,
           },
           load
@@ -185,29 +183,19 @@ export default function GroupsIndex() {
       } = await supabase.auth.getUser();
       if (!user) return Alert.alert("Sign in required");
 
-      // NOTE: This SELECT requires a groups read policy that allows looking up by invite_code
-      const { data: g, error: gErr } = await supabase
-        .from("groups")
-        .select("id")
-        .eq("invite_code", code)
-        .single();
+      // Call the SECURE RPC (handles lookup + membership insert)
+      const { data: gId, error: rpcErr } = await supabase.rpc(
+        "join_group_via_code",
+        { p_code: code }
+      );
 
-      if (gErr || !g) {
-        console.error("Join lookup failed:", gErr);
+      if (rpcErr || !gId) {
+        console.error("Join RPC failed:", rpcErr);
         return Alert.alert("Not found", "No group found for that invite code.");
       }
 
-      const { error: mErr } = await supabase
-        .from("group_members")
-        .insert({ group_id: g.id, user_id: user.id });
-
-      if (mErr) {
-        console.error("Join insert failed:", mErr);
-        return Alert.alert("Join failed", mErr.message);
-      }
-
       setJoinCode("");
-      router.push({ pathname: "/groups/[id]", params: { id: g.id } });
+      router.push({ pathname: "/groups/[id]", params: { id: gId as string } });
     } catch (e: any) {
       console.error("Join threw:", e);
       Alert.alert("Join error", e?.message ?? String(e));
@@ -229,7 +217,7 @@ export default function GroupsIndex() {
       <Text style={styles.muted}>Create a group or join with a code.</Text>
 
       {/* Create */}
-      <View className="card" style={styles.card}>
+      <View style={styles.card}>
         <Text style={styles.h2}>Create a group</Text>
         <TextInput
           value={createName}
