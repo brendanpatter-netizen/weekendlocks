@@ -8,11 +8,9 @@ import {
   ActivityIndicator,
   StyleSheet,
   Alert,
-  Platform,
 } from "react-native";
 import { Link, router } from "expo-router";
-import * as Crypto from "expo-crypto";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "../../lib/supabase";
 
 type Group = {
   id: string;
@@ -28,7 +26,7 @@ export default function GroupsIndex() {
   const [createName, setCreateName] = useState("");
   const [joinCode, setJoinCode] = useState("");
 
-  const sortedGroups = useMemo(
+  const sorted = useMemo(
     () =>
       [...groups].sort(
         (a, b) => +new Date(b.created_at) - +new Date(a.created_at)
@@ -43,7 +41,6 @@ export default function GroupsIndex() {
       error: authErr,
     } = await supabase.auth.getUser();
     if (authErr) {
-      console.error(authErr);
       Alert.alert("Auth error", authErr.message);
       setLoading(false);
       return;
@@ -54,7 +51,7 @@ export default function GroupsIndex() {
       return;
     }
 
-    // 1) Groups where I'm a member
+    // Groups where I'm a member
     const { data: mm, error: mmErr } = await supabase
       .from("group_members")
       .select(
@@ -64,14 +61,13 @@ export default function GroupsIndex() {
       .order("joined_at", { ascending: false });
 
     if (mmErr) {
-      console.error(mmErr);
       Alert.alert("Load error (members)", mmErr.message);
       setLoading(false);
       return;
     }
     const memberGroups: Group[] = (mm || []).map((r: any) => r.groups);
 
-    // 2) Groups I own (covers the instant-after-create case)
+    // Groups I own (covers the instant-after-create case)
     const { data: owned, error: ownedErr } = await supabase
       .from("groups")
       .select("id, name, invite_code, owner_user_id, created_at")
@@ -79,7 +75,6 @@ export default function GroupsIndex() {
       .order("created_at", { ascending: false });
 
     if (ownedErr) {
-      console.error(ownedErr);
       Alert.alert("Load error (owned)", ownedErr.message);
       setLoading(false);
       return;
@@ -93,7 +88,7 @@ export default function GroupsIndex() {
   }
 
   useEffect(() => {
-    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let ch: ReturnType<typeof supabase.channel> | null = null;
 
     (async () => {
       const {
@@ -102,8 +97,7 @@ export default function GroupsIndex() {
 
       await load();
 
-      // Realtime updates: my memberships + groups I own
-      channel = supabase
+      ch = supabase
         .channel("groups-index")
         .on(
           "postgres_changes",
@@ -113,7 +107,9 @@ export default function GroupsIndex() {
             table: "group_members",
             filter: user ? `user_id=eq.${user.id}` : undefined,
           },
-          load
+          () => {
+            void load();
+          }
         )
         .on(
           "postgres_changes",
@@ -123,83 +119,66 @@ export default function GroupsIndex() {
             table: "groups",
             filter: user ? `owner_user_id=eq.${user.id}` : undefined,
           },
-          load
+          () => {
+            void load();
+          }
         )
         .subscribe();
     })();
 
     return () => {
-      if (channel) supabase.removeChannel(channel);
+      if (ch) supabase.removeChannel(ch);
     };
   }, []);
 
+  // CREATE via RPC
   const createGroup = async () => {
     const name = createName.trim();
     if (!name) return Alert.alert("Missing name", "Give your group a name.");
 
-    try {
-      const {
-        data: { user },
-        error: authErr,
-      } = await supabase.auth.getUser();
-      if (authErr) return Alert.alert("Auth error", authErr.message);
-      if (!user) return Alert.alert("Sign in required");
+    const {
+      data: { user },
+      error: authErr,
+    } = await supabase.auth.getUser();
+    if (authErr) return Alert.alert("Auth error", authErr.message);
+    if (!user) return Alert.alert("Sign in required");
 
-      // Pre-generate UUID so we can navigate without a post-insert SELECT
-      const newId =
-        Platform.OS === "web" &&
-        typeof crypto !== "undefined" &&
-        "randomUUID" in crypto
-          ? (crypto as any).randomUUID()
-          : await Crypto.randomUUID();
+    const { data: newId, error: rpcErr } = await supabase.rpc("create_group", {
+      p_name: name,
+    });
 
-      const { error } = await supabase.from("groups").insert({
-        id: newId,
-        name,
-        owner_user_id: user.id,
-      });
-
-      if (error) {
-        console.error("Create failed:", error);
-        return Alert.alert("Create failed", error.message);
-      }
-
-      setCreateName("");
-      // jump right to the group; detail screen will load members & invite code
-      router.push({ pathname: "/groups/[id]", params: { id: newId } });
-    } catch (e: any) {
-      console.error("Create threw:", e);
-      Alert.alert("Create error", e?.message ?? String(e));
+    if (rpcErr || !newId) {
+      return Alert.alert(
+        "Create failed",
+        rpcErr?.message || "RPC returned no id"
+      );
     }
+
+    setCreateName("");
+    router.push({ pathname: "/groups/[id]", params: { id: newId as string } });
   };
 
+  // JOIN via RPC
   const joinByCode = async () => {
     const code = joinCode.trim();
     if (!code) return;
 
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return Alert.alert("Sign in required");
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return Alert.alert("Sign in required");
 
-      // Call the SECURE RPC (handles lookup + membership insert)
-      const { data: gId, error: rpcErr } = await supabase.rpc(
-        "join_group_via_code",
-        { p_code: code }
-      );
+    const { data: gId, error: rpcErr } = await supabase.rpc(
+      "join_group_via_code",
+      { p_code: code }
+    );
 
-      if (rpcErr || !gId) {
-        console.error("Join RPC failed:", rpcErr);
-        return Alert.alert("Not found", "No group found for that invite code.");
-      }
-
-      setJoinCode("");
-      router.push({ pathname: "/groups/[id]", params: { id: gId as string } });
-    } catch (e: any) {
-      console.error("Join threw:", e);
-      Alert.alert("Join error", e?.message ?? String(e));
+    if (rpcErr || !gId) {
+      return Alert.alert("Not found", "No group found for that invite code.");
     }
+
+    setJoinCode("");
+    router.push({ pathname: "/groups/[id]", params: { id: gId as string } });
   };
 
   if (loading) {
@@ -216,7 +195,6 @@ export default function GroupsIndex() {
       <Text style={styles.h1}>Your Groups</Text>
       <Text style={styles.muted}>Create a group or join with a code.</Text>
 
-      {/* Create */}
       <View style={styles.card}>
         <Text style={styles.h2}>Create a group</Text>
         <TextInput
@@ -230,7 +208,6 @@ export default function GroupsIndex() {
         </TouchableOpacity>
       </View>
 
-      {/* Join */}
       <View style={styles.card}>
         <Text style={styles.h2}>Join with code</Text>
         <TextInput
@@ -245,10 +222,9 @@ export default function GroupsIndex() {
         </TouchableOpacity>
       </View>
 
-      {/* List */}
       <FlatList
         style={{ marginTop: 12 }}
-        data={sortedGroups}
+        data={sorted}
         keyExtractor={(g) => g.id}
         renderItem={({ item }) => (
           <Link

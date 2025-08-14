@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { View, Text, ActivityIndicator, StyleSheet, Alert } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "../../../lib/supabase";
 
 export default function JoinGroupByUrl() {
   const { code } = useLocalSearchParams<{ code?: string }>();
@@ -24,7 +24,6 @@ export default function JoinGroupByUrl() {
         });
       }
 
-      // Use the secure RPC instead of SELECT+INSERT
       const { data: gId, error: rpcErr } = await supabase.rpc(
         "join_group_via_code",
         { p_code: String(code) }
