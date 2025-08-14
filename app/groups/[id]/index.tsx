@@ -1,3 +1,4 @@
+// app/groups/[id]/index.tsx
 import { useEffect, useState } from "react";
 import {
   View,
@@ -25,6 +26,7 @@ type Group = {
 
 export default function GroupDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
+
   const [group, setGroup] = useState<Group | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
@@ -35,44 +37,65 @@ export default function GroupDetail() {
     if (!id) return;
 
     const load = async () => {
-      setLoading(true);
-      const { data: g, error: gErr } = await supabase
-        .from("groups")
-        .select("*")
-        .eq("id", id)
-        .single();
-      if (gErr || !g) {
+      try {
+        setLoading(true);
+
+        // Load group (owner or member can read; see RLS policies)
+        const { data: g, error: gErr } = await supabase
+          .from("groups")
+          .select("*")
+          .eq("id", id)
+          .single();
+
+        if (gErr || !g) {
+          console.error("Group load error:", gErr);
+          setLoading(false);
+          return; // bail without alert so we don't loop on web
+        }
+
+        setGroup(g);
+        setInviteCode(g.invite_code ?? "");
+
+        // Load members
+        const { data: m, error: mErr } = await supabase
+          .from("group_members")
+          .select("user_id, role")
+          .eq("group_id", g.id)
+          .order("role", { ascending: true });
+
+        if (mErr) {
+          console.error("Members load error:", mErr);
+          setLoading(false);
+          return;
+        }
+
+        setMembers(m || []);
+
+        // Load lightweight profiles for display names
+        const ids = (m || []).map((x) => x.user_id);
+        if (ids.length) {
+          const { data: profs, error: pErr } = await supabase
+            .from("profiles")
+            .select("id, username")
+            .in("id", ids);
+
+          if (pErr) {
+            console.error("Profiles load error:", pErr);
+          } else {
+            const map: Record<string, Profile> = {};
+            (profs || []).forEach((p) => (map[p.id] = p));
+            setProfiles(map);
+          }
+        }
+
         setLoading(false);
-        return Alert.alert("Error", gErr?.message || "Group not found");
-      }
-      setGroup(g);
-      setInviteCode(g.invite_code ?? "");
-
-      const { data: m, error: mErr } = await supabase
-        .from("group_members")
-        .select("user_id, role")
-        .eq("group_id", g.id)
-        .order("role", { ascending: true });
-
-      if (mErr) {
+      } catch (e) {
+        console.error("Group load threw:", e);
         setLoading(false);
-        return Alert.alert("Error", mErr.message);
       }
-      setMembers(m || []);
-
-      const ids = (m || []).map((x) => x.user_id);
-      if (ids.length) {
-        const { data: profs } = await supabase
-          .from("profiles")
-          .select("id, username")
-          .in("id", ids);
-        const map: Record<string, Profile> = {};
-        (profs || []).forEach((p) => (map[p.id] = p));
-        setProfiles(map);
-      }
-      setLoading(false);
     };
 
+    // Realtime: update when membership or group changes
     const channel = supabase
       .channel(`group-${id}`)
       .on(
@@ -90,7 +113,7 @@ export default function GroupDetail() {
       .on(
         "postgres_changes",
         {
-          event: "UPDATE",
+          event: "*",
           schema: "public",
           table: "groups",
           filter: `id=eq.${id}`,
@@ -102,6 +125,7 @@ export default function GroupDetail() {
       .subscribe();
 
     void load();
+
     return () => {
       supabase.removeChannel(channel);
     };
@@ -136,11 +160,23 @@ export default function GroupDetail() {
     if (error) return Alert.alert("Error", error.message);
   };
 
-  if (loading || !group) {
+  if (loading) {
     return (
       <View style={styles.container}>
         <ActivityIndicator />
         <Text style={styles.muted}>Loading group…</Text>
+      </View>
+    );
+  }
+
+  if (!group) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.h1}>Group not available</Text>
+        <Text style={styles.muted}>
+          If you just created this group, make sure RLS policies allow owners to
+          read it.
+        </Text>
       </View>
     );
   }
@@ -151,7 +187,7 @@ export default function GroupDetail() {
 
       <View style={styles.cardRow}>
         <TextInput
-          value={inviteCode}
+          value={inviteCode || ""}
           editable={false}
           style={[styles.input, { flex: 1 }]}
         />
