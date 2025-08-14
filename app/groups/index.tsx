@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, FlatList, ActivityIndicator, StyleSheet, Alert } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, FlatList, ActivityIndicator, StyleSheet, Alert, Platform } from "react-native";
 import { Link, router } from "expo-router";
+import * as Crypto from "expo-crypto";
 import { supabase } from "@/lib/supabase";
 
 type Group = { id: string; name: string; invite_code: string | null; owner_user_id: string; created_at: string };
@@ -19,30 +20,28 @@ export default function GroupsIndex() {
   async function load() {
     setLoading(true);
     const { data: { user }, error: authErr } = await supabase.auth.getUser();
-    if (authErr) { Alert.alert("Auth error", authErr.message); setLoading(false); return; }
+    if (authErr) { console.error(authErr); Alert.alert("Auth error", authErr.message); setLoading(false); return; }
     if (!user) { setGroups([]); setLoading(false); return; }
 
-    // 1) groups where I'm a member
+    // groups where I'm a member
     const { data: mm, error: mmErr } = await supabase
       .from("group_members")
       .select("groups!inner(id, name, invite_code, owner_user_id, created_at)")
       .eq("user_id", user.id)
       .order("joined_at", { ascending: false });
 
-    if (mmErr) { Alert.alert("Load error (members)", mmErr.message); setLoading(false); return; }
-
+    if (mmErr) { console.error(mmErr); Alert.alert("Load error (members)", mmErr.message); setLoading(false); return; }
     const memberGroups: Group[] = (mm || []).map((r: any) => r.groups);
 
-    // 2) groups I own (fallback if trigger hasn’t added me as a member yet)
+    // groups I own (covers the instant-after-create case)
     const { data: owned, error: ownedErr } = await supabase
       .from("groups")
       .select("id, name, invite_code, owner_user_id, created_at")
       .eq("owner_user_id", user.id)
       .order("created_at", { ascending: false });
 
-    if (ownedErr) { Alert.alert("Load error (owned)", ownedErr.message); setLoading(false); return; }
+    if (ownedErr) { console.error(ownedErr); Alert.alert("Load error (owned)", ownedErr.message); setLoading(false); return; }
 
-    // merge by id (avoid dupes)
     const map = new Map<string, Group>();
     [...memberGroups, ...(owned || [])].forEach(g => map.set(g.id, g));
     setGroups(Array.from(map.values()));
@@ -54,61 +53,82 @@ export default function GroupsIndex() {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       await load();
-
-      // realtime: refresh when my memberships change or I create/rename groups I own
       channel = supabase
         .channel("groups-index")
         .on("postgres_changes", { event: "*", schema: "public", table: "group_members" }, load)
         .on("postgres_changes", { event: "*", schema: "public", table: "groups", filter: user ? `owner_user_id=eq.${user.id}` : undefined }, load)
         .subscribe();
     })();
-
     return () => { if (channel) supabase.removeChannel(channel); };
   }, []);
 
   const createGroup = async () => {
     const name = createName.trim();
     if (!name) return Alert.alert("Missing name", "Give your group a name.");
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return Alert.alert("Sign in required");
 
-    const { data, error } = await supabase
-      .from("groups")
-      .insert({ name, owner_user_id: user.id })
-      .select("id")
-      .single();
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return Alert.alert("Sign in required");
 
-    if (error) {
-      return Alert.alert("Create failed", error.message);
+      // Pre-generate ID so we don't need a SELECT after INSERT
+      const newId =
+        (Platform.OS === "web" && typeof crypto !== "undefined" && "randomUUID" in crypto)
+          ? (crypto as any).randomUUID()
+          : await Crypto.randomUUID();
+
+      const { error } = await supabase.from("groups").insert({
+        id: newId,
+        name,
+        owner_user_id: user.id,
+      });
+
+      if (error) {
+        console.error("Create failed:", error);
+        return Alert.alert("Create failed", error.message);
+      }
+
+      setCreateName("");
+      router.push({ pathname: "/groups/[id]", params: { id: newId } });
+    } catch (e: any) {
+      console.error("Create threw:", e);
+      Alert.alert("Create error", e?.message ?? String(e));
     }
-
-    setCreateName("");
-    // navigate right away; detail page will load members & invite code
-    router.push({ pathname: "/groups/[id]", params: { id: data!.id } });
   };
 
   const joinByCode = async () => {
     const code = joinCode.trim();
     if (!code) return;
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return Alert.alert("Sign in required");
 
-    const { data: g, error: gErr } = await supabase
-      .from("groups")
-      .select("id, invite_code")
-      .eq("invite_code", code)
-      .single();
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return Alert.alert("Sign in required");
 
-    if (gErr || !g) return Alert.alert("Not found", "No group found for that invite code.");
+      const { data: g, error: gErr } = await supabase
+        .from("groups")
+        .select("id, invite_code")
+        .eq("invite_code", code)
+        .single();
 
-    const { error: mErr } = await supabase
-      .from("group_members")
-      .insert({ group_id: g.id, user_id: user.id });
+      if (gErr || !g) {
+        console.error("Join lookup failed:", gErr);
+        return Alert.alert("Not found", "No group found for that invite code.");
+      }
 
-    if (mErr) return Alert.alert("Join failed", mErr.message);
+      const { error: mErr } = await supabase
+        .from("group_members")
+        .insert({ group_id: g.id, user_id: user.id });
 
-    setJoinCode("");
-    router.push({ pathname: "/groups/[id]", params: { id: g.id } });
+      if (mErr) {
+        console.error("Join insert failed:", mErr);
+        return Alert.alert("Join failed", mErr.message);
+      }
+
+      setJoinCode("");
+      router.push({ pathname: "/groups/[id]", params: { id: g.id } });
+    } catch (e: any) {
+      console.error("Join threw:", e);
+      Alert.alert("Join error", e?.message ?? String(e));
+    }
   };
 
   if (loading) {
