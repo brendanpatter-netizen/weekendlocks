@@ -2,8 +2,9 @@
 import { createClient } from "@supabase/supabase-js";
 import Constants from "expo-constants";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
 
-// Resolve env for Expo (native + web) and Vercel web
+// Resolve env (Expo + Vercel)
 const SUPABASE_URL =
   process.env.EXPO_PUBLIC_SUPABASE_URL ||
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -18,16 +19,31 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw new Error("Supabase env vars are missing");
 }
 
-const isWeb = typeof window !== "undefined";
+// Node/SSR build?
+const isSSR = typeof window === "undefined";
 
-// On web: localStorage. On native: AsyncStorage.
-const storage = isWeb ? window.localStorage : AsyncStorage;
+// Storage selection:
+// - SSR build: no-op adapter (don’t touch window)
+// - Web runtime: localStorage
+// - Native runtime: AsyncStorage
+const serverStorage = {
+  getItem: async (_k: string) => null as string | null,
+  setItem: async (_k: string, _v: string) => {},
+  removeItem: async (_k: string) => {},
+};
+
+const storage: any = isSSR
+  ? serverStorage
+  : Platform.OS === "web"
+  ? window.localStorage
+  : AsyncStorage;
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    storage: storage as any,
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: isWeb, // only needed on web
+    storage,
+    // Avoid session work during SSR build
+    persistSession: !isSSR,
+    autoRefreshToken: !isSSR,
+    detectSessionInUrl: !isSSR && Platform.OS === "web",
   },
 });
