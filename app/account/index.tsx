@@ -26,7 +26,7 @@ export default function AccountPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
 
-  // Ensure a profile row exists and load it (no upsert)
+  // Load email + display name
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -34,54 +34,38 @@ export default function AccountPage() {
 
       setEmail(user.email ?? "");
 
-      // 1) Try to read an existing profile row
-      const { data: existing, error: readErr } = await supabase
+      // Read profile (just id, username)
+      const { data, error } = await supabase
         .from("profiles")
-        .select("id, username")
+        .select("username")
         .eq("id", user.id)
         .maybeSingle();
 
-      if (readErr) {
-        console.warn("profiles read error:", readErr);
+      if (error) {
+        console.warn("profiles read error:", error);
+        return;
       }
 
-      if (!existing) {
-        // 2) Insert a row if missing (not upsert)
-        const defaultName =
-          user.user_metadata?.name ||
-          (user.email ? user.email.split("@")[0] : "User");
+      // Use DB value or sensible default
+      const fallback =
+        user.user_metadata?.name ||
+        (user.email ? user.email.split("@")[0] : "User");
 
-        const { error: insErr } = await supabase
-          .from("profiles")
-          .insert({ id: user.id, username: defaultName });
-
-        if (insErr) {
-          console.warn("profiles insert error:", insErr);
-        } else {
-          setUsername(defaultName);
-          return;
-        }
-      }
-
-      // 3) Use existing username if present
-      if (existing?.username) setUsername(existing.username);
+      setUsername((data?.username ?? fallback).replace(/\s/g, ""));
     })();
   }, []);
 
+  // Save via RPC (security definer)
   const saveProfile = async () => {
     try {
       setSavingProfile(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not signed in");
+      const clean = username?.trim() || "";
 
-      const clean = username?.trim() || null;
-
-      const { error } = await supabase
-        .from("profiles")
-        .update({ username: clean })
-        .eq("id", user.id);
-
+      const { error } = await supabase.rpc("save_profile", {
+        p_username: clean,
+      });
       if (error) throw error;
+
       Alert.alert("Saved", "Profile updated.");
     } catch (e: any) {
       Alert.alert("Couldn’t save", e?.message ?? "Please try again.");
@@ -153,8 +137,8 @@ export default function AccountPage() {
           </View>
 
           <Text style={{ fontSize: 12, color: colors.subtext }}>
-            This updates your name in the <Text style={{ fontWeight: "700" }}>profiles</Text> table
-            so it shows up in Groups.
+            Your name is stored in the <Text style={{ fontWeight: "700" }}>profiles</Text> table and
+            shows in Groups.
           </Text>
         </View>
 
