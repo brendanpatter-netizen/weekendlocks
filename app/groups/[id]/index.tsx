@@ -202,8 +202,11 @@ export default function GroupDetail() {
           data={members}
           keyExtractor={(m) => m.user_id}
           renderItem={({ item }) => {
-            const username =
-              profiles[item.user_id]?.username ?? item.user_id.slice(0, 8) + "…";
+            const rawName = profiles[item.user_id]?.username;
+            const username = rawName && rawName.trim()
+              ? rawName.trim()
+              : item.user_id.slice(0, 8) + "…";
+;
             return (
               <View style={styles.memberRow}>
                 <Text style={styles.rowTitle}>{username}</Text>
