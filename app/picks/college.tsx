@@ -33,6 +33,15 @@ function normTeamCFB(name: string) {
   return CFB_ALIASES[last] || last;
 }
 
+// tab button
+function Tab({ label, active, disabled, onPress }: { label: string; active: boolean; disabled?: boolean; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} disabled={disabled} style={[styles.tab, active && styles.tabActive, disabled && styles.tabDisabled]}>
+      <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 export default function PicksCFB() {
   const [week, setWeek] = useState<number>(getCurrentCfbWeek());
   const [betType, setBetType] = useState<BetType>("spreads");
@@ -93,6 +102,18 @@ export default function PicksCFB() {
     return now >= Date.parse(weekRow.opens_at) && now < Date.parse(weekRow.closes_at);
   }, [weekRow]);
 
+  // tab availability
+  const marketHas = useMemo(() => {
+    const has = { spreads: false, totals: false, h2h: false };
+    for (const g of (data ?? [])) {
+      const keys = g.bookmakers?.[0]?.markets?.map((m: any) => m.key) ?? [];
+      if (keys.includes("spreads")) has.spreads = true;
+      if (keys.includes("totals")) has.totals = true;
+      if (keys.includes("h2h")) has.h2h = true;
+    }
+    return has;
+  }, [data]);
+
   const labelFor = (type: BetType, o: any) =>
     type === "spreads" ? `${o.name} ${o.point}` : type === "h2h" ? `${o.name} ML` : `${o.name} ${o.point}`;
 
@@ -151,6 +172,13 @@ export default function PicksCFB() {
           <Picker.Item key={i + 1} label={`Week ${i + 1}`} value={i + 1} />
         ))}
       </Picker>
+
+      {/* Tabs row */}
+      <View style={styles.tabsRow}>
+        <Tab label="SPREADS" active={betType==="spreads"} disabled={!marketHas.spreads} onPress={() => setBetType("spreads")} />
+        <Tab label="TOTALS"  active={betType==="totals"}  disabled={!marketHas.totals}  onPress={() => setBetType("totals")} />
+        <Tab label="H2H"     active={betType==="h2h"}     disabled={!marketHas.h2h}     onPress={() => setBetType("h2h")} />
+      </View>
 
       {!!notice && <Text style={styles.warn}>{notice}</Text>}
 
@@ -213,6 +241,14 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection:"row", justifyContent:"space-between", alignItems:"center", marginBottom:10 },
   title: { fontSize:20, fontWeight:"600" },
   switch: { color:"#0a84ff", fontSize:16 },
+
+  // tabs
+  tabsRow: { flexDirection:"row", gap:12, marginBottom:10 },
+  tab: { flex:1, borderWidth:1, borderColor:"#bbb", borderRadius:6, paddingVertical:10, alignItems:"center", backgroundColor:"#eee" },
+  tabActive: { backgroundColor:"#111", borderColor:"#111" },
+  tabDisabled: { opacity:0.45 },
+  tabText: { fontWeight:"700", color:"#333" },
+  tabTextActive: { color:"#fff" },
 
   card: { padding:12, borderWidth:1, borderRadius:8, borderColor:"#ccc", backgroundColor:"#fff", marginBottom:12 },
   logosRow: { flexDirection:"row", alignItems:"center", justifyContent:"center", marginBottom:6 },

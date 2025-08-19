@@ -21,70 +21,36 @@ function getCurrentWeek() {
 
 // ---------- team normalization ----------
 const NFL_ALIASES: Record<string, string> = {
-  "dallas": "cowboys",
-  "cowboys": "cowboys",
-  "philadelphia": "eagles",
-  "eagles": "eagles",
-  "san francisco": "49ers",
-  "niners": "49ers",
-  "49ers": "49ers",
-  "new york": "giants",
-  "giants": "giants",
-  "jets": "jets",
-  "kansas": "chiefs",
-  "kansas city": "chiefs",
-  "chiefs": "chiefs",
-  "green bay": "packers",
-  "packers": "packers",
-  "new england": "patriots",
-  "patriots": "patriots",
-  "pittsburgh": "steelers",
-  "steelers": "steelers",
-  "cleveland": "browns",
-  "browns": "browns",
-  "los angeles": "rams",
-  "rams": "rams",
-  "chargers": "chargers",
-  "seattle": "seahawks",
-  "seahawks": "seahawks",
-  "buffalo": "bills",
-  "bills": "bills",
-  "miami": "dolphins",
-  "dolphins": "dolphins",
-  "baltimore": "ravens",
-  "ravens": "ravens",
-  "houston": "texans",
-  "texans": "texans",
-  "jacksonville": "jaguars",
-  "jaguars": "jaguars",
-  "detroit": "lions",
-  "lions": "lions",
-  "minnesota": "vikings",
-  "vikings": "vikings",
-  "atlanta": "falcons",
-  "falcons": "falcons",
-  "new orleans": "saints",
-  "saints": "saints",
-  "tampa bay": "buccaneers",
-  "buccaneers": "buccaneers",
-  "chicago": "bears",
-  "bears": "bears",
-  "indianapolis": "colts",
-  "colts": "colts",
-  "tennessee": "titans",
-  "titans": "titans",
-  "cincinnati": "bengals",
-  "bengals": "bengals",
-  "carolina": "panthers",
-  "panthers": "panthers",
-  "washington": "commanders",
-  "commanders": "commanders",
-  "las vegas": "raiders",
-  "raiders": "raiders",
-  "denver": "broncos",
-  "broncos": "broncos",
-  "arizona": "cardinals",
-  "cardinals": "cardinals",
+  "dallas": "cowboys", "cowboys": "cowboys",
+  "philadelphia": "eagles", "eagles": "eagles",
+  "san francisco": "49ers", "niners": "49ers", "49ers": "49ers",
+  "new york": "giants", "giants": "giants", "jets": "jets",
+  "kansas": "chiefs", "kansas city": "chiefs", "chiefs": "chiefs",
+  "green bay": "packers", "packers": "packers",
+  "new england": "patriots", "patriots": "patriots",
+  "pittsburgh": "steelers", "steelers": "steelers",
+  "cleveland": "browns", "browns": "browns",
+  "los angeles": "rams", "rams": "rams", "chargers": "chargers",
+  "seattle": "seahawks", "seahawks": "seahawks",
+  "buffalo": "bills", "bills": "bills",
+  "miami": "dolphins", "dolphins": "dolphins",
+  "baltimore": "ravens", "ravens": "ravens",
+  "houston": "texans", "texans": "texans",
+  "jacksonville": "jaguars", "jaguars": "jaguars",
+  "detroit": "lions", "lions": "lions",
+  "minnesota": "vikings", "vikings": "vikings",
+  "atlanta": "falcons", "falcons": "falcons",
+  "new orleans": "saints", "saints": "saints",
+  "tampa bay": "buccaneers", "buccaneers": "buccaneers",
+  "chicago": "bears", "bears": "bears",
+  "indianapolis": "colts", "colts": "colts",
+  "tennessee": "titans", "titans": "titans",
+  "cincinnati": "bengals", "bengals": "bengals",
+  "carolina": "panthers", "panthers": "panthers",
+  "washington": "commanders", "commanders": "commanders",
+  "las vegas": "raiders", "raiders": "raiders",
+  "denver": "broncos", "broncos": "broncos",
+  "arizona": "cardinals", "cardinals": "cardinals",
 };
 function normTeamNFL(name: string) {
   const raw = name.toLowerCase().replace(/[^\w\s-]/g, "").trim();
@@ -92,6 +58,15 @@ function normTeamNFL(name: string) {
   const parts = raw.split(/\s+/);
   const last = parts[parts.length - 1];
   return NFL_ALIASES[last] || last;
+}
+
+// ---------- small UI helper ----------
+function Tab({ label, active, disabled, onPress }: { label: string; active: boolean; disabled?: boolean; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} disabled={disabled} style={[styles.tab, active && styles.tabActive, disabled && styles.tabDisabled]}>
+      <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
+    </Pressable>
+  );
 }
 
 // ---------- component ----------
@@ -119,11 +94,8 @@ export default function PicksNFL() {
       setNotice(null);
 
       const { data: w, error: wErr } = await supabase
-        .from("weeks")
-        .select("*")
-        .eq("league", "nfl")
-        .eq("season", SEASON)
-        .eq("week_num", week)
+        .from("weeks").select("*")
+        .eq("league", "nfl").eq("season", SEASON).eq("week_num", week)
         .maybeSingle();
 
       if (wErr) setNotice(`weeks: ${wErr.message}`);
@@ -131,9 +103,7 @@ export default function PicksNFL() {
 
       if (w?.id) {
         const { data: g, error: gErr } = await supabase
-          .from("games")
-          .select("id, home, away, week_id")
-          .eq("week_id", w.id);
+          .from("games").select("id, home, away, week_id").eq("week_id", w.id);
 
         if (gErr) setNotice(`games: ${gErr.message}`);
 
@@ -146,12 +116,8 @@ export default function PicksNFL() {
         const ids = (g ?? []).map((r: any) => r.id);
         if (ids.length) {
           const { data: ps, error: pErr } = await supabase
-            .from("picks")
-            .select("game_id, pick_team")
-            .in("game_id", ids);
-
+            .from("picks").select("game_id, pick_team").in("game_id", ids);
           if (pErr) setNotice(`picks: ${pErr.message}`);
-
           const mine: Record<number, string> = {};
           (ps ?? []).forEach((r: any) => { mine[r.game_id] = r.pick_team; });
           setMyPicks(mine);
@@ -176,6 +142,18 @@ export default function PicksNFL() {
     const closes = new Date(weekRow.closes_at);
     return isOpen ? `OPEN – closes ${closes.toLocaleString()}` : `CLOSED – closed ${closes.toLocaleString()}`;
   }, [isOpen, weekRow]);
+
+  // Availability for tabs (enable/disable)
+  const marketHas = useMemo(() => {
+    const has = { spreads: false, totals: false, h2h: false };
+    for (const g of (data ?? [])) {
+      const keys = g.bookmakers?.[0]?.markets?.map((m: any) => m.key) ?? [];
+      if (keys.includes("spreads")) has.spreads = true;
+      if (keys.includes("totals")) has.totals = true;
+      if (keys.includes("h2h")) has.h2h = true;
+    }
+    return has;
+  }, [data]);
 
   const labelFor = (type: BetType, o: any) =>
     type === "spreads" ? `${o.name} ${o.point}` :
@@ -220,18 +198,13 @@ export default function PicksNFL() {
         .upsert(payload, { onConflict: "user_id,game_id" });
 
       if (upErr) {
-        // If this fires, it’s usually an RLS policy blocking the insert
         Alert.alert("Save failed", upErr.message);
         return;
       }
 
-      // local echo
       setMyPicks((m) => ({ ...m, [mappedId]: label }));
 
-      // notify Home (same tab)
-      events.emitPickSaved({
-        league: "nfl", week, game_id: mappedId, user_id: userId!, pick_team: label,
-      });
+      events.emitPickSaved({ league: "nfl", week, game_id: mappedId, user_id: userId!, pick_team: label });
 
       Alert.alert("Saved", `Your pick: ${label}`);
     } catch (e: any) {
@@ -259,6 +232,13 @@ export default function PicksNFL() {
         ))}
       </Picker>
 
+      {/* Tabs row (global) */}
+      <View style={styles.tabsRow}>
+        <Tab label="SPREADS" active={betType==="spreads"} disabled={!marketHas.spreads} onPress={() => setBetType("spreads")} />
+        <Tab label="TOTALS"  active={betType==="totals"}  disabled={!marketHas.totals}  onPress={() => setBetType("totals")} />
+        <Tab label="H2H"     active={betType==="h2h"}     disabled={!marketHas.h2h}     onPress={() => setBetType("h2h")} />
+      </View>
+
       {!!notice && <Text style={styles.warn}>{notice}</Text>}
 
       {!data?.length ? (
@@ -282,13 +262,6 @@ export default function PicksNFL() {
 
               <Text style={styles.match}>{game.away_team} @ {game.home_team}</Text>
               <Text style={styles.kick}>{new Date(game.commence_time).toLocaleString()}</Text>
-
-              {/* Bet type row (optional; keep spreads default) */}
-              {/* <View style={styles.typeRow}>
-                <Chip active={betType === "spreads"} onPress={() => setBetType("spreads")} label="Spreads" />
-                <Chip active={betType === "h2h"} onPress={() => setBetType("h2h")} label="Moneyline" />
-                <Chip active={betType === "totals"} onPress={() => setBetType("totals")} label="Totals" />
-              </View> */}
 
               <View style={{ marginTop: 8, opacity: disabledWholeCard ? 0.6 : 1 }}>
                 {(market.outcomes ?? []).map((o: any, idx: number) => {
@@ -337,12 +310,19 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontWeight: "600" },
   switch: { color: "#0a84ff", fontSize: 16 },
 
-  // ✅ add this:
   warn: { color: "#7a4", marginBottom: 8 },
 
   badge: { alignSelf: "flex-start", paddingVertical: 4, paddingHorizontal: 10, borderRadius: 999, fontWeight: "800", marginBottom: 8 },
   badgeOpen: { backgroundColor: "#E9F4EF", color: "#006241" },
   badgeClosed: { backgroundColor: "#FDECEA", color: "#A4000F" },
+
+  // tabs
+  tabsRow: { flexDirection: "row", gap: 12, marginBottom: 10 },
+  tab: { flex: 1, borderWidth: 1, borderColor: "#bbb", borderRadius: 6, paddingVertical: 10, alignItems: "center", backgroundColor: "#eee" },
+  tabActive: { backgroundColor: "#111", borderColor: "#111" },
+  tabDisabled: { opacity: 0.45 },
+  tabText: { fontWeight: "700", color: "#333" },
+  tabTextActive: { color: "#fff" },
 
   card: { padding: 12, borderWidth: 1, borderRadius: 8, borderColor: "#ccc", backgroundColor: "#fff", marginBottom: 12 },
   logosRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginBottom: 6 },
@@ -359,5 +339,4 @@ const styles = StyleSheet.create({
   pickTextActive: { color: "#006241" },
 
   note: { marginTop: 8, fontSize: 12, color: "#9a6a00" },
-  typeRow: { flexDirection: "row", gap: 8, marginTop: 8 },
 });
