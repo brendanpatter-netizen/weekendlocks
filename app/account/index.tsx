@@ -59,20 +59,31 @@ export default function AccountPage() {
   const saveProfile = async () => {
     try {
       setSavingProfile(true);
-      const clean = username?.trim() || "";
+      const clean = (username ?? "").trim();
 
-      const { error } = await supabase.rpc("save_profile", {
-        p_username: clean,
-      });
-      if (error) throw error;
+    // Call the RPC (now returns the saved row as JSON)
+    const { data, error } = await supabase.rpc("save_profile", {
+      p_username: clean,
+    });
 
-      Alert.alert("Saved", "Profile updated.");
-    } catch (e: any) {
-      Alert.alert("Couldn’t save", e?.message ?? "Please try again.");
-    } finally {
-      setSavingProfile(false);
+    if (error) {
+      // This logs Postgres' exact message (super useful if anything is off)
+      console.warn("save_profile RPC error:", error);
+      throw error;
     }
-  };
+
+    // Optional: reflect the DB result back into UI
+    if (data?.username !== undefined) {
+      setUsername((data.username ?? "").toString());
+    }
+
+    Alert.alert("Saved", "Profile updated.");
+  } catch (e: any) {
+    Alert.alert("Couldn’t save", e?.message ?? "Please try again.");
+  } finally {
+    setSavingProfile(false);
+  }
+};
 
   const savePassword = async () => {
     if (!newPassword || newPassword.length < 8) {
