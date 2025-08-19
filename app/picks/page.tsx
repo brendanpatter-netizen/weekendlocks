@@ -195,7 +195,7 @@ export default function PicksNFL() {
 
       const { error: upErr } = await supabase
         .from("picks")
-        .upsert(payload, { onConflict: "user_id,game_id" });
+        .upsert(payload, { onConflict: "user_id,game_id,pick_market" });
 
       if (upErr) {
         Alert.alert("Save failed", upErr.message);
