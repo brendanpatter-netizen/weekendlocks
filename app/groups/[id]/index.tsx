@@ -40,17 +40,31 @@ export default function GroupDetail() {
       try {
         setLoading(true);
 
-        // Load group (owner or member can read; see RLS policies)
+        // ✅ Ensure we have a session so RLS auth.uid() is populated
+        const { data: sess } = await supabase.auth.getSession();
+        if (!sess?.session) {
+          console.warn("No session; user must sign in to view groups.");
+          setLoading(false);
+          return;
+        }
+
+        // Load group (RLS allows owner OR member to read)
         const { data: g, error: gErr } = await supabase
           .from("groups")
           .select("*")
           .eq("id", id)
-          .single();
+          .maybeSingle();
 
-        if (gErr || !g) {
+        if (gErr) {
           console.error("Group load error:", gErr);
           setLoading(false);
-          return; // bail without alert so we don't loop on web
+          return;
+        }
+        if (!g) {
+          // 0 rows back typically means RLS denied visibility
+          console.error("Group not visible (likely RLS), id:", id);
+          setLoading(false);
+          return;
         }
 
         setGroup(g);
@@ -78,7 +92,6 @@ export default function GroupDetail() {
             .from("profiles")
             .select("id, username")
             .in("id", ids);
-
           if (pErr) {
             console.error("Profiles load error:", pErr);
           } else {
@@ -100,27 +113,13 @@ export default function GroupDetail() {
       .channel(`group-${id}`)
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "group_members",
-          filter: `group_id=eq.${id}`,
-        },
-        () => {
-          void load();
-        }
+        { event: "*", schema: "public", table: "group_members", filter: `group_id=eq.${id}` },
+        () => { void load(); }
       )
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "groups",
-          filter: `id=eq.${id}`,
-        },
-        () => {
-          void load();
-        }
+        { event: "*", schema: "public", table: "groups", filter: `id=eq.${id}` },
+        () => { void load(); }
       )
       .subscribe();
 
@@ -134,9 +133,7 @@ export default function GroupDetail() {
   const shareInvite = async () => {
     if (!inviteCode) return;
     const base =
-      typeof window !== "undefined"
-        ? window.location.origin
-        : "https://weekendlocks.com";
+      typeof window !== "undefined" ? window.location.origin : "https://weekendlocks.com";
     const url = `${base}/groups/join?code=${inviteCode}`;
     try {
       await Share.share({
@@ -149,9 +146,7 @@ export default function GroupDetail() {
 
   const leaveGroup = async () => {
     if (!group) return;
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return Alert.alert("Sign in required");
     const { error } = await supabase
       .from("group_members")
@@ -174,8 +169,8 @@ export default function GroupDetail() {
       <View style={styles.container}>
         <Text style={styles.h1}>Group not available</Text>
         <Text style={styles.muted}>
-          If you just created this group, make sure RLS policies allow owners to
-          read it.
+          If you just created this group, make sure RLS policies allow owners or
+          members to read it and that you’re signed in.
         </Text>
       </View>
     );
@@ -186,11 +181,7 @@ export default function GroupDetail() {
       <Text style={styles.h1}>{group.name}</Text>
 
       <View style={styles.cardRow}>
-        <TextInput
-          value={inviteCode || ""}
-          editable={false}
-          style={[styles.input, { flex: 1 }]}
-        />
+        <TextInput value={inviteCode || ""} editable={false} style={[styles.input, { flex: 1 }]} />
         <TouchableOpacity onPress={shareInvite} style={styles.button}>
           <Text style={styles.buttonText}>Share</Text>
         </TouchableOpacity>
@@ -203,8 +194,7 @@ export default function GroupDetail() {
           keyExtractor={(m) => m.user_id}
           renderItem={({ item }) => {
             const username =
-              profiles[item.user_id]?.username ??
-              item.user_id.slice(0, 8) + "…";
+              profiles[item.user_id]?.username ?? item.user_id.slice(0, 8) + "…";
             return (
               <View style={styles.memberRow}>
                 <Text style={styles.rowTitle}>{username}</Text>
@@ -212,9 +202,7 @@ export default function GroupDetail() {
               </View>
             );
           }}
-          ListEmptyComponent={
-            <Text style={styles.muted}>No members yet.</Text>
-          }
+          ListEmptyComponent={<Text style={styles.muted}>No members yet.</Text>}
         />
       </View>
 
