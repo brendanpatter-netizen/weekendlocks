@@ -1,4 +1,3 @@
-// app/groups/[id]/index.tsx
 import { useEffect, useState } from "react";
 import {
   View,
@@ -11,8 +10,8 @@ import {
   TextInput,
   Share,
 } from "react-native";
-import { useLocalSearchParams } from "expo-router";
-import { supabase } from "../../../lib/supabase"; // ← change if your path differs
+import { useLocalSearchParams, router } from "expo-router";
+import { supabase } from "../../../lib/supabase"; // keep your path
 
 type Member = { user_id: string; role: "owner" | "admin" | "member" };
 type Profile = { id: string; username: string | null };
@@ -33,6 +32,10 @@ export default function GroupDetail() {
   const [inviteCode, setInviteCode] = useState("");
   const [loading, setLoading] = useState(true);
 
+  // track current user to know if they are the owner
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const isOwner = !!group && currentUserId === group.owner_user_id;
+
   useEffect(() => {
     if (!id) return;
 
@@ -40,10 +43,11 @@ export default function GroupDetail() {
       try {
         setLoading(true);
 
-        // Ensure we have a session so RLS sees auth.uid()
+        // ensure session so RLS sees auth.uid()
         const { data: sess } = await supabase.auth.getSession();
-        if (!sess?.session) {
-          console.warn("No session; sign in required.");
+        const uid = sess?.session?.user?.id ?? null;
+        setCurrentUserId(uid);
+        if (!uid) {
           setLoading(false);
           return;
         }
@@ -69,13 +73,12 @@ export default function GroupDetail() {
         setGroup(g);
         setInviteCode(g.invite_code ?? "");
 
-        // Load roster via RPC to avoid RLS recursion on group_members
+        // Load roster via RPC (security-definer; avoids RLS recursion)
         const { data: m, error: mErr } = await supabase.rpc("get_group_members", {
           p_group_id: g.id,
         });
-        if (mErr) {
-          console.error("Roster RPC error:", mErr);
-        }
+        if (mErr) console.error("Roster RPC error:", mErr);
+
         const roster = (m as Member[]) || [];
         setMembers(roster);
 
@@ -139,13 +142,22 @@ export default function GroupDetail() {
 
   const leaveGroup = async () => {
     if (!group) return;
+    if (isOwner) {
+      Alert.alert("Owner cannot leave", "Transfer ownership or delete the group.");
+      return;
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return Alert.alert("Sign in required");
+
     const { error } = await supabase
       .from("group_members")
       .delete()
       .match({ group_id: group.id, user_id: user.id });
-    if (error) Alert.alert("Error", error.message);
+
+    if (error) return Alert.alert("Error", error.message);
+
+    Alert.alert("Left group", "You’ve left the group.");
+    router.replace("/groups");
   };
 
   if (loading) {
@@ -205,9 +217,15 @@ export default function GroupDetail() {
 
       <TouchableOpacity
         onPress={leaveGroup}
-        style={[styles.button, { backgroundColor: "#c00", alignSelf: "flex-start" }]}
+        disabled={isOwner}
+        style={[
+          styles.button,
+          { backgroundColor: isOwner ? "#888" : "#c00", alignSelf: "flex-start" },
+        ]}
       >
-        <Text style={styles.buttonText}>Leave group</Text>
+        <Text style={styles.buttonText}>
+          {isOwner ? "Owner (cannot leave)" : "Leave group"}
+        </Text>
       </TouchableOpacity>
     </View>
   );

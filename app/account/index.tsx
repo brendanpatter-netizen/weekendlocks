@@ -1,4 +1,3 @@
-// app/account/index.tsx
 import { useEffect, useState } from "react";
 import {
   View,
@@ -6,16 +5,9 @@ import {
   TextInput,
   StyleSheet,
   Pressable,
-  Platform,
   Alert,
 } from "react-native";
-import {
-  useFonts,
-  RobotoCondensed_400Regular,
-  RobotoCondensed_700Bold,
-} from "@expo-google-fonts/roboto-condensed";
 import { supabase } from "@/lib/supabase";
-import { useRouter } from "expo-router";
 
 const colors = {
   primary: "#006241",
@@ -26,18 +18,7 @@ const colors = {
 };
 
 export default function AccountPage() {
-  const router = useRouter();
-
-  const [loaded] = useFonts({
-    RobotoCondensed_400Regular,
-    RobotoCondensed_700Bold,
-  });
-
-  const ffBold = loaded ? "RobotoCondensed_700Bold" : undefined;
-  const ffReg = loaded ? "RobotoCondensed_400Regular" : undefined;
-
-  const [email, setEmail] = useState<string>("");
-  const [displayName, setDisplayName] = useState("");
+  const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
 
@@ -45,30 +26,46 @@ export default function AccountPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
 
+  // Ensure a profile row exists and load it
   useEffect(() => {
-    let mounted = true;
-    supabase.auth.getUser().then(({ data }) => {
-      if (!mounted) return;
-      const user = data.user;
-      setEmail(user?.email ?? "");
-      const meta = (user?.user_metadata as any) || {};
-      setDisplayName(meta.display_name ?? "");
-      setUsername(meta.username ?? "");
-    });
-    return () => {
-      mounted = false;
-    };
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      setEmail(user.email ?? "");
+
+      // upsert a profile row for this user if missing
+      await supabase.from("profiles").upsert(
+        {
+          id: user.id,
+          username:
+            user.user_metadata?.name ||
+            (user.email ? user.email.split("@")[0] : null),
+        },
+        { onConflict: "id" }
+      );
+
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      setUsername(prof?.username ?? "");
+    })();
   }, []);
 
   const saveProfile = async () => {
     try {
       setSavingProfile(true);
-      const { error } = await supabase.auth.updateUser({
-        data: {
-          display_name: displayName || null,
-          username: username || null,
-        },
-      });
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not signed in");
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({ username: username || null })
+        .eq("id", user.id);
+
       if (error) throw error;
       Alert.alert("Saved", "Profile updated.");
     } catch (e: any) {
@@ -89,19 +86,12 @@ export default function AccountPage() {
     }
     try {
       setSavingPassword(true);
-
-      const { error: pwError } = await supabase.auth.updateUser({ password: newPassword });
-      if (pwError) throw pwError;
-
-      const { error: metaError } = await supabase.auth.updateUser({
-        data: { password_set: true },
-      });
-      if (metaError) throw metaError;
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
 
       setNewPassword("");
       setConfirmPassword("");
       Alert.alert("Password set", "You can now sign in with email + password.");
-      router.replace("/");
     } catch (e: any) {
       Alert.alert("Couldn’t update password", e?.message ?? "Please try again.");
     } finally {
@@ -120,29 +110,19 @@ export default function AccountPage() {
   return (
     <View style={styles.screen}>
       <View style={styles.card}>
-        <Text style={[styles.title, { fontFamily: ffBold }]}>My Account</Text>
+        <Text style={styles.title}>My Account</Text>
 
         {/* Profile */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { fontFamily: ffBold }]}>Profile</Text>
+          <Text style={styles.sectionTitle}>Profile</Text>
 
           <View style={styles.row}>
-            <Text style={[styles.label, { fontFamily: ffBold }]}>Email</Text>
-            <Text style={[styles.value, { fontFamily: ffReg }]}>{email || "—"}</Text>
+            <Text style={styles.label}>Email</Text>
+            <Text style={styles.value}>{email || "—"}</Text>
           </View>
 
           <View style={styles.row}>
-            <Text style={[styles.label, { fontFamily: ffBold }]}>Display name</Text>
-            <TextInput
-              placeholder="Your name"
-              value={displayName}
-              onChangeText={setDisplayName}
-              style={styles.input}
-            />
-          </View>
-
-          <View style={styles.row}>
-            <Text style={[styles.label, { fontFamily: ffBold }]}>Username</Text>
+            <Text style={styles.label}>Display name (username)</Text>
             <TextInput
               placeholder="e.g. weekend_wizard"
               autoCapitalize="none"
@@ -156,16 +136,17 @@ export default function AccountPage() {
           </View>
 
           <Text style={{ fontSize: 12, color: colors.subtext }}>
-            Note: username is stored in your profile. (We can add “login by username” later.)
+            This updates your name in the <Text style={{ fontWeight: "700" }}>profiles</Text> table
+            so it shows up in Groups.
           </Text>
         </View>
 
         {/* Security */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { fontFamily: ffBold }]}>Security</Text>
+          <Text style={styles.sectionTitle}>Security</Text>
 
           <View style={styles.row}>
-            <Text style={[styles.label, { fontFamily: ffBold }]}>Set / change password</Text>
+            <Text style={styles.label}>Set / change password</Text>
             <TextInput
               placeholder="New password"
               secureTextEntry
@@ -213,9 +194,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#eaeaea",
   },
-  title: { fontSize: 24, color: colors.primary, textTransform: "uppercase" },
+  title: { fontSize: 24, color: colors.primary, textTransform: "uppercase", fontWeight: "700" },
   section: { gap: 10 },
-  sectionTitle: { fontSize: 16, color: colors.primary, textTransform: "uppercase" },
+  sectionTitle: { fontSize: 16, color: colors.primary, textTransform: "uppercase", fontWeight: "700" },
   row: {
     backgroundColor: "#FAFAFA",
     borderRadius: 12,
