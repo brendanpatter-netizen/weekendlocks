@@ -26,7 +26,7 @@ export default function AccountPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
 
-  // Ensure a profile row exists and load it
+  // Ensure a profile row exists and load it (no upsert)
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -34,24 +34,37 @@ export default function AccountPage() {
 
       setEmail(user.email ?? "");
 
-      // upsert a profile row for this user if missing
-      await supabase.from("profiles").upsert(
-        {
-          id: user.id,
-          username:
-            user.user_metadata?.name ||
-            (user.email ? user.email.split("@")[0] : null),
-        },
-        { onConflict: "id" }
-      );
-
-      const { data: prof } = await supabase
+      // 1) Try to read an existing profile row
+      const { data: existing, error: readErr } = await supabase
         .from("profiles")
-        .select("username")
+        .select("id, username")
         .eq("id", user.id)
         .maybeSingle();
 
-      setUsername(prof?.username ?? "");
+      if (readErr) {
+        console.warn("profiles read error:", readErr);
+      }
+
+      if (!existing) {
+        // 2) Insert a row if missing (not upsert)
+        const defaultName =
+          user.user_metadata?.name ||
+          (user.email ? user.email.split("@")[0] : "User");
+
+        const { error: insErr } = await supabase
+          .from("profiles")
+          .insert({ id: user.id, username: defaultName });
+
+        if (insErr) {
+          console.warn("profiles insert error:", insErr);
+        } else {
+          setUsername(defaultName);
+          return;
+        }
+      }
+
+      // 3) Use existing username if present
+      if (existing?.username) setUsername(existing.username);
     })();
   }, []);
 
@@ -61,9 +74,11 @@ export default function AccountPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not signed in");
 
+      const clean = username?.trim() || null;
+
       const { error } = await supabase
         .from("profiles")
-        .update({ username: username || null })
+        .update({ username: clean })
         .eq("id", user.id);
 
       if (error) throw error;
@@ -131,7 +146,9 @@ export default function AccountPage() {
               style={styles.input}
             />
             <Pressable onPress={saveProfile} disabled={savingProfile} style={styles.primaryBtn}>
-              <Text style={styles.primaryBtnText}>{savingProfile ? "Saving..." : "Save profile"}</Text>
+              <Text style={styles.primaryBtnText}>
+                {savingProfile ? "Saving..." : "Save profile"}
+              </Text>
             </Pressable>
           </View>
 
