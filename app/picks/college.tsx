@@ -143,7 +143,7 @@ export default function PicksCFB() {
       };
       const { error: upErr } = await supabase
         .from("picks")
-        .upsert(payload, { onConflict: "user_id,game_id,pick_market" });
+        .upsert(payload, { onConflict: "user_id,game_id" });
       if (upErr) { Alert.alert("Save failed", upErr.message); return; }
 
       setMyPicks((m) => ({ ...m, [mappedId]: label }));
