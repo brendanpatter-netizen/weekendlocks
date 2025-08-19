@@ -12,7 +12,7 @@ import {
   Share,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
-import { supabase } from "../../../lib/supabase";
+import { supabase } from "../../../lib/supabase"; // ← change if your path differs
 
 type Member = { user_id: string; role: "owner" | "admin" | "member" };
 type Profile = { id: string; username: string | null };
@@ -40,15 +40,15 @@ export default function GroupDetail() {
       try {
         setLoading(true);
 
-        // ✅ Ensure we have a session so RLS auth.uid() is populated
+        // Ensure we have a session so RLS sees auth.uid()
         const { data: sess } = await supabase.auth.getSession();
         if (!sess?.session) {
-          console.warn("No session; user must sign in to view groups.");
+          console.warn("No session; sign in required.");
           setLoading(false);
           return;
         }
 
-        // Load group (RLS allows owner OR member to read)
+        // Read the group (RLS: owner OR member)
         const { data: g, error: gErr } = await supabase
           .from("groups")
           .select("*")
@@ -61,8 +61,7 @@ export default function GroupDetail() {
           return;
         }
         if (!g) {
-          // 0 rows back typically means RLS denied visibility
-          console.error("Group not visible (likely RLS), id:", id);
+          console.error("Group not visible via RLS. id:", id);
           setLoading(false);
           return;
         }
@@ -70,23 +69,18 @@ export default function GroupDetail() {
         setGroup(g);
         setInviteCode(g.invite_code ?? "");
 
-        // Load members
-        const { data: m, error: mErr } = await supabase
-          .from("group_members")
-          .select("user_id, role")
-          .eq("group_id", g.id)
-          .order("role", { ascending: true });
-
+        // Load roster via RPC to avoid RLS recursion on group_members
+        const { data: m, error: mErr } = await supabase.rpc("get_group_members", {
+          p_group_id: g.id,
+        });
         if (mErr) {
-          console.error("Members load error:", mErr);
-          setLoading(false);
-          return;
+          console.error("Roster RPC error:", mErr);
         }
+        const roster = (m as Member[]) || [];
+        setMembers(roster);
 
-        setMembers(m || []);
-
-        // Load lightweight profiles for display names
-        const ids = (m || []).map((x) => x.user_id);
+        // Fetch lightweight profiles for display names
+        const ids = roster.map((r) => r.user_id);
         if (ids.length) {
           const { data: profs, error: pErr } = await supabase
             .from("profiles")
@@ -108,23 +102,22 @@ export default function GroupDetail() {
       }
     };
 
-    // Realtime: update when membership or group changes
+    // Realtime: refresh when group or membership changes
     const channel = supabase
       .channel(`group-${id}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "group_members", filter: `group_id=eq.${id}` },
-        () => { void load(); }
+        () => void load()
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "groups", filter: `id=eq.${id}` },
-        () => { void load(); }
+        () => void load()
       )
       .subscribe();
 
     void load();
-
     return () => {
       supabase.removeChannel(channel);
     };
@@ -152,7 +145,7 @@ export default function GroupDetail() {
       .from("group_members")
       .delete()
       .match({ group_id: group.id, user_id: user.id });
-    if (error) return Alert.alert("Error", error.message);
+    if (error) Alert.alert("Error", error.message);
   };
 
   if (loading) {
@@ -169,8 +162,8 @@ export default function GroupDetail() {
       <View style={styles.container}>
         <Text style={styles.h1}>Group not available</Text>
         <Text style={styles.muted}>
-          If you just created this group, make sure RLS policies allow owners or
-          members to read it and that you’re signed in.
+          If you just created this group, make sure you’re signed in and RLS allows
+          owners or members to read it.
         </Text>
       </View>
     );
@@ -181,7 +174,11 @@ export default function GroupDetail() {
       <Text style={styles.h1}>{group.name}</Text>
 
       <View style={styles.cardRow}>
-        <TextInput value={inviteCode || ""} editable={false} style={[styles.input, { flex: 1 }]} />
+        <TextInput
+          value={inviteCode || ""}
+          editable={false}
+          style={[styles.input, { flex: 1 }]}
+        />
         <TouchableOpacity onPress={shareInvite} style={styles.button}>
           <Text style={styles.buttonText}>Share</Text>
         </TouchableOpacity>
