@@ -13,25 +13,18 @@ import { logoSrc } from "@/lib/teamLogos";
 type BetType = "spreads" | "totals" | "h2h";
 const CFB_SPORT_KEY = "americanfootball_ncaaf";
 const SEASON = 2025;
+
 function getCurrentWeek() { return 1; }
 
-// ------------ team normalization ------------
-/**
- * College names are noisy. This keeps it simple:
- *  - lowercases
- *  - strips punctuation and common stopwords
- *  - uses the final word as the mascot fallback
- * Make sure your `games.home/away` use the same convention (mascots or short names).
- */
-const STOP = new Set(["the","of","and","university","state","st","tech","at","&","a","b","c","d","e"]);
+// Basic normalizer for CFB team names
+const STOP = new Set(["the","of","and","university","state","st","tech","at","&"]);
 function normTeamCFB(name: string) {
   const raw = name.toLowerCase().replace(/[^\w\s-]/g, " ").replace(/\s+/g, " ").trim();
   const words = raw.split(" ").filter((w) => !STOP.has(w));
   const last = words[words.length - 1] || raw;
-  return last; // e.g. "bulldogs", "longhorns", "trojans"
+  return last;
 }
 
-// ------------ small ui ------------
 function Tab({ label, active, disabled, onPress }:{label:string;active:boolean;disabled?:boolean;onPress:()=>void}) {
   return (
     <Pressable onPress={onPress} disabled={disabled} style={[styles.tab, active && styles.tabActive, disabled && styles.tabDisabled]}>
@@ -40,7 +33,6 @@ function Tab({ label, active, disabled, onPress }:{label:string;active:boolean;d
   );
 }
 
-// ------------ component ------------
 export default function PicksCollege() {
   const [week, setWeek] = useState<number>(getCurrentWeek());
   const [betType, setBetType] = useState<BetType>("spreads");
@@ -58,14 +50,15 @@ export default function PicksCollege() {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
   }, []);
 
-  // load weeks/games + existing picks
   useEffect(() => {
     (async () => {
       setNotice(null);
 
       const { data: w, error: wErr } = await supabase
         .from("weeks").select("*")
-        .eq("league", "cfb").eq("season", SEASON).eq("week_num", week)
+        .eq("league", "cfb")     // <-- lowercase enum value in your DB
+        .eq("season", SEASON)
+        .eq("week_num", week)
         .maybeSingle();
 
       if (wErr) setNotice(`weeks: ${wErr.message}`);
@@ -74,24 +67,18 @@ export default function PicksCollege() {
       if (!w?.id) { setGameMap({}); setMyPicks({}); return; }
 
       const { data: g, error: gErr } = await supabase
-        .from("games")
-        .select("id, home, away, week_id")
-        .eq("week_id", w.id);
+        .from("games").select("id, home, away, week_id").eq("week_id", w.id);
       if (gErr) setNotice(`games: ${gErr.message}`);
 
       const map: Record<string, number> = {};
-      (g ?? []).forEach((row: any) => {
-        map[`${normTeamCFB(row.away)}@${normTeamCFB(row.home)}`] = row.id;
-      });
+      (g ?? []).forEach((row: any) => { map[`${normTeamCFB(row.away)}@${normTeamCFB(row.home)}`] = row.id; });
       setGameMap(map);
 
       const ids = (g ?? []).map((r: any) => r.id);
       if (!ids.length) { setMyPicks({}); return; }
 
       const { data: ps, error: pErr } = await supabase
-        .from("picks")
-        .select("game_id, pick_team")
-        .in("game_id", ids);
+        .from("picks").select("game_id, pick_team").in("game_id", ids);
       if (pErr) setNotice(`picks: ${pErr.message}`);
 
       const mine: Record<number, string> = {};
@@ -128,24 +115,18 @@ export default function PicksCollege() {
     type === "h2h"     ? `${o.name} ML` :
                          `${o.name} ${o.point}`;
 
+  // ---- SAVE pick ----
   const savePick = async (oddsGame: any, type: BetType, o: any) => {
     if (!userId) { Alert.alert("Sign in required", "Please sign in to save picks."); return; }
     if (!isOpen)  { Alert.alert("Picks closed", openLabel); return; }
 
     const key = `${normTeamCFB(oddsGame.away_team)}@${normTeamCFB(oddsGame.home_team)}`;
     const mappedId = gameMap[key];
-
-    if (!mappedId) {
-      Alert.alert(
-        "Can’t match game",
-        `The odds game couldn't be matched to your internal 'games' row.\n\nLookup key used:\n${key}\n\nAdjust the 'games' home/away names or tweak normTeamCFB().`
-      );
-      return;
-    }
+    if (!mappedId) { Alert.alert("Can’t match game", `Lookup key used: ${key}`); return; }
 
     const label = labelFor(type, o);
-
     setSaving(mappedId);
+
     try {
       const payload = {
         user_id: userId,
@@ -155,22 +136,45 @@ export default function PicksCollege() {
         pick_side: String(o.name),
         pick_line: o.point != null ? Number(o.point) : null,
         pick_price: typeof o.price === "number" ? o.price : null,
-        sport: "cfb",
+        sport: "cfb",      // <-- lowercase
         week,
         status: "pending",
         created_at: new Date().toISOString(),
       };
 
-      const { error: upErr } = await supabase
-        .from("picks")
-        .upsert(payload, { onConflict: "user_id,game_id" });
-
+      const { error: upErr } = await supabase.from("picks").upsert(payload, { onConflict: "user_id,game_id" });
       if (upErr) { Alert.alert("Save failed", upErr.message); return; }
 
       setMyPicks((m) => ({ ...m, [mappedId]: label }));
       events.emitPickSaved({ league: "cfb", week, game_id: mappedId, user_id: userId!, pick_team: label });
-
       Alert.alert("Saved", `Your pick: ${label}`);
+    } catch (e: any) {
+      Alert.alert("Error", String(e?.message || e));
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  // ---- CLEAR pick ----
+  const clearPick = async (gameId: number) => {
+    if (!userId) return;
+    setSaving(gameId);
+    try {
+      const { error: delErr } = await supabase
+        .from("picks")
+        .delete()
+        .eq("user_id", userId)
+        .eq("game_id", gameId)
+        .eq("week", week)
+        .eq("sport", "cfb");
+
+      if (delErr) { Alert.alert("Couldn’t clear", delErr.message); return; }
+
+      setMyPicks((m) => {
+        const { [gameId]: _removed, ...rest } = m;
+        return rest;
+      });
+      events.emitPickSaved({ league: "cfb", week, game_id: gameId, user_id: userId!, pick_team: "" });
     } catch (e: any) {
       Alert.alert("Error", String(e?.message || e));
     } finally {
@@ -191,12 +195,9 @@ export default function PicksCollege() {
       <Text style={[styles.badge, isOpen ? styles.badgeOpen : styles.badgeClosed]}>{openLabel}</Text>
 
       <Picker selectedValue={week} onValueChange={(v) => setWeek(Number(v))} style={{ marginBottom: 12 }}>
-        {Array.from({ length: 15 }).map((_, i) => (
-          <Picker.Item key={i + 1} label={`Week ${i + 1}`} value={i + 1} />
-        ))}
+        {Array.from({ length: 15 }).map((_, i) => (<Picker.Item key={i + 1} label={`Week ${i + 1}`} value={i + 1} />))}
       </Picker>
 
-      {/* Global tabs for the page */}
       <View style={styles.tabsRow}>
         <Tab label="SPREADS" active={betType==="spreads"} disabled={!marketHas.spreads} onPress={() => setBetType("spreads")} />
         <Tab label="TOTALS"  active={betType==="totals"}  disabled={!marketHas.totals}  onPress={() => setBetType("totals")} />
@@ -215,6 +216,7 @@ export default function PicksCollege() {
 
           const mappedId = gameMap[`${normTeamCFB(game.away_team)}@${normTeamCFB(game.home_team)}`];
           const disabledWholeCard = !isOpen || !mappedId;
+          const selectedLabel = mappedId ? myPicks[mappedId] : undefined;
 
           return (
             <View key={game.id} style={styles.card}>
@@ -230,7 +232,7 @@ export default function PicksCollege() {
               <View style={{ marginTop: 8, opacity: disabledWholeCard ? 0.6 : 1 }}>
                 {(market.outcomes ?? []).map((o: any, idx: number) => {
                   const label = labelFor(betType, o);
-                  const isMine = mappedId ? myPicks[mappedId] === label : false;
+                  const isMine = !!selectedLabel && selectedLabel === label;
                   const disabled = disabledWholeCard || saving === mappedId;
 
                   return (
@@ -238,11 +240,7 @@ export default function PicksCollege() {
                       <Pressable
                         disabled={disabled}
                         onPress={() => savePick(game, betType, o)}
-                        style={
-                          isMine
-                            ? [styles.pickBtn, styles.pickBtnActive]
-                            : disabled ? [styles.pickBtn, styles.pickBtnDisabled] : styles.pickBtn
-                        }
+                        style={ isMine ? [styles.pickBtn, styles.pickBtnActive] : disabled ? [styles.pickBtn, styles.pickBtnDisabled] : styles.pickBtn }
                       >
                         <Text style={isMine ? [styles.pickText, styles.pickTextActive] : styles.pickText}>
                           {label}{typeof o.price === "number" ? `  (${o.price > 0 ? `+${o.price}` : o.price})` : ""}
@@ -253,12 +251,19 @@ export default function PicksCollege() {
                 })}
               </View>
 
-              {!mappedId && (
-                <Text style={styles.note}>
-                  Not clickable: this odds matchup didn’t map to a row in your <Text style={{fontWeight: "700"}}>games</Text> table.
-                  {"\n"}Lookup key tried: <Text style={{fontWeight:"700"}}>{`${normTeamCFB(game.away_team)}@${normTeamCFB(game.home_team)}`}</Text>
-                </Text>
+              {!!selectedLabel && mappedId && (
+                <View style={{ marginTop: 8, alignItems: "flex-start" }}>
+                  <Pressable
+                    disabled={saving === mappedId}
+                    onPress={() => clearPick(mappedId)}
+                    style={styles.clearBtn}
+                  >
+                    <Text style={styles.clearText}>Clear pick</Text>
+                  </Pressable>
+                </View>
               )}
+
+              {!mappedId && (<Text style={styles.note}>Not clickable: odds matchup didn’t map to a row in your <Text style={{fontWeight: "700"}}>games</Text> table.</Text>)}
             </View>
           );
         })
@@ -273,13 +278,10 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
   title: { fontSize: 20, fontWeight: "600" },
   switch: { color: "#0a84ff", fontSize: 16 },
-
   warn: { color: "#7a4", marginBottom: 8 },
-
   badge: { alignSelf: "flex-start", paddingVertical: 4, paddingHorizontal: 10, borderRadius: 999, fontWeight: "800", marginBottom: 8 },
   badgeOpen: { backgroundColor: "#E9F4EF", color: "#006241" },
   badgeClosed: { backgroundColor: "#FDECEA", color: "#A4000F" },
-
   tabsRow: { flexDirection: "row", gap: 12, marginBottom: 10 },
   tab: { flex: 1, borderWidth: 1, borderColor: "#bbb", borderRadius: 6, paddingVertical: 10, alignItems: "center", backgroundColor: "#eee" },
   tabActive: { backgroundColor: "#111", borderColor: "#111" },
@@ -295,11 +297,14 @@ const styles = StyleSheet.create({
   match: { fontWeight: "bold", marginBottom: 2, fontSize: 16 },
   kick: { marginTop: 2, fontSize: 12, opacity: 0.7 },
 
-  pickBtn: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: "#bbb", backgroundColor: "#fff" },
+  pickBtn: { padding: 10, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: "#bbb", backgroundColor: "#fff" },
   pickBtnActive: { borderColor: "#006241", backgroundColor: "#E9F4EF" },
   pickBtnDisabled: { opacity: 0.5 },
   pickText: { fontWeight: "800", color: "#222" },
-  pickTextActive: { color: "#006241" },
+  pickTextActive: { color: "#006241" }, 
+
+  clearBtn: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 6, borderWidth: 1, borderColor: "#888", backgroundColor: "#f5f5f5" },
+  clearText: { fontWeight: "700", color: "#444" },
 
   note: { marginTop: 8, fontSize: 12, color: "#9a6a00" },
 });

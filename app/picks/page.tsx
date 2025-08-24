@@ -14,7 +14,7 @@ type BetType = "spreads" | "totals" | "h2h";
 const NFL_SPORT_KEY = "americanfootball_nfl";
 const SEASON = 2025;
 
-// If you have a util for current week, import that. Fallback to 1.
+// If you already have a helper, swap this in; otherwise fallback to 1.
 function getCurrentWeek() {
   return 1;
 }
@@ -95,7 +95,9 @@ export default function PicksNFL() {
 
       const { data: w, error: wErr } = await supabase
         .from("weeks").select("*")
-        .eq("league", "nfl").eq("season", SEASON).eq("week_num", week)
+        .eq("league", "nfl")         // <-- lowercase enum value in your DB
+        .eq("season", SEASON)
+        .eq("week_num", week)
         .maybeSingle();
 
       if (wErr) setNotice(`weeks: ${wErr.message}`);
@@ -160,6 +162,7 @@ export default function PicksNFL() {
     type === "h2h"     ? `${o.name} ML` :
                          `${o.name} ${o.point}`;
 
+  // ---- SAVE pick ----
   const savePick = async (oddsGame: any, type: BetType, o: any) => {
     if (!userId) { Alert.alert("Sign in required", "Please sign in to save picks."); return; }
     if (!isOpen)  { Alert.alert("Picks closed", openLabel); return; }
@@ -170,7 +173,7 @@ export default function PicksNFL() {
     if (!mappedId) {
       Alert.alert(
         "Can’t match game",
-        `The odds game couldn't be matched to your internal 'games' row.\n\nLookup key used:\n${key}\n\nCheck 'games' (away/home) and 'weeks' linkage.`
+        `This odds game couldn't be matched to your internal 'games' row.\n\nLookup key used:\n${key}\n\nCheck 'games' (away/home) and 'weeks' linkage.`
       );
       return;
     }
@@ -197,16 +200,41 @@ export default function PicksNFL() {
         .from("picks")
         .upsert(payload, { onConflict: "user_id,game_id" });
 
-      if (upErr) {
-        Alert.alert("Save failed", upErr.message);
-        return;
-      }
+      if (upErr) { Alert.alert("Save failed", upErr.message); return; }
 
       setMyPicks((m) => ({ ...m, [mappedId]: label }));
-
+      // fire live refresh for other screens
       events.emitPickSaved({ league: "nfl", week, game_id: mappedId, user_id: userId!, pick_team: label });
 
       Alert.alert("Saved", `Your pick: ${label}`);
+    } catch (e: any) {
+      Alert.alert("Error", String(e?.message || e));
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  // ---- CLEAR pick ----
+  const clearPick = async (gameId: number) => {
+    if (!userId) return;
+    setSaving(gameId);
+    try {
+      const { error: delErr } = await supabase
+        .from("picks")
+        .delete()
+        .eq("user_id", userId)
+        .eq("game_id", gameId)
+        .eq("week", week)
+        .eq("sport", "nfl");
+
+      if (delErr) { Alert.alert("Couldn’t clear", delErr.message); return; }
+
+      setMyPicks((m) => {
+        const { [gameId]: _removed, ...rest } = m;
+        return rest;
+      });
+      // notify others to refresh
+      events.emitPickSaved({ league: "nfl", week, game_id: gameId, user_id: userId!, pick_team: "" });
     } catch (e: any) {
       Alert.alert("Error", String(e?.message || e));
     } finally {
@@ -251,6 +279,7 @@ export default function PicksNFL() {
 
           const mappedId = gameMap[`${normTeamNFL(game.away_team)}@${normTeamNFL(game.home_team)}`];
           const disabledWholeCard = !isOpen || !mappedId;
+          const selectedLabel = mappedId ? myPicks[mappedId] : undefined;
 
           return (
             <View key={game.id} style={styles.card}>
@@ -266,7 +295,7 @@ export default function PicksNFL() {
               <View style={{ marginTop: 8, opacity: disabledWholeCard ? 0.6 : 1 }}>
                 {(market.outcomes ?? []).map((o: any, idx: number) => {
                   const label = labelFor(betType, o);
-                  const isMine = mappedId ? myPicks[mappedId] === label : false;
+                  const isMine = !!selectedLabel && selectedLabel === label;
                   const disabled = disabledWholeCard || saving === mappedId;
 
                   return (
@@ -288,6 +317,18 @@ export default function PicksNFL() {
                   );
                 })}
               </View>
+
+              {!!selectedLabel && mappedId && (
+                <View style={{ marginTop: 8, alignItems: "flex-start" }}>
+                  <Pressable
+                    disabled={saving === mappedId}
+                    onPress={() => clearPick(mappedId)}
+                    style={styles.clearBtn}
+                  >
+                    <Text style={styles.clearText}>Clear pick</Text>
+                  </Pressable>
+                </View>
+              )}
 
               {!mappedId && (
                 <Text style={styles.note}>
@@ -337,6 +378,9 @@ const styles = StyleSheet.create({
   pickBtnDisabled: { opacity: 0.5 },
   pickText: { fontWeight: "800", color: "#222" },
   pickTextActive: { color: "#006241" },
+
+  clearBtn: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 6, borderWidth: 1, borderColor: "#888", backgroundColor: "#f5f5f5" },
+  clearText: { fontWeight: "700", color: "#444" },
 
   note: { marginTop: 8, fontSize: 12, color: "#9a6a00" },
 });
