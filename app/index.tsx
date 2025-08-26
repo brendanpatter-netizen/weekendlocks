@@ -2,7 +2,7 @@
 export const unstable_settings = { prerender: false };
 
 import { useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert } from "react-native";
 import { Link } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { events } from "@/lib/events";
@@ -28,6 +28,12 @@ type BoardRow = { user_id: string; username: string | null; wins: number; losses
 
 export default function Home() {
   const [tab, setTab] = useState<"live" | "board">("live");
+
+  // current user (needed for clearing)
+  const [userId, setUserId] = useState<string | null>(null);
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
+  }, []);
 
   // Live picks
   const [live, setLive] = useState<LiveRow[]>([]);
@@ -71,7 +77,7 @@ export default function Home() {
     return off;
   }, []);
 
-  // 🔁 optional: cross-tab / other users via Supabase Realtime
+  // 🔁 cross-tab / other users via Realtime
   useEffect(() => {
     const ch = supabase
       .channel("picks-realtime")
@@ -81,6 +87,32 @@ export default function Home() {
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, []);
+
+  // 🚫 Clear my solo picks (group_id IS NULL)
+  const [clearing, setClearing] = useState(false);
+  const clearMySoloPicks = async () => {
+    if (!userId) { Alert.alert("Sign in required", "Please sign in to clear picks."); return; }
+    setClearing(true);
+    try {
+      // Remove ALL of your solo picks (any week / sport). Safer when sport casing/types vary.
+      const { error } = await supabase
+        .from("picks")
+        .delete()
+        .eq("user_id", userId)
+        .is("group_id", null);
+        // If you later want to target a specific week/sport:
+        // .eq("week", 1)
+        // .eq("sport", "nfl")
+
+      if (error) throw error;
+      await fetchLive();
+      Alert.alert("Cleared", "Your solo picks have been removed.");
+    } catch (e: any) {
+      Alert.alert("Couldn’t clear picks", e?.message ?? String(e));
+    } finally {
+      setClearing(false);
+    }
+  };
 
   const updatedAgo = useMemo(() => {
     if (!liveUpdatedAt) return null;
@@ -105,7 +137,14 @@ export default function Home() {
       </View>
 
       {tab === "live" ? (
-        <LivePicks loading={loadingLive} rows={live} onRefresh={fetchLive} updatedAgo={updatedAgo} />
+        <LivePicks
+          loading={loadingLive}
+          rows={live}
+          onRefresh={fetchLive}
+          updatedAgo={updatedAgo}
+          onClear={clearMySoloPicks}
+          clearing={clearing}
+        />
       ) : (
         <>
           <View style={s.inlineLeague}>
@@ -127,12 +166,14 @@ export default function Home() {
 /* -------- Live Picks -------- */
 
 function LivePicks({
-  loading, rows, onRefresh, updatedAgo,
+  loading, rows, onRefresh, updatedAgo, onClear, clearing,
 }: {
   loading: boolean;
   rows: LiveRow[];
   onRefresh: () => void;
   updatedAgo: string | null;
+  onClear: () => void;
+  clearing: boolean;
 }) {
   return (
     <View style={{ padding: 16 }}>
@@ -154,20 +195,25 @@ function LivePicks({
         </View>
       </View>
 
-      {/* Header + refresh */}
+      {/* Header + actions */}
       <View style={s.refreshRow}>
         <Text style={s.sectionTitle}>This Week’s Picks</Text>
-        <Pressable onPress={onRefresh} disabled={loading} style={loading ? [s.refreshBtn, s.refreshBtnDisabled] : s.refreshBtn}>
-          <Text style={s.refreshBtnText}>{loading ? "Refreshing…" : "Refresh ↻"}</Text>
-        </Pressable>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Pressable onPress={onRefresh} disabled={loading} style={loading ? [s.refreshBtn, s.refreshBtnDisabled] : s.refreshBtn}>
+            <Text style={s.refreshBtnText}>{loading ? "Refreshing…" : "Refresh ↻"}</Text>
+          </Pressable>
+          <Pressable onPress={onClear} disabled={clearing} style={clearing ? [s.refreshBtn, s.refreshBtnDisabled] : [s.refreshBtn, { borderColor: "#A4000F" }]}>
+            <Text style={[s.refreshBtnText, { color: "#A4000F" }]}>{clearing ? "Clearing…" : "Clear my solo picks"}</Text>
+          </Pressable>
+        </View>
       </View>
       {updatedAgo && <Text style={[s.dim, { marginBottom: 8 }]}>Updated {updatedAgo}</Text>}
 
       {/* Table header */}
       <View style={s.legendRow}>
-        <Text style={[s.legend, {flex: 2}]}>User</Text>
-        <Text style={[s.legend, {flex: 3, textAlign: "center"}]}>CFB</Text>
-        <Text style={[s.legend, {flex: 3, textAlign: "center"}]}>NFL</Text>
+        <Text style={[s.legend, { flex: 2 }]}>User</Text>
+        <Text style={[s.legend, { flex: 3, textAlign: "center" }]}>CFB</Text>
+        <Text style={[s.legend, { flex: 3, textAlign: "center" }]}>NFL</Text>
       </View>
 
       {/* Rows */}
@@ -178,9 +224,9 @@ function LivePicks({
       ) : (
         rows.map((r) => (
           <View key={r.user_id} style={[s.liveRow, { marginBottom: 10 }]}>
-            <Text style={[s.user, {flex: 2}]} numberOfLines={1}>{r.username ?? "User"}</Text>
+            <Text style={[s.user, { flex: 2 }]} numberOfLines={1}>{r.username ?? "User"}</Text>
 
-            <View style={{flex: 3}}>
+            <View style={{ flex: 3 }}>
               {r.cfb_pick ? (
                 <>
                   <Text style={s.livePick} numberOfLines={1}>{r.cfb_pick}</Text>
@@ -192,7 +238,7 @@ function LivePicks({
               ) : <Text style={s.dim}>—</Text>}
             </View>
 
-            <View style={{flex: 3}}>
+            <View style={{ flex: 3 }}>
               {r.nfl_pick ? (
                 <>
                   <Text style={s.livePick} numberOfLines={1}>{r.nfl_pick}</Text>
