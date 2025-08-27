@@ -1,334 +1,209 @@
-// app/index.tsx — Home: Live Picks + Leaderboard (refreshes when picks are saved)
+// app/index.tsx
 export const unstable_settings = { prerender: false };
 
-import { useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert } from "react-native";
+import { useEffect, useState, useCallback } from "react";
+import { View, Text, StyleSheet, ActivityIndicator, Pressable } from "react-native";
 import { Link } from "expo-router";
 import { supabase } from "@/lib/supabase";
-import { events } from "@/lib/events";
 
-type League = "nfl" | "cfb";
+// If your enum values are uppercase, change to ["NFL", "NCAAF"]
+const SPORTS = ["nfl", "cfb"] as const;
+type Sport = (typeof SPORTS)[number];
 
-type LiveRow = {
-  user_id: string;
-  username: string | null;
-  nfl_week: number | null;
-  nfl_pick: string | null;
-  nfl_matchup: string | null;
-  nfl_status: string | null;
-  nfl_kickoff: string | null;
-  cfb_week: number | null;
-  cfb_pick: string | null;
-  cfb_matchup: string | null;
-  cfb_status: string | null;
-  cfb_kickoff: string | null;
+type SoloPickRow = {
+  id: number;
+  sport: Sport;           // enum cast to text in select below
+  pick_team: string | null;
+  status: string | null;
+  created_at: string;
+  game: { id: number; home: string; away: string } | null;
 };
 
-type BoardRow = { user_id: string; username: string | null; wins: number; losses: number };
+type SoloBySport = Partial<Record<Sport, SoloPickRow | null>>;
 
 export default function Home() {
-  const [tab, setTab] = useState<"live" | "board">("live");
-
-  // current user (needed for clearing)
   const [userId, setUserId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [solo, setSolo] = useState<SoloBySport>({ nfl: null, cfb: null });
+
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
+    supabase.auth.getUser().then(({ data }) => {
+      setUserId(data.user?.id ?? null);
+    });
   }, []);
 
-  // Live picks
-  const [live, setLive] = useState<LiveRow[]>([]);
-  const [loadingLive, setLoadingLive] = useState(true);
-  const [liveUpdatedAt, setLiveUpdatedAt] = useState<number | null>(null);
+  const refresh = useCallback(async () => {
+    if (!userId) return;
+    setLoading(true);
+    setError(null);
 
-  // Leaderboard
-  const [boardLeague, setBoardLeague] = useState<League>("nfl");
-  const [board, setBoard] = useState<BoardRow[]>([]);
-  const [loadingBoard, setLoadingBoard] = useState(true);
+    // Pull only SOLO picks (group_id IS NULL) and newest first.
+    const { data, error } = await supabase
+      .from("picks")
+      .select(
+        `
+        id,
+        sport::text,
+        pick_team,
+        status,
+        created_at,
+        game:games(id, home, away)
+      `
+      )
+      .eq("user_id", userId)
+      .is("group_id", null)           // <- important: IS NULL (not eq)
+      .order("created_at", { ascending: false })
+      .limit(100);
 
-  const fetchLive = async () => {
-    setLoadingLive(true);
-    try {
-      const { data, error } = await supabase.rpc("live_picks_both");
-      if (error) throw error;
-      setLive((data || []) as LiveRow[]);
-      setLiveUpdatedAt(Date.now());
-    } finally {
-      setLoadingLive(false);
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+      return;
     }
-  };
 
-  const fetchBoard = async (league: League) => {
-    setLoadingBoard(true);
-    try {
-      const { data, error } = await supabase.rpc("leaderboard_simple", { p_league: league });
-      if (error) throw error;
-      setBoard((data || []) as BoardRow[]);
-    } finally {
-      setLoadingBoard(false);
+    // Keep the first (newest) for each sport.
+    const latest: SoloBySport = { nfl: null, cfb: null };
+    for (const row of (data ?? []) as any as SoloPickRow[]) {
+      const s = (row.sport ?? "").toLowerCase() as Sport;
+      if (!SPORTS.includes(s)) continue;
+      if (!latest[s]) latest[s] = row;
+      if (latest.nfl && latest.cfb) break;
     }
-  };
 
-  useEffect(() => { fetchLive(); }, []);
-  useEffect(() => { fetchBoard(boardLeague); }, [boardLeague]);
+    setSolo(latest);
+    setLastUpdated(new Date());
+    setLoading(false);
+  }, [userId]);
 
-  // 🔔 same-tab instant update when a pick is saved on a Picks page
   useEffect(() => {
-    const off = events.onPickSaved(() => { fetchLive(); });
-    return off;
-  }, []);
+    if (userId) refresh();
+  }, [userId, refresh]);
 
-  // 🔁 cross-tab / other users via Realtime
-  useEffect(() => {
-    const ch = supabase
-      .channel("picks-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "picks" }, () => {
-        fetchLive();
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, []);
+  const clearSolo = useCallback(async () => {
+    if (!userId) return;
+    setLoading(true);
+    setError(null);
 
-  // 🚫 Clear my solo picks (group_id IS NULL)
-  const [clearing, setClearing] = useState(false);
-  const clearMySoloPicks = async () => {
-    if (!userId) { Alert.alert("Sign in required", "Please sign in to clear picks."); return; }
-    setClearing(true);
-    try {
-      // Remove ALL of your solo picks (any week / sport). Safer when sport casing/types vary.
-      const { error } = await supabase
-        .from("picks")
-        .delete()
-        .eq("user_id", userId)
-        .is("group_id", null);
-        // If you later want to target a specific week/sport:
-        // .eq("week", 1)
-        // .eq("sport", "nfl")
+    // Delete ONLY solo picks for this user (any week), both sports.
+    const { error } = await supabase
+      .from("picks")
+      .delete()
+      .eq("user_id", userId)
+      .is("group_id", null)           // <- important: IS NULL (not eq)
+      .in("sport", SPORTS);           // restrict to nfl/cfb
 
-      if (error) throw error;
-      await fetchLive();
-      Alert.alert("Cleared", "Your solo picks have been removed.");
-    } catch (e: any) {
-      Alert.alert("Couldn’t clear picks", e?.message ?? String(e));
-    } finally {
-      setClearing(false);
+    if (error) {
+      setError(error.message);
     }
-  };
+    await refresh();
+  }, [userId, refresh]);
 
-  const updatedAgo = useMemo(() => {
-    if (!liveUpdatedAt) return null;
-    const m = Math.floor((Date.now() - liveUpdatedAt) / 60000);
-    if (m < 1) return "just now";
-    if (m < 60) return `${m}m ago`;
-    const h = Math.floor(m / 60);
-    return `${h}h ago`;
-  }, [liveUpdatedAt]);
+  if (!userId) {
+    return (
+      <View style={styles.center}>
+        <Text>You need to sign in to see your picks.</Text>
+      </View>
+    );
+  }
+
+  if (loading) return <ActivityIndicator style={styles.center} size="large" />;
 
   return (
-    <View style={s.screen}>
-      {/* Tabs */}
-      <View style={s.tabs}>
-        <Pressable onPress={() => setTab("live")} style={tab === "live" ? [s.tab, s.tabActive] : s.tab}>
-          <Text style={tab === "live" ? [s.tabText, s.tabTextActive] : s.tabText}>Live Picks</Text>
-        </Pressable>
-        <View style={{ width: 8 }} />
-        <Pressable onPress={() => setTab("board")} style={tab === "board" ? [s.tab, s.tabActive] : s.tab}>
-          <Text style={tab === "board" ? [s.tabText, s.tabTextActive] : s.tabText}>Leaderboard</Text>
-        </Pressable>
+    <View style={styles.page}>
+      <View style={styles.topbar}>
+        <Text style={styles.h1}>Live Picks</Text>
+        <Link href="/leaderboard" style={styles.leader}>Leaderboard</Link>
       </View>
 
-      {tab === "live" ? (
-        <LivePicks
-          loading={loadingLive}
-          rows={live}
-          onRefresh={fetchLive}
-          updatedAgo={updatedAgo}
-          onClear={clearMySoloPicks}
-          clearing={clearing}
-        />
-      ) : (
-        <>
-          <View style={s.inlineLeague}>
-            <Pressable onPress={() => setBoardLeague("cfb")} style={boardLeague === "cfb" ? [s.inlineChip, s.inlineChipActive] : s.inlineChip}>
-              <Text style={boardLeague === "cfb" ? [s.inlineChipText, s.inlineChipTextActive] : s.inlineChipText}>CFB</Text>
+      <View style={styles.card}>
+        <View style={styles.headerRow}>
+          <Text style={styles.h2}>Make Your Picks</Text>
+        </View>
+
+        <View style={{ flexDirection: "row", gap: 12, marginTop: 8 }}>
+          <Link href="/picks/college" style={styles.cta}>College Football</Link>
+          <Link href="/picks/page" style={styles.cta}>NFL</Link>
+        </View>
+      </View>
+
+      <View style={styles.card}>
+        <View style={styles.rowBetween}>
+          <Text style={styles.h2}>This Week’s Picks</Text>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <Pressable onPress={refresh} style={styles.secondaryBtn}>
+              <Text style={styles.secondaryText}>Refresh</Text>
             </Pressable>
-            <View style={{ width: 8 }} />
-            <Pressable onPress={() => setBoardLeague("nfl")} style={boardLeague === "nfl" ? [s.inlineChip, s.inlineChipActive] : s.inlineChip}>
-              <Text style={boardLeague === "nfl" ? [s.inlineChipText, s.inlineChipTextActive] : s.inlineChipText}>NFL</Text>
+            <Pressable onPress={clearSolo} style={styles.dangerBtn}>
+              <Text style={styles.dangerText}>Clear my solo picks</Text>
             </Pressable>
           </View>
-          <Leaderboard loading={loadingBoard} rows={board} />
-        </>
+        </View>
+        <Text style={styles.meta}>Updated {lastUpdated?.toLocaleTimeString() ?? "—"}</Text>
+
+        {error && <Text style={styles.error}>Error: {error}</Text>}
+
+        <View style={styles.table}>
+          <View style={[styles.tr, styles.th]}>
+            <Text style={[styles.td, { flex: 2 }]}>User</Text>
+            <Text style={[styles.td, { flex: 1, textAlign: "center" }]}>CFB</Text>
+            <Text style={[styles.td, { flex: 1, textAlign: "center" }]}>NFL</Text>
+          </View>
+
+          <View style={styles.tr}>
+            <Text style={[styles.td, { flex: 2 }]}>You</Text>
+
+            {/* CFB */}
+            <CellPick row={solo.cfb} />
+
+            {/* NFL */}
+            <CellPick row={solo.nfl} />
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function CellPick({ row }: { row: SoloPickRow | null | undefined }) {
+  if (!row) return <Text style={[styles.td, styles.muted, { flex: 1, textAlign: "center" }]}>—</Text>;
+  return (
+    <View style={{ flex: 1, alignItems: "center" }}>
+      <Text style={{ fontWeight: "700" }}>{row.pick_team ?? "—"}</Text>
+      {!!row.game && (
+        <Text style={{ fontSize: 12, opacity: 0.75 }}>
+          {row.game.away} @ {row.game.home}
+        </Text>
+      )}
+      {!!row.status && (
+        <Text style={styles.badgePending}>{row.status.toUpperCase()}</Text>
       )}
     </View>
   );
 }
 
-/* -------- Live Picks -------- */
-
-function LivePicks({
-  loading, rows, onRefresh, updatedAgo, onClear, clearing,
-}: {
-  loading: boolean;
-  rows: LiveRow[];
-  onRefresh: () => void;
-  updatedAgo: string | null;
-  onClear: () => void;
-  clearing: boolean;
-}) {
-  return (
-    <View style={{ padding: 16 }}>
-      {/* Banner */}
-      <View style={s.banner}>
-        <Text style={s.bannerTitle}>Make Your Picks</Text>
-        <View style={s.leagueSwitchRow}>
-          <Link href="/picks/college" prefetch={false} asChild>
-            <Pressable style={s.ctaBtnPrimary}>
-              <Text style={s.ctaBtnPrimaryText}>College Football</Text>
-            </Pressable>
-          </Link>
-          <View style={{ width: 8 }} />
-          <Link href="/picks/page" prefetch={false} asChild>
-            <Pressable style={s.ctaBtnPrimary}>
-              <Text style={s.ctaBtnPrimaryText}>NFL</Text>
-            </Pressable>
-          </Link>
-        </View>
-      </View>
-
-      {/* Header + actions */}
-      <View style={s.refreshRow}>
-        <Text style={s.sectionTitle}>This Week’s Picks</Text>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <Pressable onPress={onRefresh} disabled={loading} style={loading ? [s.refreshBtn, s.refreshBtnDisabled] : s.refreshBtn}>
-            <Text style={s.refreshBtnText}>{loading ? "Refreshing…" : "Refresh ↻"}</Text>
-          </Pressable>
-          <Pressable onPress={onClear} disabled={clearing} style={clearing ? [s.refreshBtn, s.refreshBtnDisabled] : [s.refreshBtn, { borderColor: "#A4000F" }]}>
-            <Text style={[s.refreshBtnText, { color: "#A4000F" }]}>{clearing ? "Clearing…" : "Clear my solo picks"}</Text>
-          </Pressable>
-        </View>
-      </View>
-      {updatedAgo && <Text style={[s.dim, { marginBottom: 8 }]}>Updated {updatedAgo}</Text>}
-
-      {/* Table header */}
-      <View style={s.legendRow}>
-        <Text style={[s.legend, { flex: 2 }]}>User</Text>
-        <Text style={[s.legend, { flex: 3, textAlign: "center" }]}>CFB</Text>
-        <Text style={[s.legend, { flex: 3, textAlign: "center" }]}>NFL</Text>
-      </View>
-
-      {/* Rows */}
-      {loading ? (
-        <ActivityIndicator style={{ marginTop: 24 }} />
-      ) : rows.length === 0 ? (
-        <Text style={s.dim}>No picks yet. Ask everyone to make their weekly picks!</Text>
-      ) : (
-        rows.map((r) => (
-          <View key={r.user_id} style={[s.liveRow, { marginBottom: 10 }]}>
-            <Text style={[s.user, { flex: 2 }]} numberOfLines={1}>{r.username ?? "User"}</Text>
-
-            <View style={{ flex: 3 }}>
-              {r.cfb_pick ? (
-                <>
-                  <Text style={s.livePick} numberOfLines={1}>{r.cfb_pick}</Text>
-                  <Text style={s.dim} numberOfLines={1}>{r.cfb_matchup}</Text>
-                  {r.cfb_status ? (
-                    <View style={[s.pill, pillFor(r.cfb_status)]}><Text style={s.pillText}>{r.cfb_status.toUpperCase()}</Text></View>
-                  ) : null}
-                </>
-              ) : <Text style={s.dim}>—</Text>}
-            </View>
-
-            <View style={{ flex: 3 }}>
-              {r.nfl_pick ? (
-                <>
-                  <Text style={s.livePick} numberOfLines={1}>{r.nfl_pick}</Text>
-                  <Text style={s.dim} numberOfLines={1}>{r.nfl_matchup}</Text>
-                  {r.nfl_status ? (
-                    <View style={[s.pill, pillFor(r.nfl_status)]}><Text style={s.pillText}>{r.nfl_status.toUpperCase()}</Text></View>
-                  ) : null}
-                </>
-              ) : <Text style={s.dim}>—</Text>}
-            </View>
-          </View>
-        ))
-      )}
-    </View>
-  );
-}
-
-/* -------- Leaderboard -------- */
-
-function Leaderboard({ loading, rows }: { loading: boolean; rows: BoardRow[] }) {
-  if (loading) return <ActivityIndicator style={{ marginTop: 24 }} />;
-  return (
-    <View style={{ padding: 16 }}>
-      {rows.length === 0 ? (
-        <Text style={s.dim}>No results yet.</Text>
-      ) : rows.map((r) => (
-        <View key={r.user_id} style={[s.leadRow, { marginBottom: 10 }]}>
-          <Text style={s.user}>{r.username ?? "User"}</Text>
-          <Text style={s.dim}>{r.wins}W–{r.losses}L</Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-/* -------- helpers + styles -------- */
-
-function pillFor(status?: string | null) {
-  if (!status) return s.pillGray;
-  const v = status.toLowerCase();
-  if (v === "win") return s.pillGreen;
-  if (v === "loss") return s.pillRed;
-  if (v === "live" || v === "in_progress") return s.pillBlue;
-  return s.pillGray;
-}
-
-const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#F5F5F5" },
-
-  tabs: { flexDirection: "row", marginTop: 8, paddingHorizontal: 16 },
-  tab: { flex: 1, alignItems: "center", paddingVertical: 10, borderWidth: 1, borderColor: "#ddd", backgroundColor: "#fff" },
-  tabActive: { backgroundColor: "#111" },
-  tabText: { fontWeight: "800", color: "#222" },
-  tabTextActive: { color: "#fff" },
-
-  inlineLeague: { flexDirection: "row", paddingHorizontal: 16, marginTop: 10, alignItems: "center" },
-  inlineChip: { paddingVertical: 6, paddingHorizontal: 12, borderWidth: 1, borderColor: "#ccc", borderRadius: 999, backgroundColor: "#fff" },
-  inlineChipActive: { backgroundColor: "#E9F4EF", borderColor: "#006241" },
-  inlineChipText: { fontWeight: "700", color: "#222" },
-  inlineChipTextActive: { color: "#006241" },
-
-  banner: { backgroundColor: "#fff", borderWidth: 1, borderColor: "#eee", borderRadius: 12, padding: 16 },
-  bannerTitle: { fontSize: 22, fontWeight: "900", marginBottom: 10 },
-  leagueSwitchRow: { flexDirection: "row", alignItems: "center" },
-
-  // CTA buttons
-  ctaBtnPrimary: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: "#006241", backgroundColor: "#E9F4EF" },
-  ctaBtnPrimaryText: { fontWeight: "800", color: "#006241" },
-
-  refreshRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 12 },
-  refreshBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: "#ccc", backgroundColor: "#fff" },
-  refreshBtnDisabled: { opacity: 0.5 },
-  refreshBtnText: { fontWeight: "800", color: "#222" },
-
-  sectionTitle: { fontWeight: "900", fontSize: 18 },
-
-  legendRow: { flexDirection: "row", paddingHorizontal: 4, marginTop: 8, marginBottom: 4 },
-  legend: { color: "#666", fontWeight: "700" },
-
-  liveRow: { backgroundColor: "#fff", borderRadius: 12, borderWidth: 1, borderColor: "#eee", padding: 12, flexDirection: "row", alignItems: "flex-start" },
-  user: { fontWeight: "900", color: "#111" },
-  dim: { color: "#666" },
-  livePick: { fontWeight: "800", color: "#222" },
-
-  leadRow: { backgroundColor: "#fff", borderRadius: 12, borderWidth: 1, borderColor: "#eee", padding: 12, flexDirection: "row", justifyContent: "space-between" },
-
-  pill: { alignSelf: "flex-start", marginTop: 4, borderRadius: 999, paddingVertical: 3, paddingHorizontal: 8 },
-  pillText: { fontWeight: "800" },
-  pillBlue:  { backgroundColor: "#E7F0FF" },
-  pillGreen: { backgroundColor: "#E8F6EF" },
-  pillRed:   { backgroundColor: "#FDECEA" },
-  pillGray:  { backgroundColor: "#EEE" },
+const styles = StyleSheet.create({
+  center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
+  page: { padding: 12 },
+  topbar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+  leader: { color: "#222", fontWeight: "700" },
+  h1: { fontSize: 16, fontWeight: "800", backgroundColor: "#111", color: "#fff", paddingVertical: 6, paddingHorizontal: 10, borderRadius: 4 },
+  h2: { fontSize: 18, fontWeight: "700" },
+  card: { backgroundColor: "#e9ecef", borderRadius: 8, padding: 12, marginBottom: 12 },
+  headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  cta: { backgroundColor: "#111", color: "#fff", paddingVertical: 8, paddingHorizontal: 12, borderRadius: 6, fontWeight: "700" },
+  secondaryBtn: { backgroundColor: "#f1f3f5", paddingVertical: 8, paddingHorizontal: 10, borderRadius: 6 },
+  secondaryText: { color: "#111", fontWeight: "700" },
+  dangerBtn: { backgroundColor: "#fee2e2", paddingVertical: 8, paddingHorizontal: 10, borderRadius: 6 },
+  dangerText: { color: "#991b1b", fontWeight: "800" },
+  meta: { fontSize: 12, opacity: 0.7, marginTop: 4 },
+  error: { color: "#991b1b", marginTop: 8 },
+  table: { marginTop: 10 },
+  tr: { flexDirection: "row", alignItems: "center", paddingVertical: 10, borderBottomColor: "#dfe3e6", borderBottomWidth: StyleSheet.hairlineWidth },
+  th: { borderBottomWidth: 2 },
+  td: { color: "#111" },
+  muted: { opacity: 0.5 },
+  badgePending: { marginTop: 2, paddingHorizontal: 10, paddingVertical: 2, borderRadius: 999, fontSize: 12, color: "#111", backgroundColor: "#dbeafe" },
 });
