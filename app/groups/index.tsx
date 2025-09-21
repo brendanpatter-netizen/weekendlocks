@@ -1,3 +1,5 @@
+'use client';
+
 import { useEffect, useMemo, useState } from "react";
 import {
   View,
@@ -36,54 +38,33 @@ export default function GroupsIndex() {
 
   async function load() {
     setLoading(true);
-    const {
-      data: { user },
-      error: authErr,
-    } = await supabase.auth.getUser();
+
+    // Ensure we’re signed in; RLS will hide everything if not
+    const { data: { session }, error: authErr } = await supabase.auth.getSession();
     if (authErr) {
       Alert.alert("Auth error", authErr.message);
       setLoading(false);
       return;
     }
-    if (!user) {
+    if (!session) {
       setGroups([]);
       setLoading(false);
       return;
     }
 
-    // Groups where I'm a member
-    const { data: mm, error: mmErr } = await supabase
-      .from("group_members")
-      .select(
-        "groups!inner(id, name, invite_code, owner_user_id, created_at)"
-      )
-      .eq("user_id", user.id)
-      .order("joined_at", { ascending: false });
-
-    if (mmErr) {
-      Alert.alert("Load error (members)", mmErr.message);
-      setLoading(false);
-      return;
-    }
-    const memberGroups: Group[] = (mm || []).map((r: any) => r.groups);
-
-    // Groups I own (covers the instant-after-create case)
-    const { data: owned, error: ownedErr } = await supabase
-      .from("groups")
-      .select("id, name, invite_code, owner_user_id, created_at")
-      .eq("owner_user_id", user.id)
+    // Single, simple query: groups I own OR am a member of
+    const { data, error } = await supabase
+      .from("groups_for_me")
+      .select("*")
       .order("created_at", { ascending: false });
 
-    if (ownedErr) {
-      Alert.alert("Load error (owned)", ownedErr.message);
+    if (error) {
+      Alert.alert("Load error", error.message);
       setLoading(false);
       return;
     }
 
-    // Merge without dupes
-    const map = new Map<string, Group>();
-    [...memberGroups, ...(owned || [])].forEach((g) => map.set(g.id, g));
-    setGroups(Array.from(map.values()));
+    setGroups((data || []) as Group[]);
     setLoading(false);
   }
 
@@ -91,12 +72,11 @@ export default function GroupsIndex() {
     let ch: ReturnType<typeof supabase.channel> | null = null;
 
     (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
 
       await load();
 
+      // Realtime: if my memberships or owned groups change, reload list
       ch = supabase
         .channel("groups-index")
         .on(
@@ -107,9 +87,7 @@ export default function GroupsIndex() {
             table: "group_members",
             filter: user ? `user_id=eq.${user.id}` : undefined,
           },
-          () => {
-            void load();
-          }
+          () => { void load(); }
         )
         .on(
           "postgres_changes",
@@ -119,9 +97,7 @@ export default function GroupsIndex() {
             table: "groups",
             filter: user ? `owner_user_id=eq.${user.id}` : undefined,
           },
-          () => {
-            void load();
-          }
+          () => { void load(); }
         )
         .subscribe();
     })();
@@ -131,54 +107,38 @@ export default function GroupsIndex() {
     };
   }, []);
 
-  // CREATE via RPC
+  // CREATE via RPC (also inserts owner as a member)
   const createGroup = async () => {
     const name = createName.trim();
     if (!name) return Alert.alert("Missing name", "Give your group a name.");
 
-    const {
-      data: { user },
-      error: authErr,
-    } = await supabase.auth.getUser();
-    if (authErr) return Alert.alert("Auth error", authErr.message);
-    if (!user) return Alert.alert("Sign in required");
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return Alert.alert("Sign in required");
 
-    const { data: newId, error: rpcErr } = await supabase.rpc("create_group", {
-      p_name: name,
-    });
-
-    if (rpcErr || !newId) {
-      return Alert.alert(
-        "Create failed",
-        rpcErr?.message || "RPC returned no id"
-      );
+    const { data: newId, error } = await supabase.rpc("create_group", { p_name: name });
+    if (error || !newId) {
+      return Alert.alert("Create failed", error?.message || "No id returned");
     }
 
     setCreateName("");
-    router.push({ pathname: "/groups/[id]", params: { id: newId as string } });
+    router.push({ pathname: "/groups/[id]", params: { id: String(newId) } });
   };
 
-  // JOIN via RPC
+  // JOIN via RPC (idempotent)
   const joinByCode = async () => {
     const code = joinCode.trim();
     if (!code) return;
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return Alert.alert("Sign in required");
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return Alert.alert("Sign in required");
 
-    const { data: gId, error: rpcErr } = await supabase.rpc(
-      "join_group_via_code",
-      { p_code: code }
-    );
-
-    if (rpcErr || !gId) {
+    const { data: gId, error } = await supabase.rpc("join_group_via_code", { p_code: code });
+    if (error || !gId) {
       return Alert.alert("Not found", "No group found for that invite code.");
     }
 
     setJoinCode("");
-    router.push({ pathname: "/groups/[id]", params: { id: gId as string } });
+    router.push({ pathname: "/groups/[id]", params: { id: String(gId) } });
   };
 
   if (loading) {
@@ -213,7 +173,7 @@ export default function GroupsIndex() {
         <TextInput
           value={joinCode}
           onChangeText={setJoinCode}
-          placeholder="e.g. a1b2c3d4e5f6"
+          placeholder="e.g. a1b2c3"
           autoCapitalize="none"
           style={styles.input}
         />
