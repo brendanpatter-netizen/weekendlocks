@@ -1,144 +1,84 @@
-// FILE: app/groups/[id]/index.tsx
-import { useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  ActivityIndicator,
-  StyleSheet,
-  TouchableOpacity,
-  FlatList,
-  Alert,
-  TextInput,
-} from "react-native";
-import { useLocalSearchParams, router } from "expo-router";
-import { supabase } from "@/lib/supabase";
+'use client';
 
-type Member = { user_id: string; role: "owner" | "admin" | "member" };
-type Profile = { id: string; username: string | null };
-type Group = {
-  id: string;
-  name: string;
-  invite_code: string | null;
-  owner_user_id: string;
-  created_at: string;
+import { useEffect, useState } from 'react';
+import { Text, View, ActivityIndicator, StyleSheet, FlatList } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
+import { supabase } from '../../../lib/supabase'; // adjust path if your client is elsewhere
+
+type Member = {
+  user_id: string;
+  role: string | null;
+  joined_at: string | null;
 };
 
 export default function GroupDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const groupId = String(id);
 
-  const [group, setGroup] = useState<Group | null>(null);
-  const [members, setMembers] = useState<Member[]>([]);
-  const [profiles, setProfiles] = useState<Record<string, Profile>>({});
-  const [inviteCode, setInviteCode] = useState("");
   const [loading, setLoading] = useState(true);
+  const [notAllowed, setNotAllowed] = useState(false);
+  const [groupName, setGroupName] = useState<string>('');
+  const [members, setMembers] = useState<Member[]>([]);
 
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const isOwner = !!group && currentUserId === group.owner_user_id;
+  async function load() {
+    setLoading(true);
+    setNotAllowed(false);
 
-  useEffect(() => {
-    if (!id) return;
-
-    const load = async () => {
-      try {
-        setLoading(true);
-
-        const { data: sess } = await supabase.auth.getSession();
-        const uid = sess?.session?.user?.id ?? null;
-        setCurrentUserId(uid);
-        if (!uid) {
-          setLoading(false);
-          return;
-        }
-
-        // Read group (RLS: owner OR member)
-        const { data: g, error: gErr } = await supabase
-          .from("groups")
-          .select("*")
-          .eq("id", id)
-          .maybeSingle();
-        if (gErr || !g) {
-          console.error("Group load error:", gErr);
-          setLoading(false);
-          return;
-        }
-        setGroup(g);
-        setInviteCode(g.invite_code ?? "");
-
-        // Roster via RPC (security definer)
-        const { data: m, error: mErr } = await supabase.rpc("get_group_members", { p_group_id: g.id });
-        if (mErr) console.error("Roster RPC error:", mErr);
-        const roster = (m as Member[]) || [];
-        setMembers(roster);
-
-        // Lightweight profiles for display names
-        const ids = roster.map((r) => r.user_id);
-        if (ids.length) {
-          const { data: profs, error: pErr } = await supabase
-            .from("profiles")
-            .select("id, username")
-            .in("id", ids);
-          if (!pErr && profs) {
-            const map: Record<string, Profile> = {};
-            profs.forEach((p) => (map[p.id] = p));
-            setProfiles(map);
-          }
-        }
-
-        setLoading(false);
-      } catch (e) {
-        console.error("Group load threw:", e);
-        setLoading(false);
-      }
-    };
-
-    const channel = supabase
-      .channel(`group-${id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "group_members", filter: `group_id=eq.${id}` }, () => void load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "groups",        filter: `id=eq.${id}` },        () => void load())
-      .subscribe();
-
-    void load();
-    return () => { supabase.removeChannel(channel); };
-  }, [id]);
-
-  const shareInvite = async () => {
-    if (!inviteCode) return;
-    const base = typeof window !== "undefined" ? window.location.origin : "https://weekendlocks.com";
-    const url = `${base}/groups/join?code=${inviteCode}`;
-    try {
-      await navigator.share?.({ title: "Join my Weekend Locks group", text: url }) ??
-            Promise.reject();
-    } catch {
-      Alert.alert("Invite code", `Share this code with friends: ${inviteCode}\n\nLink: ${url}`);
+    // Must be signed in
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      setNotAllowed(true);
+      setLoading(false);
+      return;
     }
-  };
 
-  const leaveGroup = async () => {
-    if (!group) return;
-    if (isOwner) return Alert.alert("Owner cannot leave", "Transfer ownership or delete the group first.");
+    // ✅ Check access via groups_for_me (owner OR member)
+    const { data: grp, error: grpErr } = await supabase
+      .from('groups_for_me')
+      .select('*')
+      .eq('id', groupId)
+      .single();
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return Alert.alert("Sign in required");
+    if (grpErr || !grp) {
+      // If the user isn’t a member/owner, the view returns 0 rows.
+      setNotAllowed(true);
+      setLoading(false);
+      return;
+    }
+    setGroupName(grp.name as string);
 
-    const { error } = await supabase.from("group_members").delete().match({ group_id: group.id, user_id: user.id });
-    if (error) return Alert.alert("Error", error.message);
+    // ✅ Now load all members of this group
+    const { data: mems, error: memErr } = await supabase
+      .from('group_members')
+      .select('user_id, role, joined_at')
+      .eq('group_id', groupId)
+      .order('joined_at', { ascending: true });
 
-    Alert.alert("Left group", "You’ve left the group.");
-    router.replace("/groups");
-  };
+    if (memErr) {
+      // If you still see nothing here, double-check the group_members SELECT policy below.
+      console.error('members error', memErr);
+      setMembers([]);
+    } else {
+      setMembers((mems ?? []) as Member[]);
+    }
+
+    setLoading(false);
+  }
+
+  useEffect(() => { load(); }, [groupId]);
 
   if (loading) {
     return (
-      <View style={styles.container}>
+      <View style={styles.wrap}>
         <ActivityIndicator />
         <Text style={styles.muted}>Loading group…</Text>
       </View>
     );
   }
 
-  if (!group) {
+  if (notAllowed) {
     return (
-      <View style={styles.container}>
+      <View style={styles.wrap}>
         <Text style={styles.h1}>Group not available</Text>
         <Text style={styles.muted}>Make sure you’re signed in and a member/owner of this group.</Text>
       </View>
@@ -146,50 +86,33 @@ export default function GroupDetail() {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.h1}>{group.name}</Text>
+    <View style={styles.wrap}>
+      <Text style={styles.h1}>{groupName}</Text>
+      <Text style={styles.h2}>Members</Text>
 
-      <View style={styles.cardRow}>
-        <TextInput value={inviteCode || ""} editable={false} style={[styles.input, { flex: 1 }]} />
-        <TouchableOpacity onPress={shareInvite} style={styles.button}><Text style={styles.buttonText}>Share</Text></TouchableOpacity>
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.h2}>Members</Text>
-        <FlatList
-          data={members}
-          keyExtractor={(m) => m.user_id}
-          renderItem={({ item }) => {
-            const rawName = profiles[item.user_id]?.username;
-            const username = rawName?.trim() ? rawName.trim() : item.user_id.slice(0, 8) + "…";
-            return (
-              <View style={styles.memberRow}>
-                <Text style={styles.rowTitle}>{username}</Text>
-                <Text style={styles.muted}>{item.role}</Text>
-              </View>
-            );
-          }}
-          ListEmptyComponent={<Text style={styles.muted}>No members yet.</Text>}
-        />
-      </View>
-
-      <TouchableOpacity onPress={leaveGroup} disabled={isOwner} style={[styles.button, { backgroundColor: isOwner ? "#888" : "#c00", alignSelf: "flex-start" }]}>
-        <Text style={styles.buttonText}>{isOwner ? "Owner (cannot leave)" : "Leave group"}</Text>
-      </TouchableOpacity>
+      <FlatList
+        data={members}
+        keyExtractor={(m) => m.user_id}
+        renderItem={({ item }) => (
+          <View style={styles.row}>
+            <Text style={styles.rowTitle}>{item.user_id}</Text>
+            <Text style={styles.rowSub}>
+              {item.role ?? 'member'}{item.joined_at ? ` • joined ${new Date(item.joined_at).toLocaleDateString()}` : ''}
+            </Text>
+          </View>
+        )}
+        ListEmptyComponent={<Text style={styles.muted}>No members yet.</Text>}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 12 },
-  h1: { fontSize: 22, fontWeight: "600" },
-  h2: { fontSize: 16, fontWeight: "600", marginBottom: 8 },
-  muted: { color: "#666" },
-  card: { backgroundColor: "white", padding: 12, borderRadius: 12, elevation: 2 },
-  cardRow: { backgroundColor: "white", padding: 12, borderRadius: 12, elevation: 2, flexDirection: "row", alignItems: "center", gap: 8 },
-  input: { borderWidth: 1, borderColor: "#ddd", borderRadius: 8, padding: 10 },
-  button: { backgroundColor: "#111", paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12 },
-  buttonText: { color: "white", fontWeight: "600" },
-  memberRow: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: "#eee", flexDirection: "row", justifyContent: "space-between" },
-  rowTitle: { fontWeight: "600" },
+  wrap: { flex: 1, padding: 16, gap: 8 },
+  h1: { fontSize: 22, fontWeight: '600' },
+  h2: { fontSize: 16, fontWeight: '600', marginTop: 12, marginBottom: 4 },
+  muted: { color: '#666' },
+  row: { backgroundColor: 'white', padding: 12, borderRadius: 12, marginBottom: 8 },
+  rowTitle: { fontWeight: '600' },
+  rowSub: { color: '#666', marginTop: 2 },
 });
