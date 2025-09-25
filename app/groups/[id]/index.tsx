@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Text, View, ActivityIndicator, StyleSheet, FlatList } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { supabase } from '../../../lib/supabase'; // adjust path if your client is elsewhere
+import { supabase } from '../../../lib/supabase'; // adjust path if needed
 
 type Member = {
   user_id: string;
@@ -24,15 +24,10 @@ export default function GroupDetail() {
     setLoading(true);
     setNotAllowed(false);
 
-    // Must be signed in
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      setNotAllowed(true);
-      setLoading(false);
-      return;
-    }
+    if (!session) { setNotAllowed(true); setLoading(false); return; }
 
-    // ✅ Check access via groups_for_me (owner OR member)
+    // ✅ Access check via view (owner OR member)
     const { data: grp, error: grpErr } = await supabase
       .from('groups_for_me')
       .select('*')
@@ -40,14 +35,13 @@ export default function GroupDetail() {
       .single();
 
     if (grpErr || !grp) {
-      // If the user isn’t a member/owner, the view returns 0 rows.
       setNotAllowed(true);
       setLoading(false);
       return;
     }
     setGroupName(grp.name as string);
 
-    // ✅ Now load all members of this group
+    // ✅ Fetch ONLY group_members (no joins; RLS guarantees visibility)
     const { data: mems, error: memErr } = await supabase
       .from('group_members')
       .select('user_id, role, joined_at')
@@ -55,8 +49,7 @@ export default function GroupDetail() {
       .order('joined_at', { ascending: true });
 
     if (memErr) {
-      // If you still see nothing here, double-check the group_members SELECT policy below.
-      console.error('members error', memErr);
+      console.error('members fetch error', memErr);
       setMembers([]);
     } else {
       setMembers((mems ?? []) as Member[]);
@@ -97,7 +90,8 @@ export default function GroupDetail() {
           <View style={styles.row}>
             <Text style={styles.rowTitle}>{item.user_id}</Text>
             <Text style={styles.rowSub}>
-              {item.role ?? 'member'}{item.joined_at ? ` • joined ${new Date(item.joined_at).toLocaleDateString()}` : ''}
+              {item.role ?? 'member'}
+              {item.joined_at ? ` • joined ${new Date(item.joined_at).toLocaleDateString()}` : ''}
             </Text>
           </View>
         )}
