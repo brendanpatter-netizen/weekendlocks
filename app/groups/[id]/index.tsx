@@ -1,11 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ViewStyle, TextStyle } from 'react-native';
-import { Text, View, ActivityIndicator, StyleSheet, FlatList, Image, Pressable } from 'react-native';
+import {
+  Text,
+  View,
+  ActivityIndicator,
+  StyleSheet,
+  FlatList,
+  Image,
+  Pressable,
+} from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { supabase } from '../../../lib/supabase'; // ← change if your client lives elsewhere
+import { supabase } from '../../../lib/supabase'; // ← adjust if your client path differs
 
+/** ------------------------------
+ * Types
+ * ------------------------------ */
 type MemberRow = {
   user_id: string;
   role: string | null;
@@ -24,6 +35,173 @@ type PicksRow = {
   nfl_picks: number;
 };
 
+type Game = {
+  id: string;
+  week_id: number; // bigint -> number in JS
+  league: 'NFL' | 'NCAAF';
+  home_team: string;
+  away_team: string;
+  kickoff?: string | null;
+};
+
+type MyPick = { game_id: string; choice: string | null };
+
+/** ------------------------------
+ * Small UI helpers for pick board
+ * ------------------------------ */
+function TeamPill({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[pickStyles.pill, selected ? pickStyles.pillSelected : null]}
+    >
+      <Text style={selected ? pickStyles.pillLabelSelected : pickStyles.pillLabel}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+/** ------------------------------
+ * The inline PickBoard (CFB/NFL)
+ * ------------------------------ */
+function PickBoard({
+  groupId,
+  weekId,
+  league,
+  onChanged,
+}: {
+  groupId: string;
+  weekId: number;
+  league: 'NFL' | 'NCAAF';
+  onChanged?: () => void; // reload summary after a pick
+}) {
+  const [games, setGames] = useState<Game[]>([]);
+  const [mine, setMine] = useState<Record<string, string | null>>({}); // game_id -> choice
+  const [loading, setLoading] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+
+    // 1) games for week + league
+    const { data: gms, error: gErr } = await supabase
+      .from('games')
+      .select('id, week_id, league, home_team, away_team, kickoff')
+      .eq('week_id', weekId)
+      .eq('league', league)
+      .order('kickoff', { ascending: true });
+
+    if (gErr) {
+      console.error('games error', gErr);
+      setGames([]);
+    } else {
+      setGames(gms ?? []);
+    }
+
+    // 2) user's picks for those games in this group
+    const gameIds = (gms ?? []).map((g) => g.id);
+    if (gameIds.length) {
+      const { data: picks, error: pErr } = await supabase
+        .from('picks')
+        .select('game_id, choice')
+        .eq('group_id', groupId)
+        .in('game_id', gameIds);
+
+      if (pErr) {
+        console.error('picks error', pErr);
+        setMine({});
+      } else {
+        const map: Record<string, string | null> = {};
+        (picks ?? []).forEach((p) => {
+          map[p.game_id] = p.choice;
+        });
+        setMine(map);
+      }
+    } else {
+      setMine({});
+    }
+
+    setLoading(false);
+  };
+
+  useMemo(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupId, weekId, league]);
+
+  const choose = async (gameId: string, choice: string) => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const payload = {
+      group_id: groupId,
+      user_id: user.id,
+      game_id: gameId,
+      choice, // <-- if you store team_id instead, put that value here
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase
+      .from('picks')
+      .upsert(payload, { onConflict: 'group_id,user_id,game_id' });
+
+    if (error) {
+      console.error('upsert pick error', error);
+      return;
+    }
+
+    setMine((prev) => ({ ...prev, [gameId]: choice }));
+    onChanged?.(); // refresh the counts strip above
+  };
+
+  if (loading) return <Text style={styles.muted}>Loading {league} games…</Text>;
+  if (!games.length) return <Text style={styles.muted}>No {league} games this week.</Text>;
+
+  return (
+    <View style={pickStyles.board}>
+      <FlatList
+        data={games}
+        keyExtractor={(g) => g.id}
+        renderItem={({ item }) => {
+          const choice = mine[item.id] ?? null;
+          return (
+            <View style={pickStyles.row}>
+              <Text style={pickStyles.matchup}>
+                {item.away_team} @ {item.home_team}
+              </Text>
+              <View style={pickStyles.pillRow}>
+                <TeamPill
+                  label={item.away_team}
+                  selected={choice === item.away_team}
+                  onPress={() => choose(item.id, item.away_team)}
+                />
+                <TeamPill
+                  label={item.home_team}
+                  selected={choice === item.home_team}
+                  onPress={() => choose(item.id, item.home_team)}
+                />
+              </View>
+            </View>
+          );
+        }}
+      />
+    </View>
+  );
+}
+
+/** ------------------------------
+ * Page component
+ * ------------------------------ */
 export default function GroupDetailPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const groupId = String(id);
@@ -33,8 +211,10 @@ export default function GroupDetailPage() {
   const [groupName, setGroupName] = useState<string>('');
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [picks, setPicks] = useState<PicksRow[]>([]);
+  const [nflWeekId, setNflWeekId] = useState<number | null>(null);
+  const [cfbWeekId, setCfbWeekId] = useState<number | null>(null);
 
-  // Get latest week id for a league (DB has bigint id -> number in JS result)
+  // Latest week id by league
   async function latestWeekId(league: 'NFL' | 'NCAAF'): Promise<number | null> {
     const { data, error } = await supabase
       .from('weeks')
@@ -53,18 +233,18 @@ export default function GroupDetailPage() {
   async function load() {
     setLoading(true);
     setNotAllowed(false);
-    setPicks([]);
-    setMembers([]);
 
-    // must be signed in
-    const { data: { session } } = await supabase.auth.getSession();
+    // signed in?
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     if (!session) {
       setNotAllowed(true);
       setLoading(false);
       return;
     }
 
-    // access check: only members/owners see the group
+    // access check via groups_for_me
     const { data: grp, error: grpErr } = await supabase
       .from('groups_for_me')
       .select('id,name')
@@ -78,7 +258,7 @@ export default function GroupDetailPage() {
     }
     setGroupName(grp.name as string);
 
-    // members (with display fields) via view
+    // members (from the view with profile fields)
     const { data: mems, error: memErr } = await supabase
       .from('group_member_profiles')
       .select('user_id, role, joined_at, display_name, username, avatar_url')
@@ -92,8 +272,12 @@ export default function GroupDetailPage() {
       setMembers((mems ?? []) as MemberRow[]);
     }
 
-    // weekly picks summary (uses bigint week ids)
+    // latest weeks for both leagues
     const [nflId, cfbId] = await Promise.all([latestWeekId('NFL'), latestWeekId('NCAAF')]);
+    setNflWeekId(nflId);
+    setCfbWeekId(cfbId);
+
+    // summary counts for header (RPC expects bigint week ids)
     if (nflId != null && cfbId != null) {
       const { data: rows, error: rpcErr } = await supabase
         .rpc('group_member_picks', { g_id: groupId, w_nfl: nflId, w_cfb: cfbId });
@@ -103,12 +287,17 @@ export default function GroupDetailPage() {
       } else {
         setPicks((rows ?? []) as PicksRow[]);
       }
+    } else {
+      setPicks([]);
     }
 
     setLoading(false);
   }
 
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [groupId]);
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupId]);
 
   if (loading) {
     return (
@@ -130,9 +319,10 @@ export default function GroupDetailPage() {
 
   return (
     <View style={styles.wrap}>
+      {/* Header */}
       <Text style={styles.h1}>{groupName}</Text>
 
-      {/* This Week’s Picks */}
+      {/* This Week’s Picks — summary */}
       <Text style={styles.h2}>This Week’s Picks</Text>
       <View style={styles.card}>
         <View style={styles.tableHeader}>
@@ -172,6 +362,26 @@ export default function GroupDetailPage() {
         </View>
       </View>
 
+      {/* Make your picks (inline boards) */}
+      <Text style={styles.h2}>Make Your Picks</Text>
+      <View style={styles.card}>
+        <Text style={{ fontWeight: '700', marginBottom: 6 }}>College Football</Text>
+        {cfbWeekId ? (
+          <PickBoard groupId={groupId} weekId={cfbWeekId} league="NCAAF" onChanged={load} />
+        ) : (
+          <Text style={styles.muted}>No CFB week found.</Text>
+        )}
+
+        <View style={{ height: 16 }} />
+
+        <Text style={{ fontWeight: '700', marginBottom: 6 }}>NFL</Text>
+        {nflWeekId ? (
+          <PickBoard groupId={groupId} weekId={nflWeekId} league="NFL" onChanged={load} />
+        ) : (
+          <Text style={styles.muted}>No NFL week found.</Text>
+        )}
+      </View>
+
       {/* Members */}
       <Text style={styles.h2}>Members</Text>
       <FlatList
@@ -204,6 +414,9 @@ export default function GroupDetailPage() {
   );
 }
 
+/** ------------------------------
+ * Styles (typed to avoid RN TS errors)
+ * ------------------------------ */
 const styles = StyleSheet.create<{
   wrap: ViewStyle;
   h1: TextStyle;
@@ -261,4 +474,27 @@ const styles = StyleSheet.create<{
     borderColor: '#ddd',
     backgroundColor: '#f7f7f7',
   },
+});
+
+const pickStyles = StyleSheet.create({
+  board: { backgroundColor: 'white', borderRadius: 12, padding: 12 },
+  row: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  matchup: { fontWeight: '600', marginBottom: 8 },
+  pillRow: { flexDirection: 'row' },
+  pill: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    backgroundColor: '#f7f7f7',
+    marginRight: 8,
+  },
+  pillSelected: { borderColor: '#0a7', backgroundColor: '#e6fbf4' },
+  pillLabel: { color: '#222' },
+  pillLabelSelected: { color: '#0a7', fontWeight: '700' },
 });
