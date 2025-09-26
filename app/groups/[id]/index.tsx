@@ -12,7 +12,7 @@ import {
   Pressable,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { supabase } from '../../../lib/supabase'; // ← adjust if your client path differs
+import { supabase } from '../../../lib/supabase'; // ← adjust if your client is elsewhere
 
 /** ------------------------------
  * Types
@@ -37,14 +37,12 @@ type PicksRow = {
 
 type Game = {
   id: string;
-  week_id: number; // bigint -> number in JS
+  week_id: number;
   league: 'NFL' | 'NCAAF';
   home_team: string;
   away_team: string;
   kickoff?: string | null;
 };
-
-type MyPick = { game_id: string; choice: string | null };
 
 /** ------------------------------
  * Small UI helpers for pick board
@@ -82,10 +80,10 @@ function PickBoard({
   groupId: string;
   weekId: number;
   league: 'NFL' | 'NCAAF';
-  onChanged?: () => void; // reload summary after a pick
+  onChanged?: () => void;
 }) {
   const [games, setGames] = useState<Game[]>([]);
-  const [mine, setMine] = useState<Record<string, string | null>>({}); // game_id -> choice
+  const [mine, setMine] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(false);
 
   const load = async () => {
@@ -147,7 +145,7 @@ function PickBoard({
       group_id: groupId,
       user_id: user.id,
       game_id: gameId,
-      choice, // <-- if you store team_id instead, put that value here
+      choice,
       updated_at: new Date().toISOString(),
     };
 
@@ -161,7 +159,7 @@ function PickBoard({
     }
 
     setMine((prev) => ({ ...prev, [gameId]: choice }));
-    onChanged?.(); // refresh the counts strip above
+    onChanged?.();
   };
 
   if (loading) return <Text style={styles.muted}>Loading {league} games…</Text>;
@@ -214,20 +212,66 @@ export default function GroupDetailPage() {
   const [nflWeekId, setNflWeekId] = useState<number | null>(null);
   const [cfbWeekId, setCfbWeekId] = useState<number | null>(null);
 
-  // Latest week id by league
+  // Robust "latest week" finder that works across schemas
   async function latestWeekId(league: 'NFL' | 'NCAAF'): Promise<number | null> {
-    const { data, error } = await supabase
-      .from('weeks')
-      .select('id, week_num')
-      .eq('league', league)
-      .order('week_num', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (error) {
-      console.error('weeks error', league, error);
-      return null;
+    const leaguesToTry =
+      league === 'NCAAF' ? ['NCAAF', 'CFB', 'College', 'COLLEGE'] : ['NFL'];
+
+    // 1) Try time-window based (now between starts_at/ends_at)
+    for (const lg of leaguesToTry) {
+      const { data, error } = await supabase
+        .from('weeks')
+        .select('id, starts_at, ends_at')
+        .eq('league', lg)
+        .lte('starts_at', new Date().toISOString())
+        .gt('ends_at', new Date().toISOString())
+        .order('starts_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!error && data?.id != null) {
+        const num = typeof data.id === 'number' ? data.id : Number(data.id);
+        if (!Number.isNaN(num)) return num;
+        return data.id as any; // UUID fallback
+      }
     }
-    return (data?.id as unknown as number) ?? null;
+
+    // 2) Fall back to most recent by week_num
+    for (const lg of leaguesToTry) {
+      const { data, error } = await supabase
+        .from('weeks')
+        .select('id, week_num')
+        .eq('league', lg)
+        .order('week_num', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!error && data?.id != null) {
+        const num = typeof data.id === 'number' ? data.id : Number(data.id);
+        if (!Number.isNaN(num)) return num;
+        return data.id as any;
+      }
+    }
+
+    // 3) Last-resort: most recent row for the league (by id)
+    for (const lg of leaguesToTry) {
+      const { data, error } = await supabase
+        .from('weeks')
+        .select('id')
+        .eq('league', lg)
+        .order('id', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!error && data?.id != null) {
+        const num = typeof data.id === 'number' ? data.id : Number(data.id);
+        if (!Number.isNaN(num)) return num;
+        return data.id as any;
+      }
+    }
+
+    console.warn('latestWeekId: no week found for leagues', leaguesToTry);
+    return null;
   }
 
   async function load() {
