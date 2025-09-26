@@ -12,11 +12,9 @@ import {
   Pressable,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { supabase } from '../../../lib/supabase'; // ← adjust if your client is elsewhere
+import { supabase } from '../../../lib/supabase'; // ← adjust if needed
 
-/** ------------------------------
- * Types
- * ------------------------------ */
+/** ---------- Types ---------- */
 type MemberRow = {
   user_id: string;
   role: string | null;
@@ -25,6 +23,8 @@ type MemberRow = {
   username: string | null;
   avatar_url: string | null;
 };
+
+type PickCountRow = { user_id: string; count: number };
 
 type PicksRow = {
   user_id: string;
@@ -37,16 +37,13 @@ type PicksRow = {
 
 type Game = {
   id: string;
-  week_id: number;
-  league: 'NFL' | 'NCAAF';
+  week_id: string | number;
   home_team: string;
   away_team: string;
   kickoff?: string | null;
 };
 
-/** ------------------------------
- * Small UI helpers for pick board
- * ------------------------------ */
+/** ---------- Small UI pill ---------- */
 function TeamPill({
   label,
   selected,
@@ -68,18 +65,14 @@ function TeamPill({
   );
 }
 
-/** ------------------------------
- * The inline PickBoard (CFB/NFL)
- * ------------------------------ */
+/** ---------- Inline pick board ---------- */
 function PickBoard({
   groupId,
   weekId,
-  league,
   onChanged,
 }: {
   groupId: string;
-  weekId: number;
-  league: 'NFL' | 'NCAAF';
+  weekId: string | number;
   onChanged?: () => void;
 }) {
   const [games, setGames] = useState<Game[]>([]);
@@ -89,12 +82,11 @@ function PickBoard({
   const load = async () => {
     setLoading(true);
 
-    // 1) games for week + league
+    // 1) games for that week (no league filter needed once week_id is known)
     const { data: gms, error: gErr } = await supabase
       .from('games')
-      .select('id, week_id, league, home_team, away_team, kickoff')
+      .select('id, week_id, home_team, away_team, kickoff')
       .eq('week_id', weekId)
-      .eq('league', league)
       .order('kickoff', { ascending: true });
 
     if (gErr) {
@@ -104,7 +96,7 @@ function PickBoard({
       setGames(gms ?? []);
     }
 
-    // 2) user's picks for those games in this group
+    // 2) my picks on those games (for this group)
     const gameIds = (gms ?? []).map((g) => g.id);
     if (gameIds.length) {
       const { data: picks, error: pErr } = await supabase
@@ -133,7 +125,7 @@ function PickBoard({
   useMemo(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupId, weekId, league]);
+  }, [groupId, weekId]);
 
   const choose = async (gameId: string, choice: string) => {
     const {
@@ -162,8 +154,8 @@ function PickBoard({
     onChanged?.();
   };
 
-  if (loading) return <Text style={styles.muted}>Loading {league} games…</Text>;
-  if (!games.length) return <Text style={styles.muted}>No {league} games this week.</Text>;
+  if (loading) return <Text style={styles.muted}>Loading games…</Text>;
+  if (!games.length) return <Text style={styles.muted}>No games in this week.</Text>;
 
   return (
     <View style={pickStyles.board}>
@@ -197,9 +189,7 @@ function PickBoard({
   );
 }
 
-/** ------------------------------
- * Page component
- * ------------------------------ */
+/** ---------- Page ---------- */
 export default function GroupDetailPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const groupId = String(id);
@@ -209,76 +199,126 @@ export default function GroupDetailPage() {
   const [groupName, setGroupName] = useState<string>('');
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [picks, setPicks] = useState<PicksRow[]>([]);
-  const [nflWeekId, setNflWeekId] = useState<number | null>(null);
-  const [cfbWeekId, setCfbWeekId] = useState<number | null>(null);
+  const [nflWeekId, setNflWeekId] = useState<string | number | null>(null);
+  const [cfbWeekId, setCfbWeekId] = useState<string | number | null>(null);
 
-  // Robust "latest week" finder that works across schemas
-  async function latestWeekId(league: 'NFL' | 'NCAAF'): Promise<number | null> {
-    const leaguesToTry =
-      league === 'NCAAF' ? ['NCAAF', 'CFB', 'College', 'COLLEGE'] : ['NFL'];
-
-    // 1) Try time-window based (now between starts_at/ends_at)
-    for (const lg of leaguesToTry) {
+  /** ---- Find the latest week_id by looking at GAMES (avoids enum issues) ---- */
+  async function latestWeekIdViaGames(leagueCandidates: string[]): Promise<string | number | null> {
+    // Try exact matches first
+    for (const val of leagueCandidates) {
       const { data, error } = await supabase
-        .from('weeks')
-        .select('id, starts_at, ends_at')
-        .eq('league', lg)
-        .lte('starts_at', new Date().toISOString())
-        .gt('ends_at', new Date().toISOString())
-        .order('starts_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .from('games')
+        .select('week_id, kickoff')
+        .eq('league', val)
+        .order('kickoff', { ascending: false, nullsFirst: false })
+        .limit(1);
 
-      if (!error && data?.id != null) {
-        const num = typeof data.id === 'number' ? data.id : Number(data.id);
-        if (!Number.isNaN(num)) return num;
-        return data.id as any; // UUID fallback
+      if (!error && data && data.length > 0 && data[0].week_id != null) {
+        return data[0].week_id;
       }
     }
 
-    // 2) Fall back to most recent by week_num
-    for (const lg of leaguesToTry) {
+    // Try case-insensitive contains (if your league values are messy)
+    for (const val of leagueCandidates) {
       const { data, error } = await supabase
-        .from('weeks')
-        .select('id, week_num')
-        .eq('league', lg)
-        .order('week_num', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .from('games')
+        .select('week_id, kickoff')
+        .ilike('league', `%${val}%`)
+        .order('kickoff', { ascending: false, nullsFirst: false })
+        .limit(1);
 
-      if (!error && data?.id != null) {
-        const num = typeof data.id === 'number' ? data.id : Number(data.id);
-        if (!Number.isNaN(num)) return num;
-        return data.id as any;
+      if (!error && data && data.length > 0 && data[0].week_id != null) {
+        return data[0].week_id;
       }
     }
 
-    // 3) Last-resort: most recent row for the league (by id)
-    for (const lg of leaguesToTry) {
-      const { data, error } = await supabase
-        .from('weeks')
-        .select('id')
-        .eq('league', lg)
-        .order('id', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (!error && data?.id != null) {
-        const num = typeof data.id === 'number' ? data.id : Number(data.id);
-        if (!Number.isNaN(num)) return num;
-        return data.id as any;
-      }
-    }
-
-    console.warn('latestWeekId: no week found for leagues', leaguesToTry);
     return null;
   }
 
+  /** ---- Pull summary counts directly (no RPC) ---- */
+  async function loadSummaryCounts(wCfb: string | number | null, wNfl: string | number | null) {
+    // base: all members (for names/avatars)
+    const base: PicksRow[] = members.map((m) => ({
+      user_id: m.user_id,
+      display_name: m.display_name,
+      username: m.username,
+      avatar_url: m.avatar_url,
+      cfb_picks: 0,
+      nfl_picks: 0,
+    }));
+
+    const map = new Map<string, PicksRow>();
+    base.forEach((r) => map.set(r.user_id, r));
+
+    // helper to merge counts
+    const applyCounts = (rows: PickCountRow[], target: 'cfb_picks' | 'nfl_picks') => {
+      for (const r of rows) {
+        const cur = map.get(r.user_id);
+        if (cur) (cur as any)[target] = r.count ?? 0;
+      }
+    };
+
+    // CFB counts for that week
+    if (wCfb != null) {
+      const { data, error } = await supabase
+        .from('picks')
+        .select('user_id, count:user_id', { count: 'exact', head: false }) // (we'll use an aggregate below instead)
+        .limit(0); // not used, just placeholder to keep TS happy
+
+      // real aggregate
+      const { data: cfb, error: cErr } = await supabase
+        .from('picks')
+        .select('user_id, game_id, games!inner(week_id)')
+        .eq('group_id', groupId)
+        .eq('games.week_id', wCfb);
+
+      if (cErr) {
+        console.error('cfb summary error', cErr);
+      } else {
+        const counts: Record<string, number> = {};
+        (cfb ?? []).forEach((p: any) => {
+          counts[p.user_id] = (counts[p.user_id] ?? 0) + 1;
+        });
+        const rows: PickCountRow[] = Object.entries(counts).map(([user_id, count]) => ({
+          user_id,
+          count,
+        }));
+        applyCounts(rows, 'cfb_picks');
+      }
+    }
+
+    // NFL counts for that week
+    if (wNfl != null) {
+      const { data: nfl, error: nErr } = await supabase
+        .from('picks')
+        .select('user_id, game_id, games!inner(week_id)')
+        .eq('group_id', groupId)
+        .eq('games.week_id', wNfl);
+
+      if (nErr) {
+        console.error('nfl summary error', nErr);
+      } else {
+        const counts: Record<string, number> = {};
+        (nfl ?? []).forEach((p: any) => {
+          counts[p.user_id] = (counts[p.user_id] ?? 0) + 1;
+        });
+        const rows: PickCountRow[] = Object.entries(counts).map(([user_id, count]) => ({
+          user_id,
+          count,
+        }));
+        applyCounts(rows, 'nfl_picks');
+      }
+    }
+
+    setPicks(Array.from(map.values()));
+  }
+
+  /** ---- Load page ---- */
   async function load() {
     setLoading(true);
     setNotAllowed(false);
 
-    // signed in?
+    // must be logged in
     const {
       data: { session },
     } = await supabase.auth.getSession();
@@ -288,7 +328,7 @@ export default function GroupDetailPage() {
       return;
     }
 
-    // access check via groups_for_me
+    // group access check
     const { data: grp, error: grpErr } = await supabase
       .from('groups_for_me')
       .select('id,name')
@@ -302,7 +342,7 @@ export default function GroupDetailPage() {
     }
     setGroupName(grp.name as string);
 
-    // members (from the view with profile fields)
+    // members with profile fields
     const { data: mems, error: memErr } = await supabase
       .from('group_member_profiles')
       .select('user_id, role, joined_at, display_name, username, avatar_url')
@@ -316,24 +356,15 @@ export default function GroupDetailPage() {
       setMembers((mems ?? []) as MemberRow[]);
     }
 
-    // latest weeks for both leagues
-    const [nflId, cfbId] = await Promise.all([latestWeekId('NFL'), latestWeekId('NCAAF')]);
+    // latest weeks found from GAMES (robust to enum changes)
+    const nflId = await latestWeekIdViaGames(['NFL', 'PRO', 'Pro', 'pro']);
+    const cfbId = await latestWeekIdViaGames(['NCAAF', 'NCAA', 'CFB', 'College', 'college']);
+
     setNflWeekId(nflId);
     setCfbWeekId(cfbId);
 
-    // summary counts for header (RPC expects bigint week ids)
-    if (nflId != null && cfbId != null) {
-      const { data: rows, error: rpcErr } = await supabase
-        .rpc('group_member_picks', { g_id: groupId, w_nfl: nflId, w_cfb: cfbId });
-      if (rpcErr) {
-        console.error('group_member_picks error:', rpcErr);
-        setPicks([]);
-      } else {
-        setPicks((rows ?? []) as PicksRow[]);
-      }
-    } else {
-      setPicks([]);
-    }
+    // summary counts (no RPC, works for uuid/bigint)
+    await loadSummaryCounts(cfbId, nflId);
 
     setLoading(false);
   }
@@ -363,10 +394,9 @@ export default function GroupDetailPage() {
 
   return (
     <View style={styles.wrap}>
-      {/* Header */}
       <Text style={styles.h1}>{groupName}</Text>
 
-      {/* This Week’s Picks — summary */}
+      {/* This Week’s Picks summary */}
       <Text style={styles.h2}>This Week’s Picks</Text>
       <View style={styles.card}>
         <View style={styles.tableHeader}>
@@ -406,12 +436,12 @@ export default function GroupDetailPage() {
         </View>
       </View>
 
-      {/* Make your picks (inline boards) */}
+      {/* Inline boards */}
       <Text style={styles.h2}>Make Your Picks</Text>
       <View style={styles.card}>
         <Text style={{ fontWeight: '700', marginBottom: 6 }}>College Football</Text>
         {cfbWeekId ? (
-          <PickBoard groupId={groupId} weekId={cfbWeekId} league="NCAAF" onChanged={load} />
+          <PickBoard groupId={groupId} weekId={cfbWeekId} onChanged={load} />
         ) : (
           <Text style={styles.muted}>No CFB week found.</Text>
         )}
@@ -420,7 +450,7 @@ export default function GroupDetailPage() {
 
         <Text style={{ fontWeight: '700', marginBottom: 6 }}>NFL</Text>
         {nflWeekId ? (
-          <PickBoard groupId={groupId} weekId={nflWeekId} league="NFL" onChanged={load} />
+          <PickBoard groupId={groupId} weekId={nflWeekId} onChanged={load} />
         ) : (
           <Text style={styles.muted}>No NFL week found.</Text>
         )}
@@ -458,27 +488,22 @@ export default function GroupDetailPage() {
   );
 }
 
-/** ------------------------------
- * Styles (typed to avoid RN TS errors)
- * ------------------------------ */
+/** ---------- Styles ---------- */
 const styles = StyleSheet.create<{
   wrap: ViewStyle;
   h1: TextStyle;
   h2: TextStyle;
   muted: TextStyle;
-
   card: ViewStyle;
   tableHeader: ViewStyle;
   th: TextStyle;
   tableRow: ViewStyle;
   td: TextStyle;
   tdName: TextStyle;
-
   row: ViewStyle;
   rowTop: ViewStyle;
   rowTitle: TextStyle;
   rowSub: TextStyle;
-
   btn: ViewStyle;
 }>({
   wrap: { flex: 1, padding: 16 },
@@ -522,11 +547,7 @@ const styles = StyleSheet.create<{
 
 const pickStyles = StyleSheet.create({
   board: { backgroundColor: 'white', borderRadius: 12, padding: 12 },
-  row: {
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
+  row: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#eee' },
   matchup: { fontWeight: '600', marginBottom: 8 },
   pillRow: { flexDirection: 'row' },
   pill: {
