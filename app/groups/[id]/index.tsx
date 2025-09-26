@@ -3,12 +3,15 @@
 import { useEffect, useState } from 'react';
 import { Text, View, ActivityIndicator, StyleSheet, FlatList } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { supabase } from '../../../lib/supabase'; // ← change if your client lives elsewhere
+import { supabase } from '../../../lib/supabase'; // ← change this path if needed
 
-type Member = {
+type MemberRow = {
   user_id: string;
   role: string | null;
   joined_at: string | null;
+  display_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
 };
 
 export default function GroupDetailPage() {
@@ -18,7 +21,7 @@ export default function GroupDetailPage() {
   const [loading, setLoading] = useState(true);
   const [notAllowed, setNotAllowed] = useState(false);
   const [groupName, setGroupName] = useState<string>('');
-  const [members, setMembers] = useState<Member[]>([]);
+  const [members, setMembers] = useState<MemberRow[]>([]);
 
   async function load() {
     setLoading(true);
@@ -32,15 +35,12 @@ export default function GroupDetailPage() {
       return;
     }
 
-    // ✅ Access check via view (returns a row only if user is owner/member)
+    // Access check (owner OR member)
     const { data: grp, error: grpErr } = await supabase
       .from('groups_for_me')
       .select('id,name')
       .eq('id', groupId)
       .single();
-
-    // Debug (remove later)
-    console.log('groupId param:', groupId, 'group row:', grp, 'grpErr:', grpErr?.message);
 
     if (grpErr || !grp) {
       setNotAllowed(true);
@@ -49,20 +49,18 @@ export default function GroupDetailPage() {
     }
     setGroupName(grp.name as string);
 
-    // ✅ Fetch members WITHOUT joins (RLS on group_members allows members to see all rows)
-    const { data: mems, error: memErr, status } = await supabase
-      .from('group_members')
-      .select('user_id, role, joined_at')
+    // Fetch member rows with profile fields via the view
+    const { data: mems, error: memErr } = await supabase
+      .from('group_member_profiles')
+      .select('user_id, role, joined_at, display_name, username, avatar_url')
       .eq('group_id', groupId)
       .order('joined_at', { ascending: true });
 
-    // Debug (remove later)
-    console.log('members status:', status, 'error:', memErr?.message, 'rows:', mems?.length);
-
     if (memErr) {
+      console.error('group_member_profiles error:', memErr);
       setMembers([]);
     } else {
-      setMembers((mems ?? []) as Member[]);
+      setMembers((mems ?? []) as MemberRow[]);
     }
 
     setLoading(false);
@@ -83,9 +81,7 @@ export default function GroupDetailPage() {
     return (
       <View style={styles.wrap}>
         <Text style={styles.h1}>Group not available</Text>
-        <Text style={styles.muted}>
-          Make sure you’re signed in and a member/owner of this group.
-        </Text>
+        <Text style={styles.muted}>Make sure you’re signed in and a member/owner of this group.</Text>
       </View>
     );
   }
@@ -98,18 +94,28 @@ export default function GroupDetailPage() {
       <FlatList
         data={members}
         keyExtractor={(m) => m.user_id}
-        renderItem={({ item }) => (
-          <View style={styles.row}>
-            {/* Replace user_id with username/avatar later via a view if desired */}
-            <Text style={styles.rowTitle}>{item.user_id}</Text>
-            <Text style={styles.rowSub}>
-              {item.role ?? 'member'}
-              {item.joined_at
-                ? ` • joined ${new Date(item.joined_at).toLocaleDateString()}`
-                : ''}
-            </Text>
-          </View>
-        )}
+        renderItem={({ item }) => {
+          const name = item.display_name ?? item.username ?? item.user_id;
+          return (
+            <View style={styles.row}>
+              <View style={styles.rowTop}>
+                {item.avatar_url ? (
+                  // simple web <img>; fine for Next/Expo web
+                  <img
+                    src={item.avatar_url}
+                    alt={name}
+                    style={{ width: 28, height: 28, borderRadius: 999, marginRight: 8 }}
+                  />
+                ) : null}
+                <Text style={styles.rowTitle}>{name}</Text>
+              </View>
+              <Text style={styles.rowSub}>
+                {item.role ?? 'member'}
+                {item.joined_at ? ` • joined ${new Date(item.joined_at).toLocaleDateString()}` : ''}
+              </Text>
+            </View>
+          );
+        }}
         ListEmptyComponent={<Text style={styles.muted}>No members yet.</Text>}
       />
     </View>
@@ -121,7 +127,8 @@ const styles = StyleSheet.create({
   h1: { fontSize: 22, fontWeight: '600' },
   h2: { fontSize: 16, fontWeight: '600', marginTop: 12, marginBottom: 4 },
   muted: { color: '#666' },
-  row: { backgroundColor: 'white', padding: 12, borderRadius: 12, marginBottom: 8 },
+  row: { backgroundColor: 'white', padding: 12, borderRadius: 12, marginBottom: 10 },
+  rowTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   rowTitle: { fontWeight: '600' },
-  rowSub: { color: '#666', marginTop: 2 },
+  rowSub: { color: '#666' },
 });
