@@ -1,456 +1,301 @@
-'use client';
-
-import { useEffect, useMemo, useState } from 'react';
-import type { ViewStyle, TextStyle } from 'react-native';
+// app/groups/[id]/index.tsx
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
-  Text,
-  View,
   ActivityIndicator,
-  StyleSheet,
   FlatList,
   Image,
   Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
-import { supabase } from '../../../lib/supabase'; // ← adjust if needed
+import { Link, useLocalSearchParams } from 'expo-router';
+import { Session } from '@supabase/supabase-js';
 
-/** ---------- Types ---------- */
+// ⬇️ Adjust this path if your client lives somewhere else
+import { supabase } from '../../../lib/supabase';
+
+/* -------------------------------------------------------------------------- */
+/* Types                                                                      */
+/* -------------------------------------------------------------------------- */
+
+type Group = {
+  id: string;
+  name: string;
+  owner_user_id: string | null;
+  created_at: string;
+};
+
 type MemberRow = {
   user_id: string;
-  role: string | null;
+  role: 'owner' | 'member';
   joined_at: string | null;
   display_name: string | null;
-  username: string | null;
   avatar_url: string | null;
 };
 
-type PickCountRow = { user_id: string; count: number };
-
-type PicksRow = {
+type PicksSummaryRow = {
+  group_id: string;
   user_id: string;
   display_name: string | null;
-  username: string | null;
   avatar_url: string | null;
   cfb_picks: number;
   nfl_picks: number;
 };
 
-type Game = {
-  id: string;
-  week_id: string | number;
-  home_team: string;
-  away_team: string;
-  kickoff?: string | null;
+type LatestWeekRow = {
+  league: 'nfl' | 'cfb';
+  week_id: number;
 };
 
-/** ---------- Small UI pill ---------- */
-function TeamPill({
-  label,
-  selected,
-  onPress,
-}: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={[pickStyles.pill, selected ? pickStyles.pillSelected : null]}
-    >
-      <Text style={selected ? pickStyles.pillLabelSelected : pickStyles.pillLabel}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
+/* -------------------------------------------------------------------------- */
+/* Component                                                                  */
+/* -------------------------------------------------------------------------- */
 
-/** ---------- Inline pick board ---------- */
-function PickBoard({
-  groupId,
-  weekId,
-  onChanged,
-}: {
-  groupId: string;
-  weekId: string | number;
-  onChanged?: () => void;
-}) {
-  const [games, setGames] = useState<Game[]>([]);
-  const [mine, setMine] = useState<Record<string, string | null>>({});
-  const [loading, setLoading] = useState(false);
-
-  const load = async () => {
-    setLoading(true);
-
-    // 1) games for that week (no league filter needed once week_id is known)
-    const { data: gms, error: gErr } = await supabase
-      .from('games')
-      .select('id, week_id, home_team, away_team, kickoff')
-      .eq('week_id', weekId)
-      .order('kickoff', { ascending: true });
-
-    if (gErr) {
-      console.error('games error', gErr);
-      setGames([]);
-    } else {
-      setGames(gms ?? []);
-    }
-
-    // 2) my picks on those games (for this group)
-    const gameIds = (gms ?? []).map((g) => g.id);
-    if (gameIds.length) {
-      const { data: picks, error: pErr } = await supabase
-        .from('picks')
-        .select('game_id, choice')
-        .eq('group_id', groupId)
-        .in('game_id', gameIds);
-
-      if (pErr) {
-        console.error('picks error', pErr);
-        setMine({});
-      } else {
-        const map: Record<string, string | null> = {};
-        (picks ?? []).forEach((p) => {
-          map[p.game_id] = p.choice;
-        });
-        setMine(map);
-      }
-    } else {
-      setMine({});
-    }
-
-    setLoading(false);
-  };
-
-  useMemo(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupId, weekId]);
-
-  const choose = async (gameId: string, choice: string) => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const payload = {
-      group_id: groupId,
-      user_id: user.id,
-      game_id: gameId,
-      choice,
-      updated_at: new Date().toISOString(),
-    };
-
-    const { error } = await supabase
-      .from('picks')
-      .upsert(payload, { onConflict: 'group_id,user_id,game_id' });
-
-    if (error) {
-      console.error('upsert pick error', error);
-      return;
-    }
-
-    setMine((prev) => ({ ...prev, [gameId]: choice }));
-    onChanged?.();
-  };
-
-  if (loading) return <Text style={styles.muted}>Loading games…</Text>;
-  if (!games.length) return <Text style={styles.muted}>No games in this week.</Text>;
-
-  return (
-    <View style={pickStyles.board}>
-      <FlatList
-        data={games}
-        keyExtractor={(g) => g.id}
-        renderItem={({ item }) => {
-          const choice = mine[item.id] ?? null;
-          return (
-            <View style={pickStyles.row}>
-              <Text style={pickStyles.matchup}>
-                {item.away_team} @ {item.home_team}
-              </Text>
-              <View style={pickStyles.pillRow}>
-                <TeamPill
-                  label={item.away_team}
-                  selected={choice === item.away_team}
-                  onPress={() => choose(item.id, item.away_team)}
-                />
-                <TeamPill
-                  label={item.home_team}
-                  selected={choice === item.home_team}
-                  onPress={() => choose(item.id, item.home_team)}
-                />
-              </View>
-            </View>
-          );
-        }}
-      />
-    </View>
-  );
-}
-
-/** ---------- Page ---------- */
 export default function GroupDetailPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const groupId = String(id);
+  const groupId = useMemo(() => String(id ?? ''), [id]);
 
-  const [loading, setLoading] = useState(true);
-  const [notAllowed, setNotAllowed] = useState(false);
-  const [groupName, setGroupName] = useState<string>('');
+  const [session, setSession] = useState<Session | null>(null);
+
+  const [group, setGroup] = useState<Group | null>(null);
+  const [loadingGroup, setLoadingGroup] = useState(true);
+
   const [members, setMembers] = useState<MemberRow[]>([]);
-  const [picks, setPicks] = useState<PicksRow[]>([]);
-  const [nflWeekId, setNflWeekId] = useState<string | number | null>(null);
-  const [cfbWeekId, setCfbWeekId] = useState<string | number | null>(null);
+  const [loadingMembers, setLoadingMembers] = useState(true);
 
-  /** ---- Find the latest week_id by looking at GAMES (avoids enum issues) ---- */
-  async function latestWeekIdViaGames(leagueCandidates: string[]): Promise<string | number | null> {
-    // Try exact matches first
-    for (const val of leagueCandidates) {
-      const { data, error } = await supabase
-        .from('games')
-        .select('week_id, kickoff')
-        .eq('league', val)
-        .order('kickoff', { ascending: false, nullsFirst: false })
-        .limit(1);
+  const [mine, setMine] = useState<PicksSummaryRow | null>(null);
+  const [groupSummaries, setGroupSummaries] = useState<PicksSummaryRow[]>([]);
+  const [loadingSummaries, setLoadingSummaries] = useState(true);
 
-      if (!error && data && data.length > 0 && data[0].week_id != null) {
-        return data[0].week_id;
-      }
-    }
+  const [latestWeeks, setLatestWeeks] = useState<Record<'cfb' | 'nfl', number | null>>({
+    cfb: null,
+    nfl: null,
+  });
+  const [loadingWeeks, setLoadingWeeks] = useState(true);
 
-    // Try case-insensitive contains (if your league values are messy)
-    for (const val of leagueCandidates) {
-      const { data, error } = await supabase
-        .from('games')
-        .select('week_id, kickoff')
-        .ilike('league', `%${val}%`)
-        .order('kickoff', { ascending: false, nullsFirst: false })
-        .limit(1);
+  /* ----------------------------- Session watch ---------------------------- */
 
-      if (!error && data && data.length > 0 && data[0].week_id != null) {
-        return data[0].week_id;
-      }
-    }
+  useEffect(() => {
+    let mounted = true;
 
-    return null;
-  }
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      setSession(data.session ?? null);
+    });
 
-  /** ---- Pull summary counts directly (no RPC) ---- */
-  async function loadSummaryCounts(wCfb: string | number | null, wNfl: string | number | null) {
-    // base: all members (for names/avatars)
-    const base: PicksRow[] = members.map((m) => ({
-      user_id: m.user_id,
-      display_name: m.display_name,
-      username: m.username,
-      avatar_url: m.avatar_url,
-      cfb_picks: 0,
-      nfl_picks: 0,
-    }));
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+      setSession(s);
+    });
 
-    const map = new Map<string, PicksRow>();
-    base.forEach((r) => map.set(r.user_id, r));
-
-    // helper to merge counts
-    const applyCounts = (rows: PickCountRow[], target: 'cfb_picks' | 'nfl_picks') => {
-      for (const r of rows) {
-        const cur = map.get(r.user_id);
-        if (cur) (cur as any)[target] = r.count ?? 0;
-      }
+    return () => {
+      mounted = false;
+      sub.subscription.unsubscribe();
     };
+  }, []);
 
-    // CFB counts for that week
-    if (wCfb != null) {
-      const { data, error } = await supabase
-        .from('picks')
-        .select('user_id, count:user_id', { count: 'exact', head: false }) // (we'll use an aggregate below instead)
-        .limit(0); // not used, just placeholder to keep TS happy
+  const userId = session?.user?.id ?? null;
 
-      // real aggregate
-      const { data: cfb, error: cErr } = await supabase
-        .from('picks')
-        .select('user_id, game_id, games!inner(week_id)')
-        .eq('group_id', groupId)
-        .eq('games.week_id', wCfb);
+  /* -------------------------------- Fetchers ------------------------------ */
 
-      if (cErr) {
-        console.error('cfb summary error', cErr);
-      } else {
-        const counts: Record<string, number> = {};
-        (cfb ?? []).forEach((p: any) => {
-          counts[p.user_id] = (counts[p.user_id] ?? 0) + 1;
-        });
-        const rows: PickCountRow[] = Object.entries(counts).map(([user_id, count]) => ({
-          user_id,
-          count,
-        }));
-        applyCounts(rows, 'cfb_picks');
-      }
-    }
-
-    // NFL counts for that week
-    if (wNfl != null) {
-      const { data: nfl, error: nErr } = await supabase
-        .from('picks')
-        .select('user_id, game_id, games!inner(week_id)')
-        .eq('group_id', groupId)
-        .eq('games.week_id', wNfl);
-
-      if (nErr) {
-        console.error('nfl summary error', nErr);
-      } else {
-        const counts: Record<string, number> = {};
-        (nfl ?? []).forEach((p: any) => {
-          counts[p.user_id] = (counts[p.user_id] ?? 0) + 1;
-        });
-        const rows: PickCountRow[] = Object.entries(counts).map(([user_id, count]) => ({
-          user_id,
-          count,
-        }));
-        applyCounts(rows, 'nfl_picks');
-      }
-    }
-
-    setPicks(Array.from(map.values()));
-  }
-
-  /** ---- Load page ---- */
-  async function load() {
-    setLoading(true);
-    setNotAllowed(false);
-
-    // must be logged in
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session) {
-      setNotAllowed(true);
-      setLoading(false);
-      return;
-    }
-
-    // group access check
-    const { data: grp, error: grpErr } = await supabase
-      .from('groups_for_me')
-      .select('id,name')
+  const fetchGroup = useCallback(async () => {
+    if (!groupId) return;
+    setLoadingGroup(true);
+    const { data, error } = await supabase
+      .from('groups')
+      .select('id,name,owner_user_id,created_at')
       .eq('id', groupId)
-      .single();
+      .maybeSingle();
+    if (!error) setGroup(data as Group);
+    setLoadingGroup(false);
+  }, [groupId]);
 
-    if (grpErr || !grp) {
-      setNotAllowed(true);
-      setLoading(false);
-      return;
-    }
-    setGroupName(grp.name as string);
-
-    // members with profile fields
-    const { data: mems, error: memErr } = await supabase
-      .from('group_member_profiles')
-      .select('user_id, role, joined_at, display_name, username, avatar_url')
+  const fetchMembers = useCallback(async () => {
+    if (!groupId) return;
+    setLoadingMembers(true);
+    // group_members + profiles.username
+    const { data, error } = await supabase
+      .from('group_members')
+      .select('user_id,role,joined_at,profiles:profiles!inner(id,username)')
       .eq('group_id', groupId)
       .order('joined_at', { ascending: true });
 
-    if (memErr) {
-      console.error('group_member_profiles error:', memErr);
-      setMembers([]);
-    } else {
-      setMembers((mems ?? []) as MemberRow[]);
+    if (!error && data) {
+      const m: MemberRow[] = (data as any[]).map((r) => ({
+        user_id: r.user_id,
+        role: r.role,
+        joined_at: r.joined_at,
+        display_name: r.profiles?.username ?? r.user_id,
+        avatar_url: null, // profiles has no avatar col in your schema (we keep the key)
+      }));
+      setMembers(m);
     }
-
-    // latest weeks found from GAMES (robust to enum changes)
-    const nflId = await latestWeekIdViaGames(['NFL', 'PRO', 'Pro', 'pro']);
-    const cfbId = await latestWeekIdViaGames(['NCAAF', 'NCAA', 'CFB', 'College', 'college']);
-
-    setNflWeekId(nflId);
-    setCfbWeekId(cfbId);
-
-    // summary counts (no RPC, works for uuid/bigint)
-    await loadSummaryCounts(cfbId, nflId);
-
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setLoadingMembers(false);
   }, [groupId]);
 
-  if (loading) {
-    return (
-      <View style={styles.wrap}>
-        <ActivityIndicator />
-        <Text style={styles.muted}>Loading group…</Text>
-      </View>
-    );
-  }
+  const fetchSummaries = useCallback(async () => {
+    if (!groupId) return;
+    setLoadingSummaries(true);
 
-  if (notAllowed) {
-    return (
-      <View style={styles.wrap}>
-        <Text style={styles.h1}>Group not available</Text>
-        <Text style={styles.muted}>Make sure you’re signed in and a member/owner of this group.</Text>
-      </View>
-    );
-  }
+    // Uses the new view we built in SQL:
+    // public.group_member_picks_latest
+    const { data, error } = await supabase
+      .from('group_member_picks_latest')
+      .select('*')
+      .eq('group_id', groupId);
+
+    if (!error && data) {
+      const rows = data as PicksSummaryRow[];
+      setGroupSummaries(rows);
+      if (userId) {
+        setMine(rows.find((r) => r.user_id === userId) ?? null);
+      } else {
+        setMine(null);
+      }
+    }
+    setLoadingSummaries(false);
+  }, [groupId, userId]);
+
+  const fetchLatestWeeks = useCallback(async () => {
+    setLoadingWeeks(true);
+    // public.latest_week_ids (league, week_id)
+    const { data, error } = await supabase
+      .from('latest_week_ids')
+      .select('league,week_id');
+
+    if (!error && data) {
+      const d = data as LatestWeekRow[];
+      setLatestWeeks({
+        cfb: d.find((x) => x.league === 'cfb')?.week_id ?? null,
+        nfl: d.find((x) => x.league === 'nfl')?.week_id ?? null,
+      });
+    }
+    setLoadingWeeks(false);
+  }, []);
+
+  useEffect(() => {
+    fetchGroup();
+    fetchMembers();
+    fetchSummaries();
+    fetchLatestWeeks();
+  }, [fetchGroup, fetchMembers, fetchSummaries, fetchLatestWeeks]);
+
+  const name = group?.name ?? 'Group';
+
+  /* ------------------------------- Rendering ------------------------------ */
+
+  const renderMember = useCallback(
+    ({ item }: { item: MemberRow }) => {
+      const dn = item.display_name ?? item.user_id;
+      return (
+        <View style={styles.row}>
+          <View style={styles.rowTop}>
+            {/* Avatar (optional) */}
+            {item.avatar_url ? (
+              <Image
+                source={{ uri: item.avatar_url }}
+                style={styles.avatar}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={[styles.avatar, styles.avatarFallback]} />
+            )}
+
+            <Text style={styles.rowTitle}>{dn}</Text>
+          </View>
+
+          <Text style={styles.rowSub}>
+            {item.role}{' '}
+            {item.joined_at ? (
+              <>
+                • joined{' '}
+                {new Date(item.joined_at).toLocaleDateString()}
+              </>
+            ) : null}
+          </Text>
+        </View>
+      );
+    },
+    []
+  );
+
+  const myCFB = mine?.cfb_picks ?? 0;
+  const myNFL = mine?.nfl_picks ?? 0;
+
+  const canPickCFB = latestWeeks.cfb !== null;
+  const canPickNFL = latestWeeks.nfl !== null;
 
   return (
-    <View style={styles.wrap}>
-      <Text style={styles.h1}>{groupName}</Text>
+    <View style={styles.container}>
+      <Text style={styles.h1}>{name}</Text>
 
-      {/* This Week’s Picks summary */}
+      {/* This Week's Picks */}
       <Text style={styles.h2}>This Week’s Picks</Text>
       <View style={styles.card}>
-        <View style={styles.tableHeader}>
-          <Text style={[styles.th, { flex: 3 }]}>User</Text>
-          <Text style={[styles.th, { flex: 1, textAlign: 'center' }]}>CFB</Text>
-          <Text style={[styles.th, { flex: 1, textAlign: 'center' }]}>NFL</Text>
-        </View>
-
-        {picks.length === 0 ? (
-          <Text style={styles.muted}>No picks yet this week.</Text>
+        {!userId ? (
+          <Text style={styles.muted}>Sign in to see your picks.</Text>
+        ) : loadingSummaries ? (
+          <ActivityIndicator />
         ) : (
-          picks.map((r) => {
-            const name = r.display_name ?? r.username ?? r.user_id;
-            return (
-              <View key={r.user_id} style={styles.tableRow}>
-                <View style={{ flex: 3, flexDirection: 'row', alignItems: 'center' }}>
-                  {r.avatar_url ? (
-                    <Image
-                      source={{ uri: r.avatar_url }}
-                      accessibilityLabel={name}
-                      style={{ width: 28, height: 28, borderRadius: 999, marginRight: 8 }}
-                    />
-                  ) : null}
-                  <Text style={styles.tdName}>{name}</Text>
-                </View>
-                <Text style={[styles.td, { flex: 1, textAlign: 'center' }]}>{r.cfb_picks || '—'}</Text>
-                <Text style={[styles.td, { flex: 1, textAlign: 'center' }]}>{r.nfl_picks || '—'}</Text>
-              </View>
-            );
-          })
-        )}
+          <View>
+            <View style={styles.gridHeader}>
+              <Text style={[styles.gridCell, styles.gridUser]}>User</Text>
+              <Text style={[styles.gridCell, styles.gridCol]}>CFB</Text>
+              <Text style={[styles.gridCell, styles.gridCol]}>NFL</Text>
+            </View>
 
-        <View style={{ marginTop: 8, flexDirection: 'row' }}>
-          <Pressable onPress={load} style={styles.btn}>
-            <Text>Refresh</Text>
-          </Pressable>
-        </View>
+            {mine ? (
+              <View style={styles.gridRow}>
+                <View style={[styles.gridCell, styles.gridUser]}>
+                  <Text style={styles.rowTitle}>
+                    {mine.display_name ?? mine.user_id}
+                  </Text>
+                </View>
+                <View style={[styles.gridCell, styles.gridCol]}>
+                  <Text style={styles.rowTitle}>{myCFB || '—'}</Text>
+                </View>
+                <View style={[styles.gridCell, styles.gridCol]}>
+                  <Text style={styles.rowTitle}>{myNFL || '—'}</Text>
+                </View>
+              </View>
+            ) : (
+              <Text style={styles.muted}>No picks yet this week.</Text>
+            )}
+
+            <Pressable onPress={fetchSummaries} style={styles.refreshBtn}>
+              <Text style={styles.refreshText}>Refresh</Text>
+            </Pressable>
+          </View>
+        )}
       </View>
 
-      {/* Inline boards */}
+      {/* Make your picks */}
       <Text style={styles.h2}>Make Your Picks</Text>
       <View style={styles.card}>
-        <Text style={{ fontWeight: '700', marginBottom: 6 }}>College Football</Text>
-        {cfbWeekId ? (
-          <PickBoard groupId={groupId} weekId={cfbWeekId} onChanged={load} />
+        {/* CFB */}
+        <Text style={styles.sectionTitle}>College Football</Text>
+        {loadingWeeks ? (
+          <ActivityIndicator />
+        ) : canPickCFB ? (
+          <Link href="/college" asChild>
+            <Pressable style={styles.linkBtn}>
+              <Text style={styles.linkText}>Go to CFB picks</Text>
+            </Pressable>
+          </Link>
         ) : (
           <Text style={styles.muted}>No CFB week found.</Text>
         )}
 
-        <View style={{ height: 16 }} />
-
-        <Text style={{ fontWeight: '700', marginBottom: 6 }}>NFL</Text>
-        {nflWeekId ? (
-          <PickBoard groupId={groupId} weekId={nflWeekId} onChanged={load} />
+        {/* NFL */}
+        <Text style={[styles.sectionTitle, { marginTop: 16 }]}>NFL</Text>
+        {loadingWeeks ? (
+          <ActivityIndicator />
+        ) : canPickNFL ? (
+          <Link href="/picks" asChild>
+            <Pressable style={styles.linkBtn}>
+              <Text style={styles.linkText}>Go to NFL picks</Text>
+            </Pressable>
+          </Link>
         ) : (
           <Text style={styles.muted}>No NFL week found.</Text>
         )}
@@ -458,108 +303,124 @@ export default function GroupDetailPage() {
 
       {/* Members */}
       <Text style={styles.h2}>Members</Text>
-      <FlatList
-        data={members}
-        keyExtractor={(m) => m.user_id}
-        renderItem={({ item }) => {
-          const name = item.display_name ?? item.username ?? item.user_id;
-          return (
-            <View style={styles.row}>
-              <View style={styles.rowTop}>
-                {item.avatar_url ? (
-                  <Image
-                    source={{ uri: item.avatar_url }}
-                    accessibilityLabel={name}
-                    style={{ width: 28, height: 28, borderRadius: 999, marginRight: 8 }}
-                  />
-                ) : null}
-                <Text style={styles.rowTitle}>{name}</Text>
-              </View>
-              <Text style={styles.rowSub}>
-                {item.role ?? 'member'}
-                {item.joined_at ? ` • joined ${new Date(item.joined_at).toLocaleDateString()}` : ''}
-              </Text>
-            </View>
-          );
-        }}
-        ListEmptyComponent={<Text style={styles.muted}>No members yet.</Text>}
-      />
+      <View style={styles.card}>
+        {loadingMembers ? (
+          <ActivityIndicator />
+        ) : (
+          <FlatList
+            data={members}
+            keyExtractor={(m) => m.user_id}
+            renderItem={renderMember}
+            ItemSeparatorComponent={() => <View style={styles.sep} />}
+            ListEmptyComponent={
+              <Text style={styles.muted}>No members yet.</Text>
+            }
+          />
+        )}
+      </View>
     </View>
   );
 }
 
-/** ---------- Styles ---------- */
-const styles = StyleSheet.create<{
-  wrap: ViewStyle;
-  h1: TextStyle;
-  h2: TextStyle;
-  muted: TextStyle;
-  card: ViewStyle;
-  tableHeader: ViewStyle;
-  th: TextStyle;
-  tableRow: ViewStyle;
-  td: TextStyle;
-  tdName: TextStyle;
-  row: ViewStyle;
-  rowTop: ViewStyle;
-  rowTitle: TextStyle;
-  rowSub: TextStyle;
-  btn: ViewStyle;
-}>({
-  wrap: { flex: 1, padding: 16 },
-  h1: { fontSize: 22, fontWeight: '600' },
-  h2: { fontSize: 16, fontWeight: '600', marginTop: 12, marginBottom: 6 },
-  muted: { color: '#666' },
+/* -------------------------------------------------------------------------- */
+/* Styles                                                                     */
+/* -------------------------------------------------------------------------- */
 
-  card: { backgroundColor: 'white', padding: 12, borderRadius: 12, marginBottom: 16 },
-  tableHeader: {
-    flexDirection: 'row',
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+const styles = StyleSheet.create({
+  container: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 32,
+    gap: 12,
+  },
+  h1: {
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  h2: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 8,
     marginBottom: 6,
   },
-  th: { fontWeight: '700' },
-  tableRow: {
+  card: {
+    backgroundColor: '#f4f5f6',
+    borderRadius: 10,
+    padding: 12,
+  },
+  muted: {
+    color: '#6b7280',
+  },
+  sectionTitle: {
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+
+  /* grid for "This Week’s Picks" */
+  gridHeader: {
+    flexDirection: 'row',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#d1d5db',
+    paddingBottom: 6,
+    marginBottom: 6,
+  },
+  gridRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f2f2f2',
-  },
-  td: { color: '#222' },
-  tdName: { fontWeight: '600' },
-
-  row: { backgroundColor: 'white', padding: 12, borderRadius: 12, marginBottom: 10 },
-  rowTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  rowTitle: { fontWeight: '600' },
-  rowSub: { color: '#666' },
-
-  btn: {
     paddingVertical: 6,
+  },
+  gridCell: { paddingRight: 8 },
+  gridUser: { flex: 1.5 },
+  gridCol: { flex: 1, alignItems: 'flex-end' },
+
+  /* buttons / links */
+  refreshBtn: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    backgroundColor: '#e5e7eb',
     paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    backgroundColor: '#f7f7f7',
   },
-});
+  refreshText: {
+    fontWeight: '600',
+  },
+  linkBtn: {
+    backgroundColor: '#091f1a',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  linkText: {
+    color: 'white',
+    fontWeight: '700',
+  },
 
-const pickStyles = StyleSheet.create({
-  board: { backgroundColor: 'white', borderRadius: 12, padding: 12 },
-  row: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  matchup: { fontWeight: '600', marginBottom: 8 },
-  pillRow: { flexDirection: 'row' },
-  pill: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    backgroundColor: '#f7f7f7',
-    marginRight: 8,
+  /* member rows */
+  row: {},
+  rowTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  pillSelected: { borderColor: '#0a7', backgroundColor: '#e6fbf4' },
-  pillLabel: { color: '#222' },
-  pillLabelSelected: { color: '#0a7', fontWeight: '700' },
+  rowTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  rowSub: {
+    marginTop: 2,
+    color: '#6b7280',
+  },
+  sep: { height: 10 },
+
+  avatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+  },
+  avatarFallback: {
+    backgroundColor: '#cbd5e1',
+  },
 });
