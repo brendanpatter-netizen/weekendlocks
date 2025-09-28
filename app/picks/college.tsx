@@ -1,4 +1,3 @@
-// FILE: app/picks/college.tsx
 export const unstable_settings = { prerender: false };
 
 import { useEffect, useMemo, useState } from "react";
@@ -52,7 +51,7 @@ export default function PicksCollege() {
 
       const { data: w, error: wErr } = await supabase
         .from("weeks").select("*")
-        .eq("league", "NCAAF")
+        .eq("league", "cfb")              // 👈 enum is lowercase
         .eq("season", SEASON)
         .eq("week_num", week)
         .maybeSingle();
@@ -128,7 +127,7 @@ export default function PicksCollege() {
         pick_side: String(o.name),
         pick_line: o.point != null ? Number(o.point) : null,
         pick_price: typeof o.price === "number" ? o.price : null,
-        sport: "NCAAF",
+        sport: "cfb",                // 👈 keep lowercase to match your convention
         week,
         status: "pending",
         created_at: new Date().toISOString(),
