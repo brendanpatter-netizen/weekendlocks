@@ -1,147 +1,254 @@
-/* app/groups/[id]/index.tsx */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+// app/groups/[id]/index.tsx
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
   Image,
   Pressable,
   StyleSheet,
   Text,
   View,
+  FlatList,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { supabase } from '../../../lib/supabase'; // <- adjust if your path differs
+import { useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
+import { supabase } from '../../../lib/supabase';
 
+/* ------------------------------------------
+ * Types
+ * ----------------------------------------*/
 type MemberRow = {
   user_id: string;
   role: string;
   joined_at: string | null;
   display_name: string | null;
+  username: string | null;
+  avatar_url?: string | null;
 };
 
-type PickRow = {
+type PickSummaryRow = {
   user_id: string;
-  display_name: string;
   cfb_picks: number;
   nfl_picks: number;
 };
 
+type CombinedRow = MemberRow & {
+  cfb_picks: number;
+  nfl_picks: number;
+};
+
+/* ------------------------------------------
+ * Component
+ * ----------------------------------------*/
 export default function GroupDetailPage() {
-  const { id: groupId } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const groupId = useMemo(() => (Array.isArray(id) ? id[0] : id) ?? '', [id]);
 
+  const [loadingMembers, setLoadingMembers] = useState(true);
   const [members, setMembers] = useState<MemberRow[]>([]);
-  const [loadingMembers, setLoadingMembers] = useState(false);
-  const [picks, setPicks] = useState<PickRow[]>([]);
-  const [loadingPicks, setLoadingPicks] = useState(false);
+  const [picks, setPicks] = useState<PickSummaryRow[]>([]);
+  const [groupName, setGroupName] = useState<string>('');
 
-  // ---- FETCH: Members (LEFT join to profiles; tolerant to profiles RLS) ----
-  const fetchMembers = useCallback(async () => {
+  // --- Load group name (optional convenience)
+  useEffect(() => {
+    if (!groupId) return;
+    (async () => {
+      const { data, error } = await supabase
+        .from('groups')
+        .select('name')
+        .eq('id', groupId)
+        .maybeSingle();
+      if (!error && data?.name) setGroupName(data.name);
+    })();
+  }, [groupId]);
+
+  // --- Load members (prefer the view `group_member_profiles`, fallback to join)
+  useEffect(() => {
     if (!groupId) return;
     setLoadingMembers(true);
 
-    const { data, error } = await supabase
-      .from('group_members')
-      .select('user_id, role, joined_at, profiles:profiles(id, username)')
-      .eq('group_id', groupId)
-      .order('joined_at', { ascending: true });
+    (async () => {
+      // First try the view with profiles baked in
+      const tryView = await supabase
+        .from('group_member_profiles')
+        .select('user_id, role, joined_at, display_name, username, avatar_url')
+        .eq('group_id', groupId)
+        .order('joined_at', { ascending: true });
 
-    if (error) {
-      console.error('members query error:', error);
-      setMembers([]);
+      if (!tryView.error && tryView.data) {
+        setMembers(tryView.data as MemberRow[]);
+        setLoadingMembers(false);
+        return;
+      }
+
+      // Fallback: join group_members + profiles
+      const fallback = await supabase
+        .from('group_members')
+        .select(
+          `
+          user_id,
+          role,
+          joined_at,
+          profiles:profiles ( username, id )
+        `
+        )
+        .eq('group_id', groupId)
+        .order('joined_at', { ascending: true });
+
+      if (fallback.error || !fallback.data) {
+        setMembers([]);
+        setLoadingMembers(false);
+        return;
+      }
+
+      const mapped: MemberRow[] = fallback.data.map((r: any) => ({
+        user_id: r.user_id,
+        role: r.role,
+        joined_at: r.joined_at,
+        display_name: r.profiles?.username ?? r.user_id,
+        username: r.profiles?.username ?? null,
+        avatar_url: null,
+      }));
+
+      setMembers(mapped);
       setLoadingMembers(false);
-      return;
-    }
-
-    const rows = (data ?? []) as any[];
-    const mapped: MemberRow[] = rows.map((r) => ({
-      user_id: r.user_id,
-      role: r.role,
-      joined_at: r.joined_at,
-      display_name: r.profiles?.username ?? r.user_id,
-    }));
-    setMembers(mapped);
-    setLoadingMembers(false);
+    })();
   }, [groupId]);
 
-  // ---- FETCH: Per-member counts for latest CFB/NFL week ----
-  const fetchPicks = useCallback(async () => {
-    if (!groupId) return;
-    setLoadingPicks(true);
-
-    const { data, error } = await supabase
-      .from('group_member_picks_latest')
-      .select('user_id, display_name, cfb_picks, nfl_picks')
-      .eq('group_id', groupId)
-      .order('display_name', { ascending: true });
-
-    if (error) {
-      console.error('picks summary query error:', error);
-      setPicks([]);
-      setLoadingPicks(false);
-      return;
-    }
-
-    const rows = (data ?? []) as any[];
-    const mapped: PickRow[] = rows.map((r) => ({
-      user_id: r.user_id,
-      display_name: r.display_name ?? r.user_id,
-      cfb_picks: Number(r.cfb_picks || 0),
-      nfl_picks: Number(r.nfl_picks || 0),
-    }));
-    setPicks(mapped);
-    setLoadingPicks(false);
-  }, [groupId]);
-
+  // --- Load “this week” picks per member (prefer the view, fallback zeros)
   useEffect(() => {
-    fetchMembers();
-    fetchPicks();
-  }, [fetchMembers, fetchPicks]);
+    if (!groupId) return;
 
-  // ---- UI helpers ----
-  const header = useMemo(
-    () => (
-      <View style={{ paddingVertical: 8 }}>
-        <Text style={styles.h1}>This Week’s Picks</Text>
-        <View style={styles.picksHeaderRow}>
-          <Text style={[styles.cell, styles.cellUserHeader]}>User</Text>
-          <Text style={[styles.cell, styles.cellHdr]}>CFB</Text>
-          <Text style={[styles.cell, styles.cellHdr]}>NFL</Text>
-        </View>
-      </View>
-    ),
-    []
+    (async () => {
+      // Prefer summarized view if present
+      const view = await supabase
+        .from('group_member_picks_latest')
+        .select('user_id, cfb_picks, nfl_picks')
+        .eq('group_id', groupId);
+
+      if (!view.error && view.data) {
+        setPicks(view.data as PickSummaryRow[]);
+        return;
+      }
+
+      // Fallback – if the view doesn’t exist, just set zeros
+      if (members.length) {
+        setPicks(
+          members.map((m) => ({
+            user_id: m.user_id,
+            cfb_picks: 0,
+            nfl_picks: 0,
+          }))
+        );
+      } else {
+        setPicks([]);
+      }
+    })();
+  }, [groupId, members.length]);
+
+  // Merge member identity with pick counts
+  const combined: CombinedRow[] = useMemo(() => {
+    if (!members.length) return [];
+    const byUser = new Map<string, PickSummaryRow>();
+    picks.forEach((p) => byUser.set(p.user_id, p));
+
+    return members.map((m) => {
+      const p = byUser.get(m.user_id);
+      return {
+        ...m,
+        cfb_picks: p?.cfb_picks ?? 0,
+        nfl_picks: p?.nfl_picks ?? 0,
+      };
+    });
+  }, [members, picks]);
+
+  // Table header row
+  const HeaderRow = () => (
+    <View style={[styles.row, styles.headerRow]}>
+      <Text style={[styles.cellUser, styles.headerText]}>User</Text>
+      <Text style={[styles.cell, styles.headerText, { textAlign: 'center' }]}>
+        CFB
+      </Text>
+      <Text style={[styles.cell, styles.headerText, { textAlign: 'center' }]}>
+        NFL
+      </Text>
+    </View>
   );
 
   return (
-    <View style={styles.page}>
-      {/* Picks section */}
+    <View style={styles.screen}>
+      {/* Title */}
+      <Text style={styles.title}>{groupName || 'Group'}</Text>
+
+      {/* This Week's Picks */}
       <View style={styles.card}>
-        {header}
-
-        {loadingPicks ? (
-          <ActivityIndicator />
-        ) : picks.length ? (
-          picks.map((p) => (
-            <View key={p.user_id} style={styles.picksRow}>
-              <Text style={[styles.cell, styles.userName]}>{p.display_name}</Text>
-              <Text style={[styles.cell, styles.center]}>{p.cfb_picks}</Text>
-              <Text style={[styles.cell, styles.center]}>{p.nfl_picks}</Text>
-            </View>
-          ))
+        <Text style={styles.h2}>This Week’s Picks</Text>
+        <HeaderRow />
+        {loadingMembers ? (
+          <View style={styles.centerRow}>
+            <ActivityIndicator />
+          </View>
         ) : (
-          <Text style={styles.muted}>No picks yet this week.</Text>
+          <FlatList
+            data={combined}
+            keyExtractor={(m) => m.user_id}
+            renderItem={({ item }) => {
+              const name =
+                item.display_name ?? item.username ?? item.user_id ?? '—';
+              return (
+                <View style={styles.row}>
+                  <View style={styles.cellUser}>
+                    <View style={styles.userCell}>
+                      {!!item.avatar_url && (
+                        <Image
+                          source={{ uri: item.avatar_url }}
+                          style={styles.avatar}
+                        />
+                      )}
+                      <Text>{name}</Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.cell, styles.centerText]}>
+                    {item.cfb_picks ?? 0}
+                  </Text>
+                  <Text style={[styles.cell, styles.centerText]}>
+                    {item.nfl_picks ?? 0}
+                  </Text>
+                </View>
+              );
+            }}
+            ListEmptyComponent={
+              <View style={styles.centerRow}>
+                <Text style={styles.muted}>No picks yet this week.</Text>
+              </View>
+            }
+          />
         )}
+        <View style={{ height: 12 }} />
+        <Pressable
+          style={styles.cta}
+          onPress={() => router.push({ pathname: '/picks/page' })}
+        >
+          <Text style={styles.ctaText}>Go to NFL picks</Text>
+        </Pressable>
+      </View>
 
-        <View style={{ height: 16 }} />
-
-        {/* Make your picks CTAs */}
+      {/* Make Your Picks */}
+      <View style={styles.card}>
         <Text style={styles.h2}>Make Your Picks</Text>
-        <View style={{ height: 8 }} />
+
+        {/* College Football */}
         <Text style={styles.h3}>College Football</Text>
-        <Text style={styles.muted}>No CFB week found.</Text>
-        <View style={{ height: 8 }} />
-        <Text style={styles.h3}>NFL</Text>
+        {/* If you have a boolean for “current CFB week”, wrap like you do for NFL.
+            Here we simply always show the button so it’s easy to reach. */}
+        <Pressable
+          style={styles.cta}
+          onPress={() => router.push({ pathname: '/picks/college' })} // <- change if your route is '/picks/cfb'
+        >
+          <Text style={styles.ctaText}>Go to CFB picks</Text>
+        </Pressable>
+
+        {/* NFL (you also have it above in the card for convenience) */}
+        <Text style={[styles.h3, { marginTop: 18 }]}>NFL</Text>
         <Pressable
           style={styles.cta}
           onPress={() => router.push({ pathname: '/picks/page' })}
@@ -152,7 +259,7 @@ export default function GroupDetailPage() {
 
       {/* Members list */}
       <View style={styles.card}>
-        <Text style={styles.h1}>Members</Text>
+        <Text style={styles.h2}>Members</Text>
         {loadingMembers ? (
           <ActivityIndicator />
         ) : members.length ? (
@@ -160,21 +267,23 @@ export default function GroupDetailPage() {
             data={members}
             keyExtractor={(m) => m.user_id}
             renderItem={({ item }) => {
-              const name = item.display_name ?? item.user_id;
+              const name =
+                item.display_name ?? item.username ?? item.user_id ?? '—';
               return (
-                <View style={styles.row}>
-                  {/* no avatar column in profiles right now; keep simple */}
-                  <Text style={styles.rowTitle}>{name}</Text>
-                  <Text style={styles.rowSub}>
-                    {item.role}{' '}
+                <View style={styles.memberRow}>
+                  <Text style={styles.memberName}>{name}</Text>
+                  <Text style={styles.memberSub}>
+                    {item.role ?? 'member'}
                     {item.joined_at
-                      ? `• joined ${new Date(item.joined_at).toLocaleDateString()}`
+                      ? ` • joined ${new Date(item.joined_at).toLocaleDateString()}`
                       : ''}
                   </Text>
                 </View>
               );
             }}
-            ListEmptyComponent={<Text style={styles.muted}>No members yet.</Text>}
+            ListEmptyComponent={
+              <Text style={styles.muted}>No members yet.</Text>
+            }
           />
         ) : (
           <Text style={styles.muted}>No members yet.</Text>
@@ -184,46 +293,99 @@ export default function GroupDetailPage() {
   );
 }
 
+/* ------------------------------------------
+ * Styles (kept simple & web-friendly)
+ * ----------------------------------------*/
 const styles = StyleSheet.create({
-  page: { padding: 16, gap: 16 },
-  card: { backgroundColor: '#eee', borderRadius: 8, padding: 12 },
-  h1: { fontSize: 18, fontWeight: '600', marginBottom: 8 },
-  h2: { fontSize: 16, fontWeight: '600' },
-  h3: { fontSize: 14, fontWeight: '600' },
-  muted: { color: '#666' },
-
-  /* Picks table */
-  picksHeaderRow: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#d0d0d0',
-    paddingBottom: 6,
-    marginBottom: 6,
+  screen: {
+    padding: 16,
+    gap: 16,
   },
-  picksRow: {
-    flexDirection: 'row',
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
+  title: {
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 4,
   },
-  cell: { flex: 1, fontSize: 14 },
-  cellHdr: { textAlign: 'center', fontWeight: '600' },
-  cellUserHeader: { flex: 2, fontWeight: '600' },
-  userName: { flex: 2 },
-  center: { textAlign: 'center' },
-
-  /* CTAs */
+  h2: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  h3: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  muted: {
+    color: '#6b7280',
+  },
+  card: {
+    backgroundColor: '#e5e7eb33',
+    borderRadius: 8,
+    padding: 12,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#d1d5db',
+  },
+  headerRow: {
+    borderTopWidth: 0,
+    paddingTop: 0,
+    paddingBottom: 8,
+  },
+  headerText: {
+    fontWeight: '700',
+  },
+  cellUser: {
+    flex: 1.5,
+  },
+  cell: {
+    flex: 0.5,
+  },
+  centerRow: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  centerText: {
+    textAlign: 'center',
+  },
+  userCell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  avatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    marginRight: 8,
+  },
   cta: {
-    backgroundColor: '#083c3c',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 6,
+    marginTop: 8,
     alignSelf: 'flex-start',
+    backgroundColor: '#0b735f',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
   },
-  ctaText: { color: 'white', fontWeight: '600' },
-
-  /* Members */
-  row: { paddingVertical: 10 },
-  rowTitle: { fontSize: 16, fontWeight: '600' },
-  rowSub: { color: '#555', marginTop: 4 },
+  ctaText: {
+    color: 'white',
+    fontWeight: '700',
+  },
+  memberRow: {
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#d1d5db',
+  },
+  memberName: {
+    fontWeight: '700',
+  },
+  memberSub: {
+    color: '#6b7280',
+    marginTop: 2,
+  },
 });
