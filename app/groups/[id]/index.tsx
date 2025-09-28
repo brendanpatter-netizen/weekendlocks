@@ -9,8 +9,7 @@ import {
   View,
   FlatList,
 } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
-import { router } from 'expo-router';
+import { useLocalSearchParams, router } from 'expo-router';
 import { supabase } from '../../../lib/supabase';
 
 /* ------------------------------------------
@@ -48,7 +47,7 @@ export default function GroupDetailPage() {
   const [picks, setPicks] = useState<PickSummaryRow[]>([]);
   const [groupName, setGroupName] = useState<string>('');
 
-  // --- Load group name (optional convenience)
+  // Load group name (optional)
   useEffect(() => {
     if (!groupId) return;
     (async () => {
@@ -61,13 +60,12 @@ export default function GroupDetailPage() {
     })();
   }, [groupId]);
 
-  // --- Load members (prefer the view `group_member_profiles`, fallback to join)
+  // Load members (prefer view, fallback to join)
   useEffect(() => {
     if (!groupId) return;
     setLoadingMembers(true);
 
     (async () => {
-      // First try the view with profiles baked in
       const tryView = await supabase
         .from('group_member_profiles')
         .select('user_id, role, joined_at, display_name, username, avatar_url')
@@ -80,7 +78,6 @@ export default function GroupDetailPage() {
         return;
       }
 
-      // Fallback: join group_members + profiles
       const fallback = await supabase
         .from('group_members')
         .select(
@@ -114,12 +111,11 @@ export default function GroupDetailPage() {
     })();
   }, [groupId]);
 
-  // --- Load “this week” picks per member (prefer the view, fallback zeros)
+  // Load this-week pick counts (prefer view, fallback zeros)
   useEffect(() => {
     if (!groupId) return;
 
     (async () => {
-      // Prefer summarized view if present
       const view = await supabase
         .from('group_member_picks_latest')
         .select('user_id, cfb_picks, nfl_picks')
@@ -130,7 +126,6 @@ export default function GroupDetailPage() {
         return;
       }
 
-      // Fallback – if the view doesn’t exist, just set zeros
       if (members.length) {
         setPicks(
           members.map((m) => ({
@@ -145,12 +140,10 @@ export default function GroupDetailPage() {
     })();
   }, [groupId, members.length]);
 
-  // Merge member identity with pick counts
   const combined: CombinedRow[] = useMemo(() => {
     if (!members.length) return [];
     const byUser = new Map<string, PickSummaryRow>();
     picks.forEach((p) => byUser.set(p.user_id, p));
-
     return members.map((m) => {
       const p = byUser.get(m.user_id);
       return {
@@ -161,7 +154,6 @@ export default function GroupDetailPage() {
     });
   }, [members, picks]);
 
-  // Table header row
   const HeaderRow = () => (
     <View style={[styles.row, styles.headerRow]}>
       <Text style={[styles.cellUser, styles.headerText]}>User</Text>
@@ -176,7 +168,6 @@ export default function GroupDetailPage() {
 
   return (
     <View style={styles.screen}>
-      {/* Title */}
       <Text style={styles.title}>{groupName || 'Group'}</Text>
 
       {/* This Week's Picks */}
@@ -223,31 +214,21 @@ export default function GroupDetailPage() {
             }
           />
         )}
-        <View style={{ height: 12 }} />
-        <Pressable
-          style={styles.cta}
-          onPress={() => router.push({ pathname: '/picks/page' })}
-        >
-          <Text style={styles.ctaText}>Go to NFL picks</Text>
-        </Pressable>
+        {/* (Removed duplicate NFL button here) */}
       </View>
 
       {/* Make Your Picks */}
       <View style={styles.card}>
         <Text style={styles.h2}>Make Your Picks</Text>
 
-        {/* College Football */}
         <Text style={styles.h3}>College Football</Text>
-        {/* If you have a boolean for “current CFB week”, wrap like you do for NFL.
-            Here we simply always show the button so it’s easy to reach. */}
         <Pressable
           style={styles.cta}
-          onPress={() => router.push({ pathname: '/picks/college' })} // <- change if your route is '/picks/cfb'
+          onPress={() => router.push({ pathname: '/picks/college' })}
         >
           <Text style={styles.ctaText}>Go to CFB picks</Text>
         </Pressable>
 
-        {/* NFL (you also have it above in the card for convenience) */}
         <Text style={[styles.h3, { marginTop: 18 }]}>NFL</Text>
         <Pressable
           style={styles.cta}
@@ -294,7 +275,7 @@ export default function GroupDetailPage() {
 }
 
 /* ------------------------------------------
- * Styles (kept simple & web-friendly)
+ * Styles
  * ----------------------------------------*/
 const styles = StyleSheet.create({
   screen: {
