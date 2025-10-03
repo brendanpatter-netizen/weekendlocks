@@ -3,7 +3,7 @@ export const unstable_settings = { prerender: false };
 import { useEffect, useMemo, useState } from "react";
 import { ScrollView, View, Text, StyleSheet, ActivityIndicator, Pressable, Image, Alert } from "react-native";
 import { Picker } from "@react-native-picker/picker";
-import { Link, useRouter } from "expo-router"; // ⬅️ changed
+import { Link, useRouter } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { events } from "@/lib/events";
 import { useOdds } from "@/lib/useOdds";
@@ -29,7 +29,7 @@ function Tab({ label, active, disabled, onPress }: { label: string; active: bool
 }
 
 export default function PicksNFL() {
-  const router = useRouter(); // ⬅️ added
+  const router = useRouter();
 
   const [week, setWeek] = useState<number>(getCurrentWeek?.() ?? 1);
   const [betType, setBetType] = useState<BetType>("spreads");
@@ -52,8 +52,9 @@ export default function PicksNFL() {
       setNotice(null);
 
       const { data: w, error: wErr } = await supabase
-        .from("weeks").select("*")
-        .eq("league", "nfl")               // 👈 enum is lowercase
+        .from("weeks")
+        .select("*")
+        .ilike("league", "nfl")       // ← case-insensitive
         .eq("season", SEASON)
         .eq("week_num", week)
         .maybeSingle();
@@ -63,19 +64,28 @@ export default function PicksNFL() {
 
       if (w?.id) {
         const { data: g, error: gErr } = await supabase
-          .from("games").select("id, home, away, week_id").eq("week_id", w.id);
+          .from("games")
+          .select("id, home, away, week_id")
+          .eq("week_id", w.id);
         if (gErr) setNotice(`games: ${gErr.message}`);
 
         const map: Record<string, number> = {};
-        (g ?? []).forEach((row: any) => { map[`${normTeamNFL(row.away)}@${normTeamNFL(row.home)}`] = row.id; });
+        (g ?? []).forEach((row: any) => {
+          map[`${normTeamNFL(row.away)}@${normTeamNFL(row.home)}`] = row.id;
+        });
         setGameMap(map);
 
         const ids = (g ?? []).map((r: any) => r.id);
         if (ids.length) {
-          const { data: ps, error: pErr } = await supabase.from("picks").select("game_id, pick_team").in("game_id", ids);
+          const { data: ps, error: pErr } = await supabase
+            .from("picks")
+            .select("game_id, pick_team")
+            .in("game_id", ids);
           if (pErr) setNotice(`picks: ${pErr.message}`);
           const mine: Record<number, string> = {};
-          (ps ?? []).forEach((r: any) => { mine[r.game_id] = r.pick_team; });
+          (ps ?? []).forEach((r: any) => {
+            mine[r.game_id] = r.pick_team;
+          });
           setMyPicks(mine);
         } else {
           setMyPicks({});
@@ -114,8 +124,8 @@ export default function PicksNFL() {
     type === "spreads" ? `${o.name} ${o.point}` : type === "h2h" ? `${o.name} ML` : `${o.name} ${o.point}`;
 
   const savePick = async (oddsGame: any, type: BetType, o: any) => {
-    if (!userId)  { Alert.alert("Sign in required", "Please sign in to save picks."); return router.push("/groups"); }
-    if (!isOpen)  { Alert.alert("Picks closed", openLabel); return router.push("/groups"); }
+    if (!userId) { Alert.alert("Sign in required", "Please sign in to save picks."); return router.push("/groups"); }
+    if (!isOpen) { Alert.alert("Picks closed", openLabel); return router.push("/groups"); }
 
     const key = `${normTeamNFL(oddsGame.away_team)}@${normTeamNFL(oddsGame.home_team)}`;
     const mappedId = gameMap[key];
@@ -151,12 +161,12 @@ export default function PicksNFL() {
       Alert.alert("Error", String(e?.message || e));
     } finally {
       setSaving(null);
-      router.push("/groups"); // ⬅️ always route to Groups
+      router.push("/groups");
     }
   };
 
   if (loading) return <ActivityIndicator style={styles.center} size="large" />;
-  if (error)   return <Text style={styles.center}>Error: {error.message}</Text>;
+  if (error) return <Text style={styles.center}>Error: {error.message}</Text>;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -168,13 +178,15 @@ export default function PicksNFL() {
       <Text style={[styles.badge, isOpen ? styles.badgeOpen : styles.badgeClosed]}>{openLabel}</Text>
 
       <Picker selectedValue={week} onValueChange={(v) => setWeek(Number(v))} style={{ marginBottom: 12 }}>
-        {Array.from({ length: 18 }).map((_, i) => (<Picker.Item key={i + 1} label={`Week ${i + 1}`} value={i + 1} />))}
+        {Array.from({ length: 18 }).map((_, i) => (
+          <Picker.Item key={i + 1} label={`Week ${i + 1}`} value={i + 1} />
+        ))}
       </Picker>
 
       <View style={styles.tabsRow}>
-        <Tab label="SPREADS" active={betType==="spreads"} disabled={!marketHas.spreads} onPress={() => setBetType("spreads")} />
-        <Tab label="TOTALS"  active={betType==="totals"}  disabled={!marketHas.totals}  onPress={() => setBetType("totals")} />
-        <Tab label="H2H"     active={betType==="h2h"}     disabled={!marketHas.h2h}     onPress={() => setBetType("h2h")} />
+        <Tab label="SPREADS" active={betType === "spreads"} disabled={!marketHas.spreads} onPress={() => setBetType("spreads")} />
+        <Tab label="TOTALS" active={betType === "totals"} disabled={!marketHas.totals} onPress={() => setBetType("totals")} />
+        <Tab label="H2H" active={betType === "h2h"} disabled={!marketHas.h2h} onPress={() => setBetType("h2h")} />
       </View>
 
       {!!notice && <Text style={styles.warn}>{notice}</Text>}
@@ -188,7 +200,7 @@ export default function PicksNFL() {
           if (!market) return null;
 
           const mappedId = gameMap[`${normTeamNFL(game.away_team)}@${normTeamNFL(game.home_team)}`];
-          const disabledWholeCard = !isOpen; // ⬅️ was `!isOpen || !mappedId`
+          const disabledWholeCard = !isOpen;
 
           return (
             <View key={game.id} style={styles.card}>
@@ -212,7 +224,7 @@ export default function PicksNFL() {
                       <Pressable
                         disabled={disabled}
                         onPress={() => savePick(game, betType, o)}
-                        style={ isMine ? [styles.pickBtn, styles.pickBtnActive] : disabled ? [styles.pickBtn, styles.pickBtnDisabled] : styles.pickBtn }
+                        style={isMine ? [styles.pickBtn, styles.pickBtnActive] : disabled ? [styles.pickBtn, styles.pickBtnDisabled] : styles.pickBtn}
                       >
                         <Text style={isMine ? [styles.pickText, styles.pickTextActive] : styles.pickText}>
                           {label}{typeof o.price === "number" ? `  (${o.price > 0 ? `+${o.price}` : o.price})` : ""}
@@ -222,8 +234,6 @@ export default function PicksNFL() {
                   );
                 })}
               </View>
-
-              {/* Removed the "Not clickable" note since odds are now always clickable */}
             </View>
           );
         })
