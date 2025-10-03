@@ -56,7 +56,7 @@ export default function PicksCollege() {
       const { data: w, error: wErr } = await supabase
         .from("weeks")
         .select("*")
-        .ilike("league", "cfb")       // ← case-insensitive
+        .in("league", ["cfb", "CFB"])   // ← enum-safe case-insensitive
         .eq("season", SEASON)
         .eq("week_num", week)
         .maybeSingle();
@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
   tabsRow: { flexDirection: "row", gap: 12, marginBottom: 10 },
   tab: { flex: 1, borderWidth: 1, borderColor: "#bbb", borderRadius: 6, paddingVertical: 10, alignItems: "center", backgroundColor: "#eee" },
   tabActive: { backgroundColor: "#111", borderColor: "#111" },
-  tabDisabled: { opacity: 0.45 },
+  tabDisabled: { opacity: 0.5 },
   tabText: { fontWeight: "700", color: "#333" },
   tabTextActive: { color: "#fff" },
   card: { padding: 12, borderWidth: 1, borderRadius: 8, borderColor: "#ccc", backgroundColor: "#fff", marginBottom: 12 },
