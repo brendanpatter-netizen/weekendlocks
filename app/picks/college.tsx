@@ -56,7 +56,7 @@ export default function PicksCollege() {
       const { data: w, error: wErr } = await supabase
         .from("weeks")
         .select("*")
-        .in("league", ["cfb", "CFB"])   // ← enum-safe case-insensitive
+        .eq("league", "cfb")        // ← use exact enum label
         .eq("season", SEASON)
         .eq("week_num", week)
         .maybeSingle();
@@ -245,21 +245,27 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontWeight: "600" },
   switch: { color: "#0a84ff", fontSize: 16 },
   warn: { color: "#7a4", marginBottom: 8 },
+
   badge: { alignSelf: "flex-start", paddingVertical: 4, paddingHorizontal: 10, borderRadius: 999, fontWeight: "800", marginBottom: 8 },
   badgeOpen: { backgroundColor: "#E9F4EF", color: "#006241" },
   badgeClosed: { backgroundColor: "#FDECEA", color: "#A4000F" },
+
   tabsRow: { flexDirection: "row", gap: 12, marginBottom: 10 },
   tab: { flex: 1, borderWidth: 1, borderColor: "#bbb", borderRadius: 6, paddingVertical: 10, alignItems: "center", backgroundColor: "#eee" },
   tabActive: { backgroundColor: "#111", borderColor: "#111" },
   tabDisabled: { opacity: 0.5 },
+
+  /* ↓ These two work together; tabTextActive was missing */
   tabText: { fontWeight: "700", color: "#333" },
   tabTextActive: { color: "#fff" },
+
   card: { padding: 12, borderWidth: 1, borderRadius: 8, borderColor: "#ccc", backgroundColor: "#fff", marginBottom: 12 },
   logosRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginBottom: 6 },
   logo: { width: 42, height: 42, borderRadius: 21 },
   vs: { fontWeight: "bold", fontSize: 16, marginHorizontal: 8 },
   match: { fontWeight: "bold", marginBottom: 2, fontSize: 16 },
   kick: { marginTop: 2, fontSize: 12, opacity: 0.7 },
+
   pickBtn: { padding: 10, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: "#bbb", backgroundColor: "#fff" },
   pickBtnActive: { borderColor: "#006241", backgroundColor: "#E9F4EF" },
   pickBtnDisabled: { opacity: 0.5 },

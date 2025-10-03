@@ -54,7 +54,7 @@ export default function PicksNFL() {
       const { data: w, error: wErr } = await supabase
         .from("weeks")
         .select("*")
-        .in("league", ["nfl", "NFL"])   // ← enum-safe case-insensitive
+        .eq("league", "nfl")        // ← use exact enum label
         .eq("season", SEASON)
         .eq("week_num", week)
         .maybeSingle();
