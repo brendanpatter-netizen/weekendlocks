@@ -3,7 +3,7 @@ export const unstable_settings = { prerender: false };
 import { useEffect, useMemo, useState } from "react";
 import { ScrollView, View, Text, StyleSheet, ActivityIndicator, Pressable, Image, Alert } from "react-native";
 import { Picker } from "@react-native-picker/picker";
-import { Link } from "expo-router";
+import { Link, useRouter } from "expo-router"; // ⬅️ changed
 import { supabase } from "@/lib/supabase";
 import { events } from "@/lib/events";
 import { useOdds } from "@/lib/useOdds";
@@ -29,6 +29,8 @@ function Tab({ label, active, disabled, onPress }: { label: string; active: bool
 }
 
 export default function PicksNFL() {
+  const router = useRouter(); // ⬅️ added
+
   const [week, setWeek] = useState<number>(getCurrentWeek?.() ?? 1);
   const [betType, setBetType] = useState<BetType>("spreads");
 
@@ -112,40 +114,44 @@ export default function PicksNFL() {
     type === "spreads" ? `${o.name} ${o.point}` : type === "h2h" ? `${o.name} ML` : `${o.name} ${o.point}`;
 
   const savePick = async (oddsGame: any, type: BetType, o: any) => {
-    if (!userId)  return Alert.alert("Sign in required", "Please sign in to save picks.");
-    if (!isOpen)  return Alert.alert("Picks closed", openLabel);
+    if (!userId)  { Alert.alert("Sign in required", "Please sign in to save picks."); return router.push("/groups"); }
+    if (!isOpen)  { Alert.alert("Picks closed", openLabel); return router.push("/groups"); }
 
     const key = `${normTeamNFL(oddsGame.away_team)}@${normTeamNFL(oddsGame.home_team)}`;
     const mappedId = gameMap[key];
-    if (!mappedId) return Alert.alert("Can’t match game", `Lookup key used: ${key}`);
 
     const label = labelFor(type, o);
-    setSaving(mappedId);
+    if (mappedId) setSaving(mappedId);
     try {
-      const payload = {
-        user_id: userId,
-        game_id: mappedId,
-        pick_team: label,
-        pick_market: type,
-        pick_side: String(o.name),
-        pick_line: o.point != null ? Number(o.point) : null,
-        pick_price: typeof o.price === "number" ? o.price : null,
-        sport: "nfl",                 // 👈 keep lowercase to match your convention
-        week,
-        status: "pending",
-        created_at: new Date().toISOString(),
-      };
+      if (mappedId) {
+        const payload = {
+          user_id: userId,
+          game_id: mappedId,
+          pick_team: label,
+          pick_market: type,
+          pick_side: String(o.name),
+          pick_line: o.point != null ? Number(o.point) : null,
+          pick_price: typeof o.price === "number" ? o.price : null,
+          sport: "nfl",
+          week,
+          status: "pending",
+          created_at: new Date().toISOString(),
+        };
 
-      const { error: upErr } = await supabase.from("picks").upsert(payload, { onConflict: "user_id,game_id" });
-      if (upErr) return Alert.alert("Save failed", upErr.message);
-
-      setMyPicks((m) => ({ ...m, [mappedId]: label }));
-      events.emitPickSaved({ league: "nfl", week, game_id: mappedId, user_id: userId!, pick_team: label });
-      Alert.alert("Saved", `Your pick: ${label}`);
+        const { error: upErr } = await supabase.from("picks").upsert(payload, { onConflict: "user_id,game_id" });
+        if (upErr) Alert.alert("Save failed", upErr.message);
+        else {
+          setMyPicks((m) => ({ ...m, [mappedId]: label }));
+          events.emitPickSaved({ league: "nfl", week, game_id: mappedId, user_id: userId!, pick_team: label });
+        }
+      } else {
+        Alert.alert("Heads up", "This matchup isn’t linked in your games table yet, but you can continue in Groups.");
+      }
     } catch (e: any) {
       Alert.alert("Error", String(e?.message || e));
     } finally {
       setSaving(null);
+      router.push("/groups"); // ⬅️ always route to Groups
     }
   };
 
@@ -182,7 +188,7 @@ export default function PicksNFL() {
           if (!market) return null;
 
           const mappedId = gameMap[`${normTeamNFL(game.away_team)}@${normTeamNFL(game.home_team)}`];
-          const disabledWholeCard = !isOpen || !mappedId;
+          const disabledWholeCard = !isOpen; // ⬅️ was `!isOpen || !mappedId`
 
           return (
             <View key={game.id} style={styles.card}>
@@ -217,9 +223,7 @@ export default function PicksNFL() {
                 })}
               </View>
 
-              {!mappedId && (
-                <Text style={styles.note}>Not clickable: odds matchup didn’t map to a row in your <Text style={{fontWeight: "700"}}>games</Text> table.</Text>
-              )}
+              {/* Removed the "Not clickable" note since odds are now always clickable */}
             </View>
           );
         })
@@ -255,5 +259,4 @@ const styles = StyleSheet.create({
   pickBtnDisabled: { opacity: 0.5 },
   pickText: { fontWeight: "800", color: "#222" },
   pickTextActive: { color: "#006241" },
-  note: { marginTop: 8, fontSize: 12, color: "#9a6a00" },
 });
