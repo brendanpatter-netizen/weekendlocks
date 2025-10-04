@@ -214,7 +214,6 @@ export default function GroupDetailPage() {
             }
           />
         )}
-        {/* (Removed duplicate NFL button here) */}
       </View>
 
       {/* Make Your Picks */}
@@ -224,7 +223,9 @@ export default function GroupDetailPage() {
         <Text style={styles.h3}>College Football</Text>
         <Pressable
           style={styles.cta}
-          onPress={() => router.push({ pathname: '/picks/college' })}
+          onPress={() =>
+            router.push({ pathname: '/picks/college', params: { group: groupId } }) // ← pass group
+          }
         >
           <Text style={styles.ctaText}>Go to CFB picks</Text>
         </Pressable>
@@ -232,7 +233,9 @@ export default function GroupDetailPage() {
         <Text style={[styles.h3, { marginTop: 18 }]}>NFL</Text>
         <Pressable
           style={styles.cta}
-          onPress={() => router.push({ pathname: '/picks/page' })}
+          onPress={() =>
+            router.push({ pathname: '/picks/page', params: { group: groupId } }) // ← pass group
+          }
         >
           <Text style={styles.ctaText}>Go to NFL picks</Text>
         </Pressable>
@@ -278,33 +281,12 @@ export default function GroupDetailPage() {
  * Styles
  * ----------------------------------------*/
 const styles = StyleSheet.create({
-  screen: {
-    padding: 16,
-    gap: 16,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  h2: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  h3: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  muted: {
-    color: '#6b7280',
-  },
-  card: {
-    backgroundColor: '#e5e7eb33',
-    borderRadius: 8,
-    padding: 12,
-  },
+  screen: { padding: 16, gap: 16 },
+  title: { fontSize: 22, fontWeight: '700', marginBottom: 4 },
+  h2: { fontSize: 18, fontWeight: '700', marginBottom: 8 },
+  h3: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
+  muted: { color: '#6b7280' },
+  card: { backgroundColor: '#e5e7eb33', borderRadius: 8, padding: 12 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -312,61 +294,17 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#d1d5db',
   },
-  headerRow: {
-    borderTopWidth: 0,
-    paddingTop: 0,
-    paddingBottom: 8,
-  },
-  headerText: {
-    fontWeight: '700',
-  },
-  cellUser: {
-    flex: 1.5,
-  },
-  cell: {
-    flex: 0.5,
-  },
-  centerRow: {
-    paddingVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  centerText: {
-    textAlign: 'center',
-  },
-  userCell: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  avatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 999,
-    marginRight: 8,
-  },
-  cta: {
-    marginTop: 8,
-    alignSelf: 'flex-start',
-    backgroundColor: '#0b735f',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  ctaText: {
-    color: 'white',
-    fontWeight: '700',
-  },
-  memberRow: {
-    paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#d1d5db',
-  },
-  memberName: {
-    fontWeight: '700',
-  },
-  memberSub: {
-    color: '#6b7280',
-    marginTop: 2,
-  },
+  headerRow: { borderTopWidth: 0, paddingTop: 0, paddingBottom: 8 },
+  headerText: { fontWeight: '700' },
+  cellUser: { flex: 1.5 },
+  cell: { flex: 0.5 },
+  centerRow: { paddingVertical: 12, alignItems: 'center', justifyContent: 'center' },
+  centerText: { textAlign: 'center' },
+  userCell: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  avatar: { width: 28, height: 28, borderRadius: 999, marginRight: 8 },
+  cta: { marginTop: 8, alignSelf: 'flex-start', backgroundColor: '#0b735f', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8 },
+  ctaText: { color: 'white', fontWeight: '700' },
+  memberRow: { paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#d1d5db' },
+  memberName: { fontWeight: '700' },
+  memberSub: { color: '#6b7280', marginTop: 2 },
 });
