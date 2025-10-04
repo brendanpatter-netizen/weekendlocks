@@ -125,7 +125,7 @@ export default function PicksNFL() {
 
   const savePick = async (oddsGame: any, type: BetType, o: any) => {
     if (!userId) { Alert.alert("Sign in required", "Please sign in to save picks."); return router.push("/groups"); }
-    if (!isOpen) { Alert.alert("Picks closed", openLabel); return router.push("/groups"); }
+    if (!isOpen) { Alert.alert("Heads up", openLabel); }
 
     const key = `${normTeamNFL(oddsGame.away_team)}@${normTeamNFL(oddsGame.home_team)}`;
     const mappedId = gameMap[key];
@@ -200,7 +200,7 @@ export default function PicksNFL() {
           if (!market) return null;
 
           const mappedId = gameMap[`${normTeamNFL(game.away_team)}@${normTeamNFL(game.home_team)}`];
-          const disabledWholeCard = !isOpen;
+          const disabledWholeCard = false;
 
           return (
             <View key={game.id} style={styles.card}>
@@ -217,7 +217,7 @@ export default function PicksNFL() {
                 {(market.outcomes ?? []).map((o: any, idx: number) => {
                   const label = labelFor(betType, o);
                   const isMine = mappedId ? myPicks[mappedId] === label : false;
-                  const disabled = disabledWholeCard || saving === mappedId;
+                  const disabled = saving === mappedId;
 
                   return (
                     <View key={o.name + String(o.point ?? "") + idx} style={{ marginTop: idx ? 8 : 0 }}>

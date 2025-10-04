@@ -121,7 +121,8 @@ export default function PicksCollege() {
 
   const savePick = async (oddsGame: any, type: BetType, o: any) => {
     if (!userId) { Alert.alert("Sign in required", "Please sign in to save picks."); return router.push("/groups"); }
-    if (!isOpen) { Alert.alert("Picks closed", openLabel); return router.push("/groups"); }
+    // Allow picks even if the week is closed; still show a heads-up if you want:
+    if (!isOpen) { Alert.alert("Heads up", openLabel); }
 
     const key = `${normTeamCFB(oddsGame.away_team)}@${normTeamCFB(oddsGame.home_team)}`;
     const mappedId = gameMap[key];
@@ -196,7 +197,7 @@ export default function PicksCollege() {
           if (!market) return null;
 
           const mappedId = gameMap[`${normTeamCFB(game.away_team)}@${normTeamCFB(game.home_team)}`];
-          const disabledWholeCard = !isOpen;
+          const disabledWholeCard = false; // always allow clicking
 
           return (
             <View key={game.id} style={styles.card}>
@@ -213,7 +214,7 @@ export default function PicksCollege() {
                 {(market.outcomes ?? []).map((o: any, idx: number) => {
                   const label = labelFor(betType, o);
                   const isMine = mappedId ? myPicks[mappedId] === label : false;
-                  const disabled = disabledWholeCard || saving === mappedId;
+                  const disabled = saving === mappedId;
 
                   return (
                     <View key={o.name + String(o.point ?? "") + idx} style={{ marginTop: idx ? 8 : 0 }}>
