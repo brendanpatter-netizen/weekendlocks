@@ -3,7 +3,7 @@ export const unstable_settings = { prerender: false };
 import { useEffect, useMemo, useState } from "react";
 import { ScrollView, View, Text, StyleSheet, ActivityIndicator, Pressable, Image, Alert } from "react-native";
 import { Picker } from "@react-native-picker/picker";
-import { Link, useRouter } from "expo-router";
+import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { events } from "@/lib/events";
 import { useOdds } from "@/lib/useOdds";
@@ -13,6 +13,8 @@ import { getCurrentCfbWeek } from "@/lib/cfbWeeks";
 type BetType = "spreads" | "totals" | "h2h";
 const CFB_SPORT_KEY = "americanfootball_ncaaf";
 const SEASON = 2025;
+
+type Group = { id: string; name: string };
 
 const STOP = new Set(["the","of","and","university","state","st","tech","at","&","a","b","c","d","e"]);
 function normTeamCFB(name: string) {
@@ -32,6 +34,8 @@ function Tab({ label, active, disabled, onPress }:{label:string;active:boolean;d
 
 export default function PicksCollege() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const groupId = typeof params.group === "string" ? params.group : undefined;
 
   const [week, setWeek] = useState<number>(getCurrentCfbWeek?.() ?? 1);
   const [betType, setBetType] = useState<BetType>("spreads");
@@ -43,11 +47,42 @@ export default function PicksCollege() {
   const [saving, setSaving] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [pickedGroupId, setPickedGroupId] = useState<string | undefined>(undefined);
+
   const { data, loading, error } = useOdds(CFB_SPORT_KEY, week);
 
+  useEffect(() => { supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null)); }, []);
+
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
-  }, []);
+    if (groupId) return;
+    (async () => {
+      try {
+        setGroupsLoading(true);
+        const { data: mems, error: memErr } = await supabase
+          .from("group_members")
+          .select("group_id")
+          .eq("user_id", (await supabase.auth.getUser()).data.user?.id ?? "");
+        if (memErr) throw memErr;
+
+        const ids = Array.from(new Set((mems ?? []).map((m: any) => m.group_id))).filter(Boolean);
+        if (!ids.length) { setGroups([]); return; }
+
+        const { data: gs, error: gErr } = await supabase
+          .from("groups")
+          .select("id,name")
+          .in("id", ids);
+        if (gErr) throw gErr;
+
+        setGroups((gs ?? []) as Group[]);
+      } catch {
+        setGroups([]);
+      } finally {
+        setGroupsLoading(false);
+      }
+    })();
+  }, [groupId]);
 
   useEffect(() => {
     (async () => {
@@ -56,7 +91,7 @@ export default function PicksCollege() {
       const { data: w, error: wErr } = await supabase
         .from("weeks")
         .select("*")
-        .eq("league", "cfb")        // ← use exact enum label
+        .eq("league", "cfb")
         .eq("season", SEASON)
         .eq("week_num", week)
         .maybeSingle();
@@ -79,19 +114,18 @@ export default function PicksCollege() {
       setGameMap(map);
 
       const ids = (g ?? []).map((r: any) => r.id);
-      if (!ids.length) { setMyPicks({}); return; }
+      if (!ids.length || !userId) { setMyPicks({}); return; }
 
-      const { data: ps, error: pErr } = await supabase
-        .from("picks")
-        .select("game_id, pick_team")
-        .in("game_id", ids);
+      let q = supabase.from("picks").select("game_id, pick_team").in("game_id", ids).eq("user_id", userId);
+      q = groupId ? q.eq("group_id", groupId) : q.is("group_id", null);
+      const { data: ps, error: pErr } = await q;
       if (pErr) setNotice(`picks: ${pErr.message}`);
 
       const mine: Record<number, string> = {};
       (ps ?? []).forEach((r: any) => { mine[r.game_id] = r.pick_team; });
       setMyPicks(mine);
     })();
-  }, [week]);
+  }, [week, userId, groupId]);
 
   const isOpen = useMemo(() => {
     if (!weekRow) return false;
@@ -120,9 +154,8 @@ export default function PicksCollege() {
     type === "spreads" ? `${o.name} ${o.point}` : type === "h2h" ? `${o.name} ML` : `${o.name} ${o.point}`;
 
   const savePick = async (oddsGame: any, type: BetType, o: any) => {
-    if (!userId) { Alert.alert("Sign in required", "Please sign in to save picks."); return router.push("/groups"); }
-    // Allow picks even if the week is closed; still show a heads-up if you want:
-    if (!isOpen) { Alert.alert("Heads up", openLabel); }
+    if (!userId)  { Alert.alert("Sign in required", "Please sign in to save picks."); return router.push(groupId ? `/groups/${groupId}` : "/groups"); }
+    if (!isOpen)  { Alert.alert("Heads up", openLabel); }
 
     const key = `${normTeamCFB(oddsGame.away_team)}@${normTeamCFB(oddsGame.home_team)}`;
     const mappedId = gameMap[key];
@@ -131,48 +164,83 @@ export default function PicksCollege() {
     if (mappedId) setSaving(mappedId);
     try {
       if (mappedId) {
-        const payload = {
+        const row = {
           user_id: userId,
+          group_id: groupId ?? null,
           game_id: mappedId,
+          sport: "cfb",
+          week,
           pick_team: label,
           pick_market: type,
           pick_side: String(o.name),
           pick_line: o.point != null ? Number(o.point) : null,
           pick_price: typeof o.price === "number" ? o.price : null,
-          sport: "cfb",
-          week,
           status: "pending",
           created_at: new Date().toISOString(),
         };
-
-        const { error: upErr } = await supabase.from("picks").upsert(payload, { onConflict: "user_id,game_id" });
+        const conflict = groupId ? "user_id,group_id,game_id" : "user_id,game_id";
+        const { error: upErr } = await supabase.from("picks").upsert(row, { onConflict: conflict });
         if (upErr) Alert.alert("Save failed", upErr.message);
         else {
           setMyPicks((m) => ({ ...m, [mappedId]: label }));
-          events.emitPickSaved({ league: "cfb", week, game_id: mappedId, user_id: userId!, pick_team: label });
+          events.emitPickSaved({ league: "cfb", week, game_id: mappedId, user_id: userId!, pick_team: label, group_id: groupId ?? null });
         }
       } else {
-        Alert.alert("Heads up", "This matchup isn’t linked in your games table yet, but you can continue in Groups.");
+        Alert.alert("Heads up", "This matchup isn’t linked in your games table yet, but you can continue in your group.");
       }
     } catch (e: any) {
       Alert.alert("Error", String(e?.message || e));
     } finally {
       setSaving(null);
-      router.push("/groups");
+      router.push(groupId ? `/groups/${groupId}` : "/groups");
     }
   };
 
+  const goToSelectedGroup = () => {
+    if (pickedGroupId) router.replace({ pathname: "/picks/college", params: { group: pickedGroupId } });
+  };
+
   if (loading) return <ActivityIndicator style={styles.center} size="large" />;
-  if (error) return <Text style={styles.center}>Error: {error.message}</Text>;
+  if (error)   return <Text style={styles.center}>Error: {error.message}</Text>;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>College Football — Week {week}</Text>
-        <Link href="/picks/page" style={styles.switch}>NFL ↗︎</Link>
+        <Link href={{ pathname: "/picks/page", params: groupId ? { group: groupId } : {} }} style={styles.switch}>NFL ↗︎</Link>
       </View>
 
       <Text style={[styles.badge, isOpen ? styles.badgeOpen : styles.badgeClosed]}>{openLabel}</Text>
+
+      {!groupId && (
+        <View style={styles.groupBanner}>
+          <Text style={styles.groupBannerTitle}>Save picks to a group?</Text>
+          <View style={{ marginTop: 6 }}>
+            {groupsLoading ? (
+              <Text style={{ opacity: 0.7 }}>Loading your groups…</Text>
+            ) : groups.length ? (
+              <>
+                <Picker
+                  selectedValue={pickedGroupId}
+                  onValueChange={(v) => setPickedGroupId(String(v))}
+                  style={{ marginBottom: 8 }}
+                >
+                  <Picker.Item label="Choose a group…" value={undefined} />
+                  {groups.map((g) => <Picker.Item key={g.id} label={g.name || g.id} value={g.id} />)}
+                </Picker>
+                <Pressable style={styles.groupApplyBtn} onPress={goToSelectedGroup} disabled={!pickedGroupId}>
+                  <Text style={styles.groupApplyText}>Use this group</Text>
+                </Pressable>
+              </>
+            ) : (
+              <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+                <Text style={{ flex: 1, opacity: 0.8 }}>You’re in solo mode. Pick a group to save within it.</Text>
+                <Link href="/groups" style={styles.groupBrowseLink}>Browse Groups</Link>
+              </View>
+            )}
+          </View>
+        </View>
+      )}
 
       <Picker selectedValue={week} onValueChange={(v) => setWeek(Number(v))} style={{ marginBottom: 12 }}>
         {Array.from({ length: 15 }).map((_, i) => (
@@ -197,7 +265,6 @@ export default function PicksCollege() {
           if (!market) return null;
 
           const mappedId = gameMap[`${normTeamCFB(game.away_team)}@${normTeamCFB(game.home_team)}`];
-          const disabledWholeCard = false; // always allow clicking
 
           return (
             <View key={game.id} style={styles.card}>
@@ -210,7 +277,7 @@ export default function PicksCollege() {
               <Text style={styles.match}>{game.away_team} @ {game.home_team}</Text>
               <Text style={styles.kick}>{new Date(game.commence_time).toLocaleString()}</Text>
 
-              <View style={{ marginTop: 8, opacity: disabledWholeCard ? 0.6 : 1 }}>
+              <View style={{ marginTop: 8 }}>
                 {(market.outcomes ?? []).map((o: any, idx: number) => {
                   const label = labelFor(betType, o);
                   const isMine = mappedId ? myPicks[mappedId] === label : false;
@@ -251,12 +318,16 @@ const styles = StyleSheet.create({
   badgeOpen: { backgroundColor: "#E9F4EF", color: "#006241" },
   badgeClosed: { backgroundColor: "#FDECEA", color: "#A4000F" },
 
+  groupBanner: { padding: 10, borderWidth: 1, borderColor: "#cbd5e1", backgroundColor: "#f8fafc", borderRadius: 8, marginBottom: 10 },
+  groupBannerTitle: { fontWeight: "700" },
+  groupApplyBtn: { alignSelf: "flex-start", borderWidth: 1, borderColor: "#0a84ff", paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8 },
+  groupApplyText: { color: "#0a84ff", fontWeight: "700" },
+  groupBrowseLink: { color: "#0a84ff", fontWeight: "700" },
+
   tabsRow: { flexDirection: "row", gap: 12, marginBottom: 10 },
   tab: { flex: 1, borderWidth: 1, borderColor: "#bbb", borderRadius: 6, paddingVertical: 10, alignItems: "center", backgroundColor: "#eee" },
   tabActive: { backgroundColor: "#111", borderColor: "#111" },
   tabDisabled: { opacity: 0.5 },
-
-  /* ↓ These two work together; tabTextActive was missing */
   tabText: { fontWeight: "700", color: "#333" },
   tabTextActive: { color: "#fff" },
 
