@@ -13,6 +13,8 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { supabase } from "@/lib/supabase";
+import { getCurrentWeek } from "@/lib/nflWeeks";
+import { getCurrentCfbWeek } from "@/lib/cfbWeeks";
 
 type MemberRow = {
   user_id: string;
@@ -30,37 +32,6 @@ type PickRow = {
 
 type ByUser = Map<string, { count: number; preview: string[] }>;
 
-const SEASON = 2025;
-
-// Choose an appropriate "current week" for a league.
-// Prefers a week that's currently OPEN; falls back to latest week_num in the season.
-async function getCurrentWeek(league: "cfb" | "nfl") {
-  const nowIso = new Date().toISOString();
-  const { data: open } = await supabase
-    .from("weeks")
-    .select("week_num")
-    .eq("league", league)
-    .eq("season", SEASON)
-    .lte("opens_at", nowIso)
-    .gt("closes_at", nowIso)
-    .order("week_num", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (open?.week_num) return open.week_num as number;
-
-  const { data: latest } = await supabase
-    .from("weeks")
-    .select("week_num")
-    .eq("league", league)
-    .eq("season", SEASON)
-    .order("week_num", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  return latest?.week_num ?? 1;
-}
-
 export default function GroupDetailPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const groupId = useMemo(() => (Array.isArray(id) ? id[0] : id) ?? "", [id]);
@@ -69,19 +40,20 @@ export default function GroupDetailPage() {
   const [loading, setLoading] = useState(true);
 
   const [members, setMembers] = useState<MemberRow[]>([]);
+
   const [nflWeek, setNflWeek] = useState<number | null>(null);
   const [cfbWeek, setCfbWeek] = useState<number | null>(null);
+
   const [nflPicks, setNflPicks] = useState<PickRow[]>([]);
   const [cfbPicks, setCfbPicks] = useState<PickRow[]>([]);
 
-  // Load group name + members
   useEffect(() => {
     if (!groupId) return;
 
     (async () => {
       setLoading(true);
 
-      // Group name (optional)
+      // Group name
       const { data: g } = await supabase
         .from("groups")
         .select("name")
@@ -89,7 +61,7 @@ export default function GroupDetailPage() {
         .maybeSingle();
       if (g?.name) setGroupName(g.name);
 
-      // Members (prefer view; fallback to join)
+      // Members (prefer consolidated view; fallback join)
       const tryView = await supabase
         .from("group_member_profiles")
         .select("user_id, role, joined_at, display_name, username, avatar_url")
@@ -118,37 +90,74 @@ export default function GroupDetailPage() {
         setMembers(mapped);
       }
 
-      // Determine the current week per league
-      const [nw, cw] = await Promise.all([
-        getCurrentWeek("nfl"),
-        getCurrentWeek("cfb"),
-      ]);
-      setNflWeek(nw);
-      setCfbWeek(cw);
+      // Use the SAME helpers as the picks pages so weeks line up
+      let nflW = typeof getCurrentWeek === "function" ? getCurrentWeek() : 1;
+      let cfbW = typeof getCurrentCfbWeek === "function" ? getCurrentCfbWeek() : 1;
 
-      // Fetch picks scoped to this group + week (per league)
+      // Smart fallback: if there are no picks for that computed week,
+      // show the latest week that actually has picks for this group.
+      const [{ data: nflWeeksWithPicks }, { data: cfbWeeksWithPicks }] =
+        await Promise.all([
+          supabase
+            .from("picks")
+            .select("week")
+            .eq("group_id", groupId)
+            .eq("sport", "nfl")
+            .order("week", { ascending: false }),
+          supabase
+            .from("picks")
+            .select("week")
+            .eq("group_id", groupId)
+            .eq("sport", "cfb")
+            .order("week", { ascending: false }),
+        ]);
+
+      const latestNfl = (nflWeeksWithPicks ?? [])[0]?.week as
+        | number
+        | undefined;
+      const latestCfb = (cfbWeeksWithPicks ?? [])[0]?.week as
+        | number
+        | undefined;
+
+      if (
+        (nflWeeksWithPicks ?? []).length &&
+        (nflWeeksWithPicks ?? []).every((r: any) => r.week !== nflW)
+      ) {
+        nflW = latestNfl ?? nflW;
+      }
+      if (
+        (cfbWeeksWithPicks ?? []).length &&
+        (cfbWeeksWithPicks ?? []).every((r: any) => r.week !== cfbW)
+      ) {
+        cfbW = latestCfb ?? cfbW;
+      }
+
+      setNflWeek(nflW);
+      setCfbWeek(cfbW);
+
       const [{ data: np }, { data: cp }] = await Promise.all([
         supabase
           .from("picks")
           .select("user_id, pick_team")
           .eq("group_id", groupId)
           .eq("sport", "nfl")
-          .eq("week", nw),
+          .eq("week", nflW),
         supabase
           .from("picks")
           .select("user_id, pick_team")
           .eq("group_id", groupId)
           .eq("sport", "cfb")
-          .eq("week", cw),
+          .eq("week", cfbW),
       ]);
 
       setNflPicks((np ?? []) as PickRow[]);
       setCfbPicks((cp ?? []) as PickRow[]);
+
       setLoading(false);
     })();
   }, [groupId]);
 
-  // Build quick aggregates for display (count + preview)
+  // Build aggregates (count + preview)
   const nflByUser: ByUser = useMemo(() => {
     const map: ByUser = new Map();
     for (const p of nflPicks) {
@@ -192,10 +201,14 @@ export default function GroupDetailPage() {
         <Text style={styles.h2}>This Week’s Picks</Text>
         <View style={[styles.row, styles.headerRow]}>
           <Text style={[styles.cellUser, styles.headerText]}>User</Text>
-          <Text style={[styles.cell, styles.headerText, { textAlign: "center" }]}>
+          <Text
+            style={[styles.cell, styles.headerText, { textAlign: "center" }]}
+          >
             CFB (Wk {cfbWeek})
           </Text>
-          <Text style={[styles.cell, styles.headerText, { textAlign: "center" }]}>
+          <Text
+            style={[styles.cell, styles.headerText, { textAlign: "center" }]}
+          >
             NFL (Wk {nflWeek})
           </Text>
         </View>
@@ -227,14 +240,20 @@ export default function GroupDetailPage() {
                 <Text style={[styles.cell, styles.centerText]}>
                   {(cfb?.count ?? 0).toString()}
                   {cfb?.preview?.length ? (
-                    <Text style={styles.preview}> — {cfb.preview.join(", ")}</Text>
+                    <Text style={styles.preview}>
+                      {" "}
+                      — {cfb.preview.join(", ")}
+                    </Text>
                   ) : null}
                 </Text>
 
                 <Text style={[styles.cell, styles.centerText]}>
                   {(nfl?.count ?? 0).toString()}
                   {nfl?.preview?.length ? (
-                    <Text style={styles.preview}> — {nfl.preview.join(", ")}</Text>
+                    <Text style={styles.preview}>
+                      {" "}
+                      — {nfl.preview.join(", ")}
+                    </Text>
                   ) : null}
                 </Text>
               </View>
@@ -279,7 +298,7 @@ export default function GroupDetailPage() {
         </Pressable>
       </View>
 
-      {/* Members list */}
+      {/* Members */}
       <View style={styles.card}>
         <Text style={styles.h2}>Members</Text>
         <FlatList
@@ -294,7 +313,9 @@ export default function GroupDetailPage() {
                 <Text style={styles.memberSub}>
                   {(item.role ?? "member") +
                     (item.joined_at
-                      ? ` • joined ${new Date(item.joined_at).toLocaleDateString()}`
+                      ? ` • joined ${new Date(
+                          item.joined_at
+                        ).toLocaleDateString()}`
                       : "")}
                 </Text>
               </View>
@@ -326,7 +347,11 @@ const styles = StyleSheet.create({
   headerText: { fontWeight: "700" },
   cellUser: { flex: 1.5 },
   cell: { flex: 0.5 },
-  centerRow: { paddingVertical: 12, alignItems: "center", justifyContent: "center" },
+  centerRow: {
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   centerText: { textAlign: "center" },
   userCell: { flexDirection: "row", alignItems: "center", gap: 8 },
   avatar: { width: 28, height: 28, borderRadius: 999, marginRight: 8 },
