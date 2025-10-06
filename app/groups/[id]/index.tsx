@@ -27,9 +27,11 @@ type LiveWeeks = { nfl: number; cfb: number };
 
 const SEASON = 2025;
 
-/** Safely compute a “live” week for a league from the weeks table.
- * If nothing is open yet, fall back to the latest week of the season.
- * If the table is empty/missing, fall back to week 1.
+/** Robust “live week”:
+ *  - If a week is open (now ∈ [opens_at, closes_at)), return it.
+ *  - Else, use the next upcoming week (first with opens_at > now).
+ *  - Else, use the last week in the season.
+ *  - If the table is empty, return 1.
  */
 async function getLiveWeek(league: "nfl" | "cfb"): Promise<number> {
   const { data, error } = await supabase
@@ -47,10 +49,35 @@ async function getLiveWeek(league: "nfl" | "cfb"): Promise<number> {
   );
   if (open) return open.week_num as number;
 
+  const upcoming = data.find((w) => Date.parse(w.opens_at as any) > now);
+  if (upcoming) return upcoming.week_num as number;
+
   return (data[data.length - 1].week_num as number) ?? 1;
 }
 
+/** Count picks safely even if a sport/league column isn't available. */
+async function countPicksForWeek(groupId: string, week: number, sport: "nfl" | "cfb") {
+  // Base head-count query
+  const base = supabase
+    .from("picks")
+    .select("*", { count: "exact", head: true })
+    .eq("group_id", groupId)
+    .eq("week", week);
+
+  // Try sport filter (many schemas have it)
+  const withSport = await base.eq("sport", sport);
+  if (!withSport.error) return withSport.count ?? 0;
+
+  // If sport column doesn't exist (or is different), retry without it.
+  const fallback = await base;
+  return fallback.count ?? 0;
+}
+
 export default function GroupDetailPage() {
+  // top of component, before any effects
+  const { w } = useLocalSearchParams<{ w?: string }>();
+  const [week, setWeek] = useState<number>(w ? Number(w) : 1);
+
   const { id } = useLocalSearchParams<{ id?: string }>();
   const groupId = useMemo(() => (Array.isArray(id) ? id?.[0] : id) ?? "", [id]);
 
@@ -79,76 +106,57 @@ export default function GroupDetailPage() {
           .maybeSingle();
         if (g?.name) setGroupName(g.name);
 
-        // Resolve safe “live” weeks
+        // Resolve weeks
         const [nflW, cfbW] = await Promise.all([getLiveWeek("nfl"), getLiveWeek("cfb")]);
         setWeeks({ nfl: nflW, cfb: cfbW });
 
         // --- Members ---
-        // 1) Try consolidated view
-        const byView = await supabase
+        const viaView = await supabase
           .from("group_member_profiles")
           .select("user_id, role, joined_at, display_name, username, avatar_url")
           .eq("group_id", groupId)
           .order("joined_at", { ascending: true });
 
-        if (!byView.error && (byView.data?.length ?? 0) > 0) {
-          setMembers(byView.data as MemberRow[]);
+        if (!viaView.error && (viaView.data?.length ?? 0) > 0) {
+          setMembers(viaView.data as MemberRow[]);
         } else {
-          // 2) Fallback: group_members → profiles (two-step join)
-          const { data: gm, error: gmErr } = await supabase
+          const { data: gm } = await supabase
             .from("group_members")
             .select("user_id, role, joined_at")
             .eq("group_id", groupId)
             .order("joined_at", { ascending: true });
 
-          if (gmErr) {
-            setMembers([]);
-          } else {
-            const ids = [...new Set((gm ?? []).map((r) => r.user_id))];
-            let profiles: Record<string, { username: string | null; avatar_url: string | null }> =
-              {};
-            if (ids.length) {
-              const { data: pf } = await supabase
-                .from("profiles")
-                .select("id, username, avatar_url")
-                .in("id", ids);
-              for (const p of pf ?? []) {
-                profiles[p.id] = { username: p.username ?? null, avatar_url: p.avatar_url ?? null };
-              }
+          const ids = [...new Set((gm ?? []).map((r) => r.user_id))];
+          let profiles: Record<string, { username: string | null; avatar_url: string | null }> = {};
+          if (ids.length) {
+            const { data: pf } = await supabase
+              .from("profiles")
+              .select("id, username, avatar_url")
+              .in("id", ids);
+            for (const p of pf ?? []) {
+              profiles[p.id] = {
+                username: p.username ?? null,
+                avatar_url: p.avatar_url ?? null,
+              };
             }
-            const mapped: MemberRow[] = (gm ?? []).map((r: any) => ({
-              user_id: r.user_id,
-              role: r.role ?? null,
-              joined_at: r.joined_at ?? null,
-              display_name: profiles[r.user_id]?.username ?? r.user_id,
-              username: profiles[r.user_id]?.username ?? null,
-              avatar_url: profiles[r.user_id]?.avatar_url ?? null,
-            }));
-            setMembers(mapped);
           }
+          const mapped: MemberRow[] = (gm ?? []).map((r: any) => ({
+            user_id: r.user_id,
+            role: r.role ?? null,
+            joined_at: r.joined_at ?? null,
+            display_name: profiles[r.user_id]?.username ?? r.user_id,
+            username: profiles[r.user_id]?.username ?? null,
+            avatar_url: profiles[r.user_id]?.avatar_url ?? null,
+          }));
+          setMembers(mapped);
         }
 
-        // --- Counts ---
-        // NFL
-        const nflHead = await supabase
-          .from("picks")
-          .select("*", { count: "exact", head: true })
-          .eq("group_id", groupId)
-          .eq("week", nflW)
-          .or("sport.eq.nfl,league.eq.nfl"); // support enum or legacy column
-        if (nflHead.error) setBanner((b) => (b ? b + " | " : "") + `[NFL] ${nflHead.error.message}`);
-        // The count is exposed on `count` for head requests
-        setCounts((c) => ({ ...c, nfl: nflHead.count ?? 0 }));
-
-        // CFB
-        const cfbHead = await supabase
-          .from("picks")
-          .select("*", { count: "exact", head: true })
-          .eq("group_id", groupId)
-          .eq("week", cfbW)
-          .or("sport.eq.cfb,league.eq.cfb");
-        if (cfbHead.error) setBanner((b) => (b ? b + " | " : "") + `[CFB] ${cfbHead.error.message}`);
-        setCounts((c) => ({ ...c, cfb: cfbHead.count ?? 0 }));
+        // --- Counts (no more schema errors) ---
+        const [nflCount, cfbCount] = await Promise.all([
+          countPicksForWeek(groupId, nflW, "nfl"),
+          countPicksForWeek(groupId, cfbW, "cfb"),
+        ]);
+        setCounts({ nfl: nflCount, cfb: cfbCount });
       } catch (e: any) {
         console.error("[groups] load error", e);
         setBanner(String(e?.message || e));
@@ -207,7 +215,7 @@ export default function GroupDetailPage() {
                     <Text>{name}</Text>
                   </View>
                 </View>
-                {/* Group-wide weekly totals for now (per-user breakdown later) */}
+                {/* For now we show group totals; per-user row can be added next */}
                 <Text style={[styles.cell, styles.centerText]}>{counts.cfb}</Text>
                 <Text style={[styles.cell, styles.centerText]}>{counts.nfl}</Text>
               </View>
@@ -224,7 +232,12 @@ export default function GroupDetailPage() {
         <Text style={styles.h3}>College Football</Text>
         <Pressable
           style={styles.cta}
-          onPress={() => router.push({ pathname: "/picks/college", params: { group: groupId } })}
+          onPress={() =>
+            router.push({
+              pathname: "/picks/college",
+              params: { group: groupId, w: String(weeks.cfb) },
+            })
+          }
         >
           <Text style={styles.ctaText}>Go to CFB picks</Text>
         </Pressable>
@@ -232,7 +245,12 @@ export default function GroupDetailPage() {
         <Text style={[styles.h3, { marginTop: 18 }]}>NFL</Text>
         <Pressable
           style={styles.cta}
-          onPress={() => router.push({ pathname: "/picks/page", params: { group: groupId } })}
+          onPress={() =>
+            router.push({
+              pathname: "/picks/page",
+              params: { group: groupId, w: String(weeks.nfl) },
+            })
+          }
         >
           <Text style={styles.ctaText}>Go to NFL picks</Text>
         </Pressable>
