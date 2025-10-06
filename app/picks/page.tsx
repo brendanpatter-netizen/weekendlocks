@@ -157,55 +157,71 @@ export default function PicksNFL() {
   const labelFor = (type: BetType, o: any) =>
     type === "spreads" ? `${o.name} ${o.point}` : type === "h2h" ? `${o.name} ML` : `${o.name} ${o.point}`;
 
-  // ---------- INSERT (no upsert) with strong logging ----------
-  const savePick = async (oddsGame: any, type: BetType, o: any) => {
-    if (!userId) {
-      Alert.alert("Sign in required", "Please sign in to save picks.");
-      return router.push(groupId ? `/groups/${groupId}` : "/groups");
-    }
-    if (!isOpen) Alert.alert("Heads up", openLabel);
+const savePick = async (oddsGame: any, type: BetType, o: any) => {
+  if (!userId) {
+    Alert.alert("Sign in required", "Please sign in to save picks.");
+    return router.push(groupId ? `/groups/${groupId}` : "/groups");
+  }
+  if (!isOpen) Alert.alert("Heads up", openLabel);
 
-    const key = `${normTeamNFL(oddsGame.away_team)}@${normTeamNFL(oddsGame.home_team)}`;
-    const mappedId = gameMap[key];
+  const key = `${normTeamNFL(oddsGame.away_team)}@${normTeamNFL(oddsGame.home_team)}`;
+  const mappedId = gameMap[key];
 
-    const label = labelFor(type, o);
-    if (mappedId) setSaving(mappedId);
+  // If the matchup isn't linked to your games table, don't attempt to insert.
+  if (!mappedId) {
+    Alert.alert(
+      "Not linked to games table",
+      "This matchup isn’t linked to a row in your games table yet, so it can’t be saved to the group."
+    );
+    return;
+  }
 
-    const row = {
-      user_id: userId,
-      group_id: groupId ?? null,
-      sport: "nfl",
-      week,
-      game_id: mappedId ?? null,
-      pick_team: label,
-      pick_market: type,
-      pick_side: String(o.name),
-      pick_line: o.point != null ? Number(o.point) : null,
-      pick_price: typeof o.price === "number" ? o.price : null,
-      status: "pending",
-      created_at: new Date().toISOString(),
-    };
+  const label =
+    type === "spreads" ? `${o.name} ${o.point}` :
+    type === "h2h"     ? `${o.name} ML` :
+                         `${o.name} ${o.point}`;
 
-    console.log("[NFL] saving pick", { key, mappedId, row });
-
-    try {
-      const { error } = await supabase.from("picks").insert(row);
-      if (error) {
-        console.error("[NFL] insert error", error);
-        Alert.alert("Save failed", `${error.message}\n\n${JSON.stringify(error, null, 2)}`);
-        return;
-      }
-      if (mappedId) setMyPicks((m) => ({ ...m, [mappedId]: label }));
-      events.emitPickSaved({ league: "nfl", week, game_id: mappedId ?? null, user_id: userId!, pick_team: label, group_id: groupId ?? null });
-      Alert.alert("Saved", `Added ${label} to Week ${week}${groupId ? " (group)" : " (solo)"}.`);
-    } catch (e: any) {
-      console.error("[NFL] unexpected save error", e);
-      Alert.alert("Error", String(e?.message || e));
-    } finally {
-      setSaving(null);
-      router.push(groupId ? `/groups/${groupId}` : "/groups");
-    }
+  // Insert ONLY the columns your table has
+  const row = {
+    user_id: userId,
+    group_id: groupId ?? null, // OK if group_id is nullable; otherwise require group
+    sport: "nfl",
+    week,
+    game_id: mappedId,
+    pick_team: label,
+    created_at: new Date().toISOString(),
   };
+
+  console.log("[NFL] insert row", row);
+
+  setSaving(mappedId);
+  try {
+    const { error } = await supabase.from("picks").insert(row);
+    if (error) {
+      console.error("[NFL] insert error", error);
+      Alert.alert("Save failed", error.message);
+      return;
+    }
+
+    setMyPicks((m) => ({ ...m, [mappedId]: label }));
+    events.emitPickSaved({
+      league: "nfl",
+      week,
+      game_id: mappedId,
+      user_id: userId!,
+      pick_team: label,
+      group_id: groupId ?? null,
+    });
+
+    Alert.alert("Saved", `Added ${label} to Week ${week}${groupId ? " (group)" : ""}.`);
+  } catch (e: any) {
+    console.error("[NFL] unexpected save error", e);
+    Alert.alert("Error", String(e?.message || e));
+  } finally {
+    setSaving(null);
+    router.push(groupId ? `/groups/${groupId}` : "/groups");
+  }
+};
   // ------------------------------------------------------------
 
   const goToSelectedGroup = () => {
