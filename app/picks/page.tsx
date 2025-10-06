@@ -33,7 +33,7 @@ function Tab({ label, active, disabled, onPress }: { label: string; active: bool
 export default function PicksNFL() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const groupId = typeof params.group === "string" ? params.group : undefined; // current group context (optional)
+  const groupId = typeof params.group === "string" ? params.group : undefined;
 
   const [week, setWeek] = useState<number>(getCurrentWeek?.() ?? 1);
   const [betType, setBetType] = useState<BetType>("spreads");
@@ -45,7 +45,6 @@ export default function PicksNFL() {
   const [saving, setSaving] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // “Set Group Context” banner state
   const [groups, setGroups] = useState<Group[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [pickedGroupId, setPickedGroupId] = useState<string | undefined>(undefined);
@@ -56,13 +55,11 @@ export default function PicksNFL() {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
   }, []);
 
-  // Load user's groups only when we *don't* already have group context
   useEffect(() => {
     if (groupId) return;
     (async () => {
       try {
         setGroupsLoading(true);
-        // 1) memberships
         const { data: mems, error: memErr } = await supabase
           .from("group_members")
           .select("group_id")
@@ -72,7 +69,6 @@ export default function PicksNFL() {
         const ids = Array.from(new Set((mems ?? []).map((m: any) => m.group_id))).filter(Boolean);
         if (!ids.length) { setGroups([]); return; }
 
-        // 2) groups
         const { data: gs, error: gErr } = await supabase
           .from("groups")
           .select("id,name")
@@ -81,7 +77,6 @@ export default function PicksNFL() {
 
         setGroups((gs ?? []) as Group[]);
       } catch {
-        // best-effort; banner still shows “Browse Groups”
         setGroups([]);
       } finally {
         setGroupsLoading(false);
@@ -96,7 +91,7 @@ export default function PicksNFL() {
       const { data: w, error: wErr } = await supabase
         .from("weeks")
         .select("*")
-        .eq("league", "nfl") // enum label
+        .eq("league", "nfl")
         .eq("season", SEASON)
         .eq("week_num", week)
         .maybeSingle();
@@ -162,52 +157,56 @@ export default function PicksNFL() {
   const labelFor = (type: BetType, o: any) =>
     type === "spreads" ? `${o.name} ${o.point}` : type === "h2h" ? `${o.name} ML` : `${o.name} ${o.point}`;
 
+  // ---------- INSERT (no upsert) with strong logging ----------
   const savePick = async (oddsGame: any, type: BetType, o: any) => {
     if (!userId) {
       Alert.alert("Sign in required", "Please sign in to save picks.");
       return router.push(groupId ? `/groups/${groupId}` : "/groups");
     }
-    if (!isOpen) { Alert.alert("Heads up", openLabel); }
+    if (!isOpen) Alert.alert("Heads up", openLabel);
 
     const key = `${normTeamNFL(oddsGame.away_team)}@${normTeamNFL(oddsGame.home_team)}`;
     const mappedId = gameMap[key];
 
     const label = labelFor(type, o);
     if (mappedId) setSaving(mappedId);
-    try {
-      if (mappedId) {
-        const row = {
-          user_id: userId,
-          group_id: groupId ?? null,
-          game_id: mappedId,
-          sport: "nfl",
-          week,
-          pick_team: label,
-          pick_market: type,
-          pick_side: String(o.name),
-          pick_line: o.point != null ? Number(o.point) : null,
-          pick_price: typeof o.price === "number" ? o.price : null,
-          status: "pending",
-          created_at: new Date().toISOString(),
-        };
 
-        const conflict = groupId ? "user_id,group_id,game_id" : "user_id,game_id";
-        const { error: upErr } = await supabase.from("picks").upsert(row, { onConflict: conflict });
-        if (upErr) Alert.alert("Save failed", upErr.message);
-        else {
-          setMyPicks((m) => ({ ...m, [mappedId]: label }));
-          events.emitPickSaved({ league: "nfl", week, game_id: mappedId, user_id: userId!, pick_team: label, group_id: groupId ?? null });
-        }
-      } else {
-        Alert.alert("Heads up", "This matchup isn’t linked in your games table yet, but you can continue in your group.");
+    const row = {
+      user_id: userId,
+      group_id: groupId ?? null,
+      sport: "nfl",
+      week,
+      game_id: mappedId ?? null,
+      pick_team: label,
+      pick_market: type,
+      pick_side: String(o.name),
+      pick_line: o.point != null ? Number(o.point) : null,
+      pick_price: typeof o.price === "number" ? o.price : null,
+      status: "pending",
+      created_at: new Date().toISOString(),
+    };
+
+    console.log("[NFL] saving pick", { key, mappedId, row });
+
+    try {
+      const { error } = await supabase.from("picks").insert(row);
+      if (error) {
+        console.error("[NFL] insert error", error);
+        Alert.alert("Save failed", `${error.message}\n\n${JSON.stringify(error, null, 2)}`);
+        return;
       }
+      if (mappedId) setMyPicks((m) => ({ ...m, [mappedId]: label }));
+      events.emitPickSaved({ league: "nfl", week, game_id: mappedId ?? null, user_id: userId!, pick_team: label, group_id: groupId ?? null });
+      Alert.alert("Saved", `Added ${label} to Week ${week}${groupId ? " (group)" : " (solo)"}.`);
     } catch (e: any) {
+      console.error("[NFL] unexpected save error", e);
       Alert.alert("Error", String(e?.message || e));
     } finally {
       setSaving(null);
       router.push(groupId ? `/groups/${groupId}` : "/groups");
     }
   };
+  // ------------------------------------------------------------
 
   const goToSelectedGroup = () => {
     if (pickedGroupId) {
@@ -235,11 +234,7 @@ export default function PicksNFL() {
               <Text style={{ opacity: 0.7 }}>Loading your groups…</Text>
             ) : groups.length ? (
               <>
-                <Picker
-                  selectedValue={pickedGroupId}
-                  onValueChange={(v) => setPickedGroupId(String(v))}
-                  style={{ marginBottom: 8 }}
-                >
+                <Picker selectedValue={pickedGroupId} onValueChange={(v) => setPickedGroupId(String(v))} style={{ marginBottom: 8 }}>
                   <Picker.Item label="Choose a group…" value={undefined} />
                   {groups.map((g) => <Picker.Item key={g.id} label={g.name || g.id} value={g.id} />)}
                 </Picker>

@@ -153,6 +153,7 @@ export default function PicksCollege() {
   const labelFor = (type: BetType, o: any) =>
     type === "spreads" ? `${o.name} ${o.point}` : type === "h2h" ? `${o.name} ML` : `${o.name} ${o.point}`;
 
+  // ---------- INSERT (no upsert) with strong logging ----------
   const savePick = async (oddsGame: any, type: BetType, o: any) => {
     if (!userId)  { Alert.alert("Sign in required", "Please sign in to save picks."); return router.push(groupId ? `/groups/${groupId}` : "/groups"); }
     if (!isOpen)  { Alert.alert("Heads up", openLabel); }
@@ -162,39 +163,43 @@ export default function PicksCollege() {
 
     const label = labelFor(type, o);
     if (mappedId) setSaving(mappedId);
+
+    const row = {
+      user_id: userId,
+      group_id: groupId ?? null,
+      sport: "cfb",
+      week,
+      game_id: mappedId ?? null,
+      pick_team: label,
+      pick_market: type,
+      pick_side: String(o.name),
+      pick_line: o.point != null ? Number(o.point) : null,
+      pick_price: typeof o.price === "number" ? o.price : null,
+      status: "pending",
+      created_at: new Date().toISOString(),
+    };
+
+    console.log("[CFB] saving pick", { key, mappedId, row });
+
     try {
-      if (mappedId) {
-        const row = {
-          user_id: userId,
-          group_id: groupId ?? null,
-          game_id: mappedId,
-          sport: "cfb",
-          week,
-          pick_team: label,
-          pick_market: type,
-          pick_side: String(o.name),
-          pick_line: o.point != null ? Number(o.point) : null,
-          pick_price: typeof o.price === "number" ? o.price : null,
-          status: "pending",
-          created_at: new Date().toISOString(),
-        };
-        const conflict = groupId ? "user_id,group_id,game_id" : "user_id,game_id";
-        const { error: upErr } = await supabase.from("picks").upsert(row, { onConflict: conflict });
-        if (upErr) Alert.alert("Save failed", upErr.message);
-        else {
-          setMyPicks((m) => ({ ...m, [mappedId]: label }));
-          events.emitPickSaved({ league: "cfb", week, game_id: mappedId, user_id: userId!, pick_team: label, group_id: groupId ?? null });
-        }
-      } else {
-        Alert.alert("Heads up", "This matchup isn’t linked in your games table yet, but you can continue in your group.");
+      const { error } = await supabase.from("picks").insert(row);
+      if (error) {
+        console.error("[CFB] insert error", error);
+        Alert.alert("Save failed", `${error.message}\n\n${JSON.stringify(error, null, 2)}`);
+        return;
       }
+      if (mappedId) setMyPicks((m) => ({ ...m, [mappedId]: label }));
+      events.emitPickSaved({ league: "cfb", week, game_id: mappedId ?? null, user_id: userId!, pick_team: label, group_id: groupId ?? null });
+      Alert.alert("Saved", `Added ${label} to Week ${week}${groupId ? " (group)" : " (solo)"}.`);
     } catch (e: any) {
+      console.error("[CFB] unexpected save error", e);
       Alert.alert("Error", String(e?.message || e));
     } finally {
       setSaving(null);
       router.push(groupId ? `/groups/${groupId}` : "/groups");
     }
   };
+  // ------------------------------------------------------------
 
   const goToSelectedGroup = () => {
     if (pickedGroupId) router.replace({ pathname: "/picks/college", params: { group: pickedGroupId } });
@@ -203,144 +208,109 @@ export default function PicksCollege() {
   if (loading) return <ActivityIndicator style={styles.center} size="large" />;
   if (error)   return <Text style={styles.center}>Error: {error.message}</Text>;
 
-return (
-  <ScrollView contentContainerStyle={styles.container}>
-    <View style={styles.headerRow}>
-      <Text style={styles.title}>College Football — Week {week}</Text>
-      <Link
-        href={{ pathname: "/picks/page", params: groupId ? { group: groupId } : {} }}
-        style={styles.switch}
-      >
-        NFL ↗︎
-      </Link>
-    </View>
-
-    <Text style={[styles.badge, isOpen ? styles.badgeOpen : styles.badgeClosed]}>
-      {openLabel}
-    </Text>
-
-    {!groupId && (
-      <View style={styles.groupBanner}>
-        <Text style={styles.groupBannerTitle}>Save picks to a group?</Text>
-        <View style={{ marginTop: 6 }}>
-          {groupsLoading ? (
-            <Text style={{ opacity: 0.7 }}>Loading your groups…</Text>
-          ) : groups.length ? (
-            <>
-              <Picker
-                selectedValue={pickedGroupId}
-                onValueChange={(v) => setPickedGroupId(String(v))}
-                style={{ marginBottom: 8 }}
-              >
-                <Picker.Item label="Choose a group…" value={undefined} />
-                {groups.map((g) => (
-                  <Picker.Item key={g.id} label={g.name || g.id} value={g.id} />
-                ))}
-              </Picker>
-              <Pressable
-                style={styles.groupApplyBtn}
-                onPress={goToSelectedGroup}
-                disabled={!pickedGroupId}
-              >
-                <Text style={styles.groupApplyText}>Use this group</Text>
-              </Pressable>
-            </>
-          ) : (
-            <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
-              <Text style={{ flex: 1, opacity: 0.8 }}>
-                You’re in solo mode. Pick a group to save within it.
-              </Text>
-              <Link href="/groups" style={styles.groupBrowseLink}>
-                Browse Groups
-              </Link>
-            </View>
-          )}
-        </View>
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>College Football — Week {week}</Text>
+        <Link href={{ pathname: "/picks/page", params: groupId ? { group: groupId } : {} }} style={styles.switch}>NFL ↗︎</Link>
       </View>
-    )}
 
-    <Picker selectedValue={week} onValueChange={(v) => setWeek(Number(v))} style={{ marginBottom: 12 }}>
-      {Array.from({ length: 15 }).map((_, i) => (
-        <Picker.Item key={i + 1} label={`Week ${i + 1}`} value={i + 1} />
-      ))}
-    </Picker>
+      <Text style={[styles.badge, isOpen ? styles.badgeOpen : styles.badgeClosed]}>{openLabel}</Text>
 
-    <View style={styles.tabsRow}>
-      <Tab label="SPREADS" active={betType === "spreads"} disabled={!marketHas.spreads} onPress={() => setBetType("spreads")} />
-      <Tab label="TOTALS" active={betType === "totals"} disabled={!marketHas.totals} onPress={() => setBetType("totals")} />
-      <Tab label="H2H" active={betType === "h2h"} disabled={!marketHas.h2h} onPress={() => setBetType("h2h")} />
-    </View>
-
-    {!!notice && <Text style={styles.warn}>{notice}</Text>}
-
-    {!data?.length ? (
-      <View style={styles.center}>
-        <Text>No games found for week {week}.</Text>
-      </View>
-    ) : (
-      data.map((game: any) => {
-        const book = game.bookmakers?.[0];
-        const market = book?.markets?.find((m: any) => m.key === betType);
-        if (!market) return null;
-
-        const mappedId =
-          gameMap[`${normTeamCFB(game.away_team)}@${normTeamCFB(game.home_team)}`];
-
-        return (
-          <View key={game.id} style={styles.card}>
-            <View style={styles.logosRow}>
-              <Image source={logoSrc(game.away_team, "ncaaf")} style={styles.logo} />
-              <Text style={styles.vs}>@</Text>
-              <Image source={logoSrc(game.home_team, "ncaaf")} style={styles.logo} />
-            </View>
-
-            <Text style={styles.match}>
-              {game.away_team} @ {game.home_team}
-            </Text>
-            <Text style={styles.kick}>
-              {new Date(game.commence_time).toLocaleString()}
-            </Text>
-
-            <View style={{ marginTop: 8 }}>
-              {(market.outcomes ?? []).map((o: any, idx: number) => {
-                const label =
-                  betType === "spreads"
-                    ? `${o.name} ${o.point}`
-                    : betType === "h2h"
-                    ? `${o.name} ML`
-                    : `${o.name} ${o.point}`;
-
-                const isMine = mappedId ? myPicks[mappedId] === label : false;
-                const disabled = saving === mappedId;
-
-                return (
-                  <View key={o.name + String(o.point ?? "") + idx} style={{ marginTop: idx ? 8 : 0 }}>
-                    <Pressable
-                      disabled={disabled}
-                      onPress={() => savePick(game, betType, o)}
-                      style={
-                        isMine
-                          ? [styles.pickBtn, styles.pickBtnActive]
-                          : disabled
-                          ? [styles.pickBtn, styles.pickBtnDisabled]
-                          : styles.pickBtn
-                      }
-                    >
-                      <Text style={isMine ? [styles.pickText, styles.pickTextActive] : styles.pickText}>
-                        {label}
-                        {typeof o.price === "number" ? `  (${o.price > 0 ? `+${o.price}` : o.price})` : ""}
-                      </Text>
-                    </Pressable>
-                  </View>
-                );
-              })}
-            </View>
+      {!groupId && (
+        <View style={styles.groupBanner}>
+          <Text style={styles.groupBannerTitle}>Save picks to a group?</Text>
+          <View style={{ marginTop: 6 }}>
+            {groupsLoading ? (
+              <Text style={{ opacity: 0.7 }}>Loading your groups…</Text>
+            ) : groups.length ? (
+              <>
+                <Picker selectedValue={pickedGroupId} onValueChange={(v) => setPickedGroupId(String(v))} style={{ marginBottom: 8 }}>
+                  <Picker.Item label="Choose a group…" value={undefined} />
+                  {groups.map((g) => (<Picker.Item key={g.id} label={g.name || g.id} value={g.id} />))}
+                </Picker>
+                <Pressable style={styles.groupApplyBtn} onPress={goToSelectedGroup} disabled={!pickedGroupId}>
+                  <Text style={styles.groupApplyText}>Use this group</Text>
+                </Pressable>
+              </>
+            ) : (
+              <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+                <Text style={{ flex: 1, opacity: 0.8 }}>You’re in solo mode. Pick a group to save within it.</Text>
+                <Link href="/groups" style={styles.groupBrowseLink}>Browse Groups</Link>
+              </View>
+            )}
           </View>
-        );
-      })
-    )}
-  </ScrollView>
-);
+        </View>
+      )}
+
+      <Picker selectedValue={week} onValueChange={(v) => setWeek(Number(v))} style={{ marginBottom: 12 }}>
+        {Array.from({ length: 15 }).map((_, i) => (
+          <Picker.Item key={i + 1} label={`Week ${i + 1}`} value={i + 1} />
+        ))}
+      </Picker>
+
+      <View style={styles.tabsRow}>
+        <Tab label="SPREADS" active={betType === "spreads"} disabled={!marketHas.spreads} onPress={() => setBetType("spreads")} />
+        <Tab label="TOTALS" active={betType === "totals"} disabled={!marketHas.totals} onPress={() => setBetType("totals")} />
+        <Tab label="H2H" active={betType === "h2h"} disabled={!marketHas.h2h} onPress={() => setBetType("h2h")} />
+      </View>
+
+      {!!notice && <Text style={styles.warn}>{notice}</Text>}
+
+      {!data?.length ? (
+        <View style={styles.center}><Text>No games found for week {week}.</Text></View>
+      ) : (
+        data.map((game: any) => {
+          const book = game.bookmakers?.[0];
+          const market = book?.markets?.find((m: any) => m.key === betType);
+          if (!market) return null;
+
+          const mappedId = gameMap[`${normTeamCFB(game.away_team)}@${normTeamCFB(game.home_team)}`];
+
+          return (
+            <View key={game.id} style={styles.card}>
+              <View style={styles.logosRow}>
+                <Image source={logoSrc(game.away_team, "ncaaf")} style={styles.logo} />
+                <Text style={styles.vs}>@</Text>
+                <Image source={logoSrc(game.home_team, "ncaaf")} style={styles.logo} />
+              </View>
+
+              <Text style={styles.match}>{game.away_team} @ {game.home_team}</Text>
+              <Text style={styles.kick}>{new Date(game.commence_time).toLocaleString()}</Text>
+
+              <View style={{ marginTop: 8 }}>
+                {(market.outcomes ?? []).map((o: any, idx: number) => {
+                  const label = labelFor(betType, o);
+                  const isMine = mappedId ? myPicks[mappedId] === label : false;
+                  const disabled = saving === mappedId;
+
+                  return (
+                    <View key={o.name + String(o.point ?? "") + idx} style={{ marginTop: idx ? 8 : 0 }}>
+                      <Pressable
+                        disabled={disabled}
+                        onPress={() => savePick(game, betType, o)}
+                        style={
+                          isMine
+                            ? [styles.pickBtn, styles.pickBtnActive]
+                            : disabled
+                            ? [styles.pickBtn, styles.pickBtnDisabled]
+                            : styles.pickBtn
+                        }
+                      >
+                        <Text style={isMine ? [styles.pickText, styles.pickTextActive] : styles.pickText}>
+                          {label}{typeof o.price === "number" ? `  (${o.price > 0 ? `+${o.price}` : o.price})` : ""}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          );
+        })
+      )}
+    </ScrollView>
+  );
 }
 
 const styles = StyleSheet.create({
