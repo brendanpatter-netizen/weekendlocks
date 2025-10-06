@@ -1,42 +1,70 @@
+// lib/recordPick.ts
 import { supabase } from "@/lib/supabase";
 
-type Sport = "nfl" | "cfb";
+export type BetType = "spread" | "total" | "h2h";
 
-export async function recordPick(opts: {
-  gameId: number;
-  pickTeam: string;        // e.g. "PHI -6.5 (-110)" or "DAL ML"
-  sport: Sport;            // "nfl" | "cfb"
+type SavePickExtras = {
+  groupId?: string;            // optional if saving solo
+  league: "nfl" | "cfb";
   week: number;
-  groupId?: string | null; // omit or null for solo/homepage
-  market?: "spreads" | "totals" | "h2h";
-  side?: string | null;    // "PHI" or "DAL", etc
-  line?: number | null;    //  -6.5 / 50.5 / null
-  price?: number | null;   //  -110 / +120 / null
-}) {
-  const { gameId, pickTeam, week, groupId, market, side, line, price } = opts;
-  const sport = opts.sport.toLowerCase() as Sport;
+};
 
-  const { data: u } = await supabase.auth.getUser();
-  const user_id = u.user?.id;
-  if (!user_id) throw new Error("Sign in required");
+/**
+ * Minimal shape we need from your odds row. Your page already has these fields.
+ */
+type OddsPointPrice = {
+  point?: number | null;
+  price?: number | null;
+};
 
+type OddsGame = {
+  id: string | number;          // your mapped game id
+  name?: string;                // e.g., "CLE Browns -3.5 (-110)"
+  o?: OddsPointPrice;           // selected market point/price
+  label: string;                // team label you already compute (e.g., "Browns -3.5")
+};
+
+export async function savePick(
+  oddsGame: OddsGame,
+  type: BetType,
+  extras: SavePickExtras
+): Promise<true> {
+  const { groupId, league, week } = extras;
+
+  // who is saving?
+  const { data: userRes, error: userErr } = await supabase.auth.getUser();
+  if (userErr || !userRes.user?.id) {
+    throw new Error("Not signed in.");
+  }
+  const userId = userRes.user.id;
+
+  // build row
   const row = {
-    user_id,
+    user_id: userId,
     group_id: groupId ?? null,
-    game_id: gameId,
+    sport: league,                      // your table uses 'sport'
     week,
-    sport,
-    pick_team: pickTeam,
-    pick_market: market ?? null,
-    pick_side: side ?? null,
-    pick_line: line ?? null,
-    pick_price: typeof price === "number" ? price : null,
-    status: "pending" as const,
+    game_id: String(oddsGame.id),
+    pick_side: String(oddsGame.name ?? type),
+    pick_line:
+      oddsGame.o && oddsGame.o.point != null ? Number(oddsGame.o.point) : null,
+    pick_price:
+      oddsGame.o && typeof oddsGame.o.price === "number"
+        ? oddsGame.o.price
+        : null,
+    pick_team: oddsGame.label,
+    status: "pending",
     created_at: new Date().toISOString(),
   };
 
-  // Use the right conflict target based on solo vs group
-  const conflict = groupId ? "user_id,group_id,game_id" : "user_id,game_id";
-  const { error } = await supabase.from("picks").upsert(row, { onConflict: conflict });
+  // upsert so same user can only have one pick per game per group
+  const { error } = await supabase
+    .from("picks")
+    .upsert(row, {
+      onConflict: "user_id,group_id,game_id",
+    });
+
   if (error) throw error;
+
+  return true;
 }
