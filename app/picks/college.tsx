@@ -1,3 +1,4 @@
+// app/picks/college.tsx
 export const unstable_settings = { prerender: false };
 
 import { useEffect, useMemo, useState } from "react";
@@ -153,71 +154,69 @@ export default function PicksCollege() {
   const labelFor = (type: BetType, o: any) =>
     type === "spreads" ? `${o.name} ${o.point}` : type === "h2h" ? `${o.name} ML` : `${o.name} ${o.point}`;
 
- const savePick = async (oddsGame: any, type: BetType, o: any) => {
-  if (!userId) {
-    Alert.alert("Sign in required", "Please sign in to save picks.");
-    return router.push(groupId ? `/groups/${groupId}` : "/groups");
-  }
-  if (!isOpen) Alert.alert("Heads up", openLabel);
+  const savePick = async (oddsGame: any, type: BetType, o: any) => {
+    if (!userId) {
+      Alert.alert("Sign in required", "Please sign in to save picks.");
+      return router.push(groupId ? `/groups/${groupId}` : "/groups");
+    }
+    if (!isOpen) Alert.alert("Heads up", openLabel);
 
-  const key = `${normTeamCFB(oddsGame.away_team)}@${normTeamCFB(oddsGame.home_team)}`;
-  const mappedId = gameMap[key];
+    const key = `${normTeamCFB(oddsGame.away_team)}@${normTeamCFB(oddsGame.home_team)}`;
+    const mappedId = gameMap[key];
 
-  if (!mappedId) {
-    Alert.alert(
-      "Not linked to games table",
-      "This matchup isn’t linked to a row in your games table yet, so it can’t be saved to the group."
-    );
-    return;
-  }
-
-  const label =
-    type === "spreads" ? `${o.name} ${o.point}` :
-    type === "h2h"     ? `${o.name} ML` :
-                         `${o.name} ${o.point}`;
-
-  const row = {
-    user_id: userId,
-    group_id: groupId ?? null,
-    sport: "cfb",
-    week,
-    game_id: mappedId,
-    pick_team: label,
-    created_at: new Date().toISOString(),
-  };
-
-  console.log("[CFB] insert row", row);
-
-  setSaving(mappedId);
-  try {
-    const { error } = await supabase.from("picks").insert(row);
-    if (error) {
-      console.error("[CFB] insert error", error);
-      Alert.alert("Save failed", error.message);
+    if (!mappedId) {
+      Alert.alert(
+        "Not linked to games table",
+        "This matchup isn’t linked to a row in your games table yet, so it can’t be saved to the group."
+      );
       return;
     }
 
-    setMyPicks((m) => ({ ...m, [mappedId]: label }));
-    events.emitPickSaved({
-      league: "cfb",
+    const label =
+      type === "spreads" ? `${o.name} ${o.point}` :
+      type === "h2h"     ? `${o.name} ML` :
+                           `${o.name} ${o.point}`;
+
+    const row = {
+      user_id: userId,
+      group_id: groupId ?? null,
+      sport: "cfb",
       week,
       game_id: mappedId,
-      user_id: userId!,
       pick_team: label,
-      group_id: groupId ?? null,
-    });
+      created_at: new Date().toISOString(),
+    };
 
-    Alert.alert("Saved", `Added ${label} to Week ${week}${groupId ? " (group)" : ""}.`);
-  } catch (e: any) {
-    console.error("[CFB] unexpected save error", e);
-    Alert.alert("Error", String(e?.message || e));
-  } finally {
-    setSaving(null);
-    router.push(groupId ? `/groups/${groupId}` : "/groups");
-  }
-};
+    console.log("[CFB] insert row", row);
 
-  // ------------------------------------------------------------
+    setSaving(mappedId);
+    try {
+      const { error } = await supabase.from("picks").insert(row);
+      if (error) {
+        console.error("[CFB] insert error", error);
+        Alert.alert("Save failed", error.message);
+        return;
+      }
+
+      setMyPicks((m) => ({ ...m, [mappedId]: label }));
+      events.emitPickSaved({
+        league: "cfb",
+        week,
+        game_id: mappedId,
+        user_id: userId!,
+        pick_team: label,
+        group_id: groupId ?? null,
+      });
+
+      Alert.alert("Saved", `Added ${label} to Week ${week}${groupId ? " (group)" : ""}.`);
+    } catch (e: any) {
+      console.error("[CFB] unexpected save error", e);
+      Alert.alert("Error", String(e?.message || e));
+    } finally {
+      setSaving(null);
+      router.push(groupId ? `/groups/${groupId}` : "/groups");
+    }
+  };
 
   const goToSelectedGroup = () => {
     if (pickedGroupId) router.replace({ pathname: "/picks/college", params: { group: pickedGroupId } });

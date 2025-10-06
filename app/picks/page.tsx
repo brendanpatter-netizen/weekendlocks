@@ -1,3 +1,4 @@
+// app/picks/college.tsx
 export const unstable_settings = { prerender: false };
 
 import { useEffect, useMemo, useState } from "react";
@@ -8,21 +9,23 @@ import { supabase } from "@/lib/supabase";
 import { events } from "@/lib/events";
 import { useOdds } from "@/lib/useOdds";
 import { logoSrc } from "@/lib/teamLogos";
-import { getCurrentWeek } from "@/lib/nflWeeks";
+import { getCurrentCfbWeek } from "@/lib/cfbWeeks";
 
 type BetType = "spreads" | "totals" | "h2h";
-const NFL_SPORT_KEY = "americanfootball_nfl";
+const CFB_SPORT_KEY = "americanfootball_ncaaf";
 const SEASON = 2025;
 
 type Group = { id: string; name: string };
 
-function normTeamNFL(name: string) {
-  const raw = name.toLowerCase().replace(/[^\w\s-]/g, "").trim();
-  const parts = raw.split(/\s+/);
-  return parts[parts.length - 1];
+const STOP = new Set(["the","of","and","university","state","st","tech","at","&","a","b","c","d","e"]);
+function normTeamCFB(name: string) {
+  const raw = name.toLowerCase().replace(/[^\w\s-]/g, " ").replace(/\s+/g, " ").trim();
+  const words = raw.split(" ").filter((w) => !STOP.has(w));
+  const last = words[words.length - 1] || raw;
+  return last;
 }
 
-function Tab({ label, active, disabled, onPress }: { label: string; active: boolean; disabled?: boolean; onPress: () => void }) {
+function Tab({ label, active, disabled, onPress }:{label:string;active:boolean;disabled?:boolean;onPress:()=>void}) {
   return (
     <Pressable onPress={onPress} disabled={disabled} style={[styles.tab, active && styles.tabActive, disabled && styles.tabDisabled]}>
       <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
@@ -30,12 +33,12 @@ function Tab({ label, active, disabled, onPress }: { label: string; active: bool
   );
 }
 
-export default function PicksNFL() {
+export default function PicksCollege() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const groupId = typeof params.group === "string" ? params.group : undefined;
 
-  const [week, setWeek] = useState<number>(getCurrentWeek?.() ?? 1);
+  const [week, setWeek] = useState<number>(getCurrentCfbWeek?.() ?? 1);
   const [betType, setBetType] = useState<BetType>("spreads");
 
   const [userId, setUserId] = useState<string | null>(null);
@@ -49,11 +52,9 @@ export default function PicksNFL() {
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [pickedGroupId, setPickedGroupId] = useState<string | undefined>(undefined);
 
-  const { data, error, loading } = useOdds(NFL_SPORT_KEY, week);
+  const { data, loading, error } = useOdds(CFB_SPORT_KEY, week);
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
-  }, []);
+  useEffect(() => { supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null)); }, []);
 
   useEffect(() => {
     if (groupId) return;
@@ -91,7 +92,7 @@ export default function PicksNFL() {
       const { data: w, error: wErr } = await supabase
         .from("weeks")
         .select("*")
-        .eq("league", "nfl")
+        .eq("league", "cfb")
         .eq("season", SEASON)
         .eq("week_num", week)
         .maybeSingle();
@@ -99,35 +100,31 @@ export default function PicksNFL() {
       if (wErr) setNotice(`weeks: ${wErr.message}`);
       setWeekRow(w);
 
-      if (w?.id) {
-        const { data: g, error: gErr } = await supabase
-          .from("games")
-          .select("id, home, away, week_id")
-          .eq("week_id", w.id);
-        if (gErr) setNotice(`games: ${gErr.message}`);
+      if (!w?.id) { setGameMap({}); setMyPicks({}); return; }
 
-        const map: Record<string, number> = {};
-        (g ?? []).forEach((row: any) => {
-          map[`${normTeamNFL(row.away)}@${normTeamNFL(row.home)}`] = row.id;
-        });
-        setGameMap(map);
+      const { data: g, error: gErr } = await supabase
+        .from("games")
+        .select("id, home, away, week_id")
+        .eq("week_id", w.id);
+      if (gErr) setNotice(`games: ${gErr.message}`);
 
-        const ids = (g ?? []).map((r: any) => r.id);
-        if (ids.length && userId) {
-          let q = supabase.from("picks").select("game_id, pick_team").in("game_id", ids).eq("user_id", userId);
-          q = groupId ? q.eq("group_id", groupId) : q.is("group_id", null);
-          const { data: ps, error: pErr } = await q;
-          if (pErr) setNotice(`picks: ${pErr.message}`);
-          const mine: Record<number, string> = {};
-          (ps ?? []).forEach((r: any) => { mine[r.game_id] = r.pick_team; });
-          setMyPicks(mine);
-        } else {
-          setMyPicks({});
-        }
-      } else {
-        setGameMap({});
-        setMyPicks({});
-      }
+      const map: Record<string, number> = {};
+      (g ?? []).forEach((row: any) => {
+        map[`${normTeamCFB(row.away)}@${normTeamCFB(row.home)}`] = row.id;
+      });
+      setGameMap(map);
+
+      const ids = (g ?? []).map((r: any) => r.id);
+      if (!ids.length || !userId) { setMyPicks({}); return; }
+
+      let q = supabase.from("picks").select("game_id, pick_team").in("game_id", ids).eq("user_id", userId);
+      q = groupId ? q.eq("group_id", groupId) : q.is("group_id", null);
+      const { data: ps, error: pErr } = await q;
+      if (pErr) setNotice(`picks: ${pErr.message}`);
+
+      const mine: Record<number, string> = {};
+      (ps ?? []).forEach((r: any) => { mine[r.game_id] = r.pick_team; });
+      setMyPicks(mine);
     })();
   }, [week, userId, groupId]);
 
@@ -157,87 +154,82 @@ export default function PicksNFL() {
   const labelFor = (type: BetType, o: any) =>
     type === "spreads" ? `${o.name} ${o.point}` : type === "h2h" ? `${o.name} ML` : `${o.name} ${o.point}`;
 
-const savePick = async (oddsGame: any, type: BetType, o: any) => {
-  if (!userId) {
-    Alert.alert("Sign in required", "Please sign in to save picks.");
-    return router.push(groupId ? `/groups/${groupId}` : "/groups");
-  }
-  if (!isOpen) Alert.alert("Heads up", openLabel);
+  const savePick = async (oddsGame: any, type: BetType, o: any) => {
+    if (!userId) {
+      Alert.alert("Sign in required", "Please sign in to save picks.");
+      return router.push(groupId ? `/groups/${groupId}` : "/groups");
+    }
+    if (!isOpen) Alert.alert("Heads up", openLabel);
 
-  const key = `${normTeamNFL(oddsGame.away_team)}@${normTeamNFL(oddsGame.home_team)}`;
-  const mappedId = gameMap[key];
+    const key = `${normTeamCFB(oddsGame.away_team)}@${normTeamCFB(oddsGame.home_team)}`;
+    const mappedId = gameMap[key];
 
-  // If the matchup isn't linked to your games table, don't attempt to insert.
-  if (!mappedId) {
-    Alert.alert(
-      "Not linked to games table",
-      "This matchup isn’t linked to a row in your games table yet, so it can’t be saved to the group."
-    );
-    return;
-  }
-
-  const label =
-    type === "spreads" ? `${o.name} ${o.point}` :
-    type === "h2h"     ? `${o.name} ML` :
-                         `${o.name} ${o.point}`;
-
-  // Insert ONLY the columns your table has
-  const row = {
-    user_id: userId,
-    group_id: groupId ?? null, // OK if group_id is nullable; otherwise require group
-    sport: "nfl",
-    week,
-    game_id: mappedId,
-    pick_team: label,
-    created_at: new Date().toISOString(),
-  };
-
-  console.log("[NFL] insert row", row);
-
-  setSaving(mappedId);
-  try {
-    const { error } = await supabase.from("picks").insert(row);
-    if (error) {
-      console.error("[NFL] insert error", error);
-      Alert.alert("Save failed", error.message);
+    if (!mappedId) {
+      Alert.alert(
+        "Not linked to games table",
+        "This matchup isn’t linked to a row in your games table yet, so it can’t be saved to the group."
+      );
       return;
     }
 
-    setMyPicks((m) => ({ ...m, [mappedId]: label }));
-    events.emitPickSaved({
-      league: "nfl",
+    const label =
+      type === "spreads" ? `${o.name} ${o.point}` :
+      type === "h2h"     ? `${o.name} ML` :
+                           `${o.name} ${o.point}`;
+
+    const row = {
+      user_id: userId,
+      group_id: groupId ?? null,
+      sport: "cfb",
       week,
       game_id: mappedId,
-      user_id: userId!,
       pick_team: label,
-      group_id: groupId ?? null,
-    });
+      created_at: new Date().toISOString(),
+    };
 
-    Alert.alert("Saved", `Added ${label} to Week ${week}${groupId ? " (group)" : ""}.`);
-  } catch (e: any) {
-    console.error("[NFL] unexpected save error", e);
-    Alert.alert("Error", String(e?.message || e));
-  } finally {
-    setSaving(null);
-    router.push(groupId ? `/groups/${groupId}` : "/groups");
-  }
-};
-  // ------------------------------------------------------------
+    console.log("[CFB] insert row", row);
 
-  const goToSelectedGroup = () => {
-    if (pickedGroupId) {
-      router.replace({ pathname: "/picks/page", params: { group: pickedGroupId } });
+    setSaving(mappedId);
+    try {
+      const { error } = await supabase.from("picks").insert(row);
+      if (error) {
+        console.error("[CFB] insert error", error);
+        Alert.alert("Save failed", error.message);
+        return;
+      }
+
+      setMyPicks((m) => ({ ...m, [mappedId]: label }));
+      events.emitPickSaved({
+        league: "cfb",
+        week,
+        game_id: mappedId,
+        user_id: userId!,
+        pick_team: label,
+        group_id: groupId ?? null,
+      });
+
+      Alert.alert("Saved", `Added ${label} to Week ${week}${groupId ? " (group)" : ""}.`);
+    } catch (e: any) {
+      console.error("[CFB] unexpected save error", e);
+      Alert.alert("Error", String(e?.message || e));
+    } finally {
+      setSaving(null);
+      router.push(groupId ? `/groups/${groupId}` : "/groups");
     }
   };
 
+  const goToSelectedGroup = () => {
+    if (pickedGroupId) router.replace({ pathname: "/picks/college", params: { group: pickedGroupId } });
+  };
+
   if (loading) return <ActivityIndicator style={styles.center} size="large" />;
-  if (error) return <Text style={styles.center}>Error: {error.message}</Text>;
+  if (error)   return <Text style={styles.center}>Error: {error.message}</Text>;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>NFL Picks — Week {week}</Text>
-        <Link href={{ pathname: "/picks/college", params: groupId ? { group: groupId } : {} }} style={styles.switch}>NCAA ↗︎</Link>
+        <Text style={styles.title}>College Football — Week {week}</Text>
+        <Link href={{ pathname: "/picks/page", params: groupId ? { group: groupId } : {} }} style={styles.switch}>NFL ↗︎</Link>
       </View>
 
       <Text style={[styles.badge, isOpen ? styles.badgeOpen : styles.badgeClosed]}>{openLabel}</Text>
@@ -252,7 +244,7 @@ const savePick = async (oddsGame: any, type: BetType, o: any) => {
               <>
                 <Picker selectedValue={pickedGroupId} onValueChange={(v) => setPickedGroupId(String(v))} style={{ marginBottom: 8 }}>
                   <Picker.Item label="Choose a group…" value={undefined} />
-                  {groups.map((g) => <Picker.Item key={g.id} label={g.name || g.id} value={g.id} />)}
+                  {groups.map((g) => (<Picker.Item key={g.id} label={g.name || g.id} value={g.id} />))}
                 </Picker>
                 <Pressable style={styles.groupApplyBtn} onPress={goToSelectedGroup} disabled={!pickedGroupId}>
                   <Text style={styles.groupApplyText}>Use this group</Text>
@@ -269,7 +261,7 @@ const savePick = async (oddsGame: any, type: BetType, o: any) => {
       )}
 
       <Picker selectedValue={week} onValueChange={(v) => setWeek(Number(v))} style={{ marginBottom: 12 }}>
-        {Array.from({ length: 18 }).map((_, i) => (
+        {Array.from({ length: 15 }).map((_, i) => (
           <Picker.Item key={i + 1} label={`Week ${i + 1}`} value={i + 1} />
         ))}
       </Picker>
@@ -290,14 +282,14 @@ const savePick = async (oddsGame: any, type: BetType, o: any) => {
           const market = book?.markets?.find((m: any) => m.key === betType);
           if (!market) return null;
 
-          const mappedId = gameMap[`${normTeamNFL(game.away_team)}@${normTeamNFL(game.home_team)}`];
+          const mappedId = gameMap[`${normTeamCFB(game.away_team)}@${normTeamCFB(game.home_team)}`];
 
           return (
             <View key={game.id} style={styles.card}>
               <View style={styles.logosRow}>
-                <Image source={logoSrc(game.away_team, "nfl")} style={styles.logo} />
+                <Image source={logoSrc(game.away_team, "ncaaf")} style={styles.logo} />
                 <Text style={styles.vs}>@</Text>
-                <Image source={logoSrc(game.home_team, "nfl")} style={styles.logo} />
+                <Image source={logoSrc(game.home_team, "ncaaf")} style={styles.logo} />
               </View>
 
               <Text style={styles.match}>{game.away_team} @ {game.home_team}</Text>
@@ -314,7 +306,13 @@ const savePick = async (oddsGame: any, type: BetType, o: any) => {
                       <Pressable
                         disabled={disabled}
                         onPress={() => savePick(game, betType, o)}
-                        style={isMine ? [styles.pickBtn, styles.pickBtnActive] : disabled ? [styles.pickBtn, styles.pickBtnDisabled] : styles.pickBtn}
+                        style={
+                          isMine
+                            ? [styles.pickBtn, styles.pickBtnActive]
+                            : disabled
+                            ? [styles.pickBtn, styles.pickBtnDisabled]
+                            : styles.pickBtn
+                        }
                       >
                         <Text style={isMine ? [styles.pickText, styles.pickTextActive] : styles.pickText}>
                           {label}{typeof o.price === "number" ? `  (${o.price > 0 ? `+${o.price}` : o.price})` : ""}
@@ -364,7 +362,7 @@ const styles = StyleSheet.create({
   match: { fontWeight: "bold", marginBottom: 2, fontSize: 16 },
   kick: { marginTop: 2, fontSize: 12, opacity: 0.7 },
 
-  pickBtn: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: "#bbb", backgroundColor: "#fff" },
+  pickBtn: { padding: 10, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: "#bbb", backgroundColor: "#fff" },
   pickBtnActive: { borderColor: "#006241", backgroundColor: "#E9F4EF" },
   pickBtnDisabled: { opacity: 0.5 },
   pickText: { fontWeight: "800", color: "#222" },
