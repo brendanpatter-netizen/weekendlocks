@@ -1,90 +1,134 @@
+// app/groups/[id]/index.tsx
 export const unstable_settings = { prerender: false };
 
 import { useEffect, useMemo, useState } from "react";
-import { useLocalSearchParams, Link } from "expo-router";
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  Platform,
+  FlatList,
+} from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
 import { supabase } from "@/lib/supabase";
-import { View, Text, StyleSheet, ActivityIndicator, Pressable } from "react-native";
+import { getCurrentWeek } from "@/lib/nflWeeks";
+import { getCurrentCfbWeek } from "@/lib/cfbWeeks";
 
-// ---- Replace these with your helpers if you have them ----
-const CURRENT_NFL_WEEK = 5;  // <-- swap to your nfl week getter
-const CURRENT_CFB_WEEK = 6;  // <-- swap to your cfb week getter
-// ----------------------------------------------------------
+type MemberRow = {
+  user_id: string;
+  role: string | null;
+  joined_at: string | null;
+  display_name: string | null;
+  username: string | null;
+  avatar_url?: string | null;
+};
 
-type MemberRow = { user_id: string; joined_at?: string; role?: "owner" | "member"; username?: string };
-
-export default function GroupPage() {
+export default function GroupDetailPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const groupId = id;
+  const groupId = useMemo(() => (Array.isArray(id) ? id[0] : id) ?? "", [id]);
 
-  const [me, setMe] = useState<string | null>(null);
+  const [groupName, setGroupName] = useState<string>("WeekendLocks");
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [banner, setBanner] = useState<string | null>(null);
 
-  // weekly counts (use HEAD + count so the URL stays short and avoids 400s)
+  // current weeks (use same helpers as picks pages)
+  const [nflWeek, setNflWeek] = useState<number | null>(null);
+  const [cfbWeek, setCfbWeek] = useState<number | null>(null);
+
+  // counts (HEAD+count)
   const [nflCount, setNflCount] = useState<number | null>(null);
   const [cfbCount, setCfbCount] = useState<number | null>(null);
 
-  const nflW = CURRENT_NFL_WEEK;
-  const cfbW = CURRENT_CFB_WEEK;
+  // surface any API errors in a banner
+  const [banner, setBanner] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!groupId) return;
+
     (async () => {
       try {
         setLoading(true);
-        const u = await supabase.auth.getUser();
-        setMe(u.data.user?.id ?? null);
+        setBanner(null);
 
-        // members
-        const { data: ms, error: mErr } = await supabase
-          .from("group_members")
-          .select("user_id, role, created_at")
-          .eq("group_id", groupId);
+        // Group name
+        const { data: g } = await supabase
+          .from("groups")
+          .select("name")
+          .eq("id", groupId)
+          .maybeSingle();
+        if (g?.name) setGroupName(g.name);
 
-        if (mErr) throw mErr;
+        // Members (prefer consolidated view; fallback join)
+        const tryView = await supabase
+          .from("group_member_profiles")
+          .select("user_id, role, joined_at, display_name, username, avatar_url")
+          .eq("group_id", groupId)
+          .order("joined_at", { ascending: true });
 
-        const rows: MemberRow[] = (ms ?? []).map((r: any) => ({
-          user_id: r.user_id,
-          role: r.role,
-          joined_at: r.created_at,
-        }));
-
-        setMembers(rows);
-
-        // weekly counts using HEAD + count (no body)
-        // NFL
-        {
-          const { error, count } = await supabase
-            .from("picks")
-            .select("*", { count: "exact", head: true })
+        if (!tryView.error && tryView.data) {
+          setMembers(tryView.data as MemberRow[]);
+        } else {
+          const fallback = await supabase
+            .from("group_members")
+            .select("user_id, role, joined_at, profiles:profiles ( username, id )")
             .eq("group_id", groupId)
-            .eq("sport", "nfl")
-            .eq("week", nflW);
+            .order("joined_at", { ascending: true });
 
-          if (error) {
-            setBanner(`[nflW=${nflW}] ${error.message}`);
-            setNflCount(0);
-          } else {
-            setNflCount(count ?? 0);
-          }
+          const mapped: MemberRow[] =
+            (fallback.data ?? []).map((r: any) => ({
+              user_id: r.user_id,
+              role: r.role ?? null,
+              joined_at: r.joined_at ?? null,
+              display_name: r.profiles?.username ?? r.user_id,
+              username: r.profiles?.username ?? null,
+              avatar_url: null,
+            })) ?? [];
+
+          setMembers(mapped);
         }
+
+        // Use the same week logic as the picks pages
+        let nflW = typeof getCurrentWeek === "function" ? getCurrentWeek() : 1;
+        let cfbW = typeof getCurrentCfbWeek === "function" ? getCurrentCfbWeek() : 1;
+
+        // If no picks exist for these computed weeks, fall back to latest week with picks
+        const [{ data: nflWeeks }, { data: cfbWeeks }] = await Promise.all([
+          supabase.from("picks").select("week").eq("group_id", groupId).order("week", { ascending: false }),
+          supabase.from("picks").select("week").eq("group_id", groupId).order("week", { ascending: false }),
+        ]);
+
+        const nflWeekList = (nflWeeks ?? []).map((r) => Number(r.week)).filter(Number.isFinite);
+        const cfbWeekList = (cfbWeeks ?? []).map((r) => Number(r.week)).filter(Number.isFinite);
+
+        if (nflWeekList.length && !nflWeekList.includes(nflW)) nflW = nflWeekList[0]!;
+        if (cfbWeekList.length && !cfbWeekList.includes(cfbW)) cfbW = cfbWeekList[0]!;
+
+        setNflWeek(nflW);
+        setCfbWeek(cfbW);
+
+        // --- Safe counts (HEAD + count) ---
+        // NFL (sport enum OR legacy league)
+        const nflHead = await supabase
+          .from("picks")
+          .select("*", { count: "exact", head: true })
+          .eq("group_id", groupId)
+          .eq("week", nflW)
+          .or("sport.eq.nfl,league.eq.nfl");
+        if (nflHead.error) setBanner((b) => (b ? b + " | " : "") + `[NFL] ${nflHead.error.message}`);
+        setNflCount(nflHead.count ?? 0);
 
         // CFB
-        {
-          const { error, count } = await supabase
-            .from("picks")
-            .select("*", { count: "exact", head: true })
-            .eq("group_id", groupId)
-            .eq("sport", "cfb")
-            .eq("week", cfbW);
-
-          if (error) {
-            setBanner(prev => (prev ? prev + " | " : "") + `[cfbW=${cfbW}] ${error.message}`);
-            setCfbCount(0);
-          } else {
-            setCfbCount(count ?? 0);
-          }
-        }
+        const cfbHead = await supabase
+          .from("picks")
+          .select("*", { count: "exact", head: true })
+          .eq("group_id", groupId)
+          .eq("week", cfbW)
+          .or("sport.eq.cfb,league.eq.cfb");
+        if (cfbHead.error) setBanner((b) => (b ? b + " | " : "") + `[CFB] ${cfbHead.error.message}`);
+        setCfbCount(cfbHead.count ?? 0);
       } catch (e: any) {
         console.error("[groups] load error", e);
         setBanner(String(e?.message || e));
@@ -92,79 +136,163 @@ export default function GroupPage() {
         setLoading(false);
       }
     })();
-  }, [groupId, nflW, cfbW]);
+  }, [groupId]);
 
-  if (loading) return <ActivityIndicator style={{ marginTop: 24 }} />;
+  if (!groupId) {
+    return (
+      <View style={styles.center}>
+        <Text>Invalid group.</Text>
+      </View>
+    );
+  }
+
+  if (loading || nflWeek == null || cfbWeek == null) {
+    return <ActivityIndicator style={styles.center} size="large" />;
+  }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>WeekendLocks</Text>
+    <View style={styles.screen}>
+      <Text style={styles.title}>{groupName}</Text>
 
-      {!!banner && <Text style={styles.debug}>debug: groupId={groupId} · nflW={nflW} (count: {nflCount ?? 0}) · cfbW={cfbW} (count: {cfbCount ?? 0}) · msg: {banner}</Text>}
+      {/* Debug / error banner */}
+      {!!banner && (
+        <View style={styles.debug}>
+          <Text style={styles.debugText}>
+            debug: groupId={groupId} · nflW={nflWeek} · cfbW={cfbWeek} · {banner}
+          </Text>
+        </View>
+      )}
 
+      {/* This Week's Picks */}
       <View style={styles.card}>
+        <Text style={styles.h2}>This Week’s Picks</Text>
+
         <View style={[styles.row, styles.headerRow]}>
-          <Text style={[styles.colUser, styles.headerCell]}>User</Text>
-          <Text style={[styles.headerCell, styles.right]}>CFB (Wk {cfbW})</Text>
-          <Text style={[styles.headerCell, styles.right]}>NFL (Wk {nflW})</Text>
+          <Text style={[styles.cellUser, styles.headerText]}>User</Text>
+          <Text style={[styles.cell, styles.headerText, styles.centerText]}>CFB (Wk {cfbWeek})</Text>
+          <Text style={[styles.cell, styles.headerText, styles.centerText]}>NFL (Wk {nflWeek})</Text>
         </View>
 
-        {members.map((m) => (
-          <View key={m.user_id} style={styles.row}>
-            <Text style={styles.colUser}>{m.username ?? m.user_id}</Text>
-            <Text style={[styles.right, styles.count]}>{m.user_id ? (m.user_id === me ? cfbCount ?? 0 : 0) : 0}</Text>
-            <Text style={[styles.right, styles.count]}>{m.user_id ? (m.user_id === me ? nflCount ?? 0 : 0) : 0}</Text>
-          </View>
-        ))}
+        <FlatList
+          data={members}
+          keyExtractor={(m) => m.user_id}
+          renderItem={({ item }) => {
+            const name = item.display_name ?? item.username ?? item.user_id ?? "—";
+            return (
+              <View style={styles.row}>
+                <View style={styles.cellUser}>
+                  <View style={styles.userCell}>
+                    {!!item.avatar_url && (
+                      <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
+                    )}
+                    <Text>{name}</Text>
+                  </View>
+                </View>
+                <Text style={[styles.cell, styles.centerText]}>{nflCount ?? 0 /* per-user breakdown TBD */}</Text>
+                <Text style={[styles.cell, styles.centerText]}>{cfbCount ?? 0 /* per-user breakdown TBD */}</Text>
+              </View>
+            );
+          }}
+          ListEmptyComponent={<Text style={styles.muted}>No members yet.</Text>}
+        />
       </View>
 
+      {/* Make Your Picks */}
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Make Your Picks</Text>
+        <Text style={styles.h2}>Make Your Picks</Text>
 
-        <Text style={styles.subheader}>College Football</Text>
-        <Link href={{ pathname: "/picks/college", params: { group: groupId } }} asChild>
-          <Pressable style={styles.btn}><Text style={styles.btnText}>Go to CFB picks</Text></Pressable>
-        </Link>
+        <Text style={styles.h3}>College Football</Text>
+        <Pressable
+          style={styles.cta}
+          onPress={() =>
+            router.push({ pathname: "/picks/college", params: { group: groupId } })
+          }
+        >
+          <Text style={styles.ctaText}>Go to CFB picks</Text>
+        </Pressable>
 
-        <Text style={[styles.subheader, { marginTop: 14 }]}>NFL</Text>
-        <Link href={{ pathname: "/picks/page", params: { group: groupId } }} asChild>
-          <Pressable style={styles.btn}><Text style={styles.btnText}>Go to NFL picks</Text></Pressable>
-        </Link>
+        <Text style={[styles.h3, { marginTop: 18 }]}>NFL</Text>
+        <Pressable
+          style={styles.cta}
+          onPress={() =>
+            router.push({ pathname: "/picks/page", params: { group: groupId } })
+          }
+        >
+          <Text style={styles.ctaText}>Go to NFL picks</Text>
+        </Pressable>
       </View>
 
+      {/* Members */}
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Members</Text>
-        {members.map((m) => (
-          <View key={m.user_id} style={styles.memberRow}>
-            <Text style={{ fontWeight: m.role === "owner" ? "700" : "400" }}>
-              {m.user_id}
-            </Text>
-            <Text style={{ opacity: 0.6 }}>{m.role ?? "member"} · joined {new Date(m.joined_at ?? Date.now()).toLocaleDateString()}</Text>
-          </View>
-        ))}
+        <Text style={styles.h2}>Members</Text>
+        <FlatList
+          data={members}
+          keyExtractor={(m) => m.user_id}
+          renderItem={({ item }) => {
+            const name = item.display_name ?? item.username ?? item.user_id ?? "—";
+            return (
+              <View style={styles.memberRow}>
+                <Text style={styles.memberName}>{name}</Text>
+                <Text style={styles.memberSub}>
+                  {(item.role ?? "member") +
+                    (item.joined_at
+                      ? ` • joined ${new Date(item.joined_at).toLocaleDateString()}`
+                      : "")}
+                </Text>
+              </View>
+            );
+          }}
+          ListEmptyComponent={<Text style={styles.muted}>No members yet.</Text>}
+        />
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 12 },
-  title: { fontSize: 22, fontWeight: "800", marginBottom: 10 },
-  debug: { padding: 8, borderWidth: 1, borderColor: "#eab308", backgroundColor: "#fef9c3", borderRadius: 6, marginBottom: 10, color: "#92400e" },
-
-  card: { borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 8, padding: 10, backgroundColor: "#fff", marginBottom: 12 },
-  sectionTitle: { fontSize: 16, fontWeight: "700", marginBottom: 8 },
-
-  row: { flexDirection: "row", alignItems: "center", paddingVertical: 8, borderTopWidth: 1, borderTopColor: "#f1f5f9" },
-  headerRow: { borderTopWidth: 0, paddingTop: 0 },
-  colUser: { flex: 1 },
-  right: { width: 120, textAlign: "right" as const },
-  headerCell: { fontWeight: "700", color: "#334155" },
-  count: { fontWeight: "700" },
-
-  subheader: { fontWeight: "700", marginBottom: 6 },
-  btn: { alignSelf: "flex-start", backgroundColor: "#065f46", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
-  btnText: { color: "#fff", fontWeight: "700" },
-
-  memberRow: { paddingVertical: 10, borderTopWidth: 1, borderTopColor: "#f1f5f9" },
+  screen: { padding: 16, gap: 16 },
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  title: { fontSize: 22, fontWeight: "700", marginBottom: 4 },
+  h2: { fontSize: 18, fontWeight: "700", marginBottom: 8 },
+  h3: { fontSize: 16, fontWeight: "700", marginBottom: 8 },
+  muted: { color: "#6b7280" },
+  card: { backgroundColor: "#e5e7eb33", borderRadius: 8, padding: 12 },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#d1d5db",
+  },
+  headerRow: { borderTopWidth: 0, paddingTop: 0, paddingBottom: 8 },
+  headerText: { fontWeight: "700" },
+  cellUser: { flex: 1.5 },
+  cell: { flex: 0.5 },
+  centerText: { textAlign: "center" },
+  userCell: { flexDirection: "row", alignItems: "center", gap: 8 },
+  avatar: { width: 28, height: 28, borderRadius: 999, marginRight: 8 },
+  cta: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    backgroundColor: "#0b735f",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  ctaText: { color: "white", fontWeight: "700" },
+  memberRow: {
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#d1d5db",
+  },
+  memberName: { fontWeight: "700" },
+  memberSub: { color: "#6b7280", marginTop: 2 },
+  debug: {
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: "#fff7ed",
+    borderWidth: 1,
+    borderColor: "#fed7aa",
+  },
+  debugText: { color: "#9a3412", fontSize: 12 },
 });
