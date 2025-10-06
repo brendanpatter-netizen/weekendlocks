@@ -2,206 +2,313 @@
 export const unstable_settings = { prerender: false };
 
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View, Pressable } from "react-native";
-import { useLocalSearchParams, Link } from "expo-router";
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  FlatList,
+} from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
 import { supabase } from "@/lib/supabase";
 
-type MemberRow = { user_id: string; joined_at?: string; is_owner?: boolean; display_name?: string };
+type MemberRow = {
+  user_id: string;
+  role: string | null;
+  joined_at: string | null;
+  display_name: string | null;
+  username: string | null;
+  avatar_url?: string | null;
+};
 
-type LiveWeeks = { nfl: number | null; cfb: number | null };
+type LiveWeeks = { nfl: number; cfb: number };
 
 const SEASON = 2025;
 
-async function getLiveWeek(league: "nfl" | "cfb"): Promise<number | null> {
-  // 1) fetch all season weeks (small table, cheap)
+/** Safely compute a “live” week for a league from the weeks table.
+ * If nothing is open yet, fall back to the latest week of the season.
+ * If the table is empty/missing, fall back to week 1.
+ */
+async function getLiveWeek(league: "nfl" | "cfb"): Promise<number> {
   const { data, error } = await supabase
     .from("weeks")
-    .select("week_num, opens_at, closes_at")
+    .select("week_num, opens_at, closes_at, season, league")
     .eq("league", league)
     .eq("season", SEASON)
     .order("week_num", { ascending: true });
 
-  if (error || !data?.length) return null;
+  if (error || !data?.length) return 1;
 
   const now = Date.now();
-  // first *open* week (closes in the future)
-  const open = data.find(w => Date.parse(w.opens_at) <= now && now < Date.parse(w.closes_at));
-  if (open) return open.week_num;
+  const open = data.find(
+    (w) => Date.parse(w.opens_at as any) <= now && now < Date.parse(w.closes_at as any)
+  );
+  if (open) return open.week_num as number;
 
-  // else fallback to the latest available week in the season
-  return data[data.length - 1].week_num ?? null;
+  return (data[data.length - 1].week_num as number) ?? 1;
 }
 
-export default function GroupIndex() {
+export default function GroupDetailPage() {
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const groupId = typeof id === "string" ? id : null;
+  const groupId = useMemo(() => (Array.isArray(id) ? id?.[0] : id) ?? "", [id]);
 
-  const [loading, setLoading] = useState(true);
-  const [liveWeeks, setLiveWeeks] = useState<LiveWeeks>({ nfl: null, cfb: null });
+  const [groupName, setGroupName] = useState<string>("WeekendLocks");
   const [members, setMembers] = useState<MemberRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [weeks, setWeeks] = useState<LiveWeeks>({ nfl: 1, cfb: 1 });
   const [counts, setCounts] = useState<{ nfl: number; cfb: number }>({ nfl: 0, cfb: 0 });
-  const [me, setMe] = useState<{ id: string | null }>({ id: null });
-  const [debug, setDebug] = useState<string>("");
+
+  const [banner, setBanner] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!groupId) return;
+
     (async () => {
       try {
         setLoading(true);
+        setBanner(null);
 
-        // Who am I?
-        const { data: userData } = await supabase.auth.getUser();
-        setMe({ id: userData.user?.id ?? null });
+        // Group name (optional)
+        const { data: g } = await supabase
+          .from("groups")
+          .select("name")
+          .eq("id", groupId)
+          .maybeSingle();
+        if (g?.name) setGroupName(g.name);
 
-        // Resolve "live" week per league safely
-        const [nflLive, cfbLive] = await Promise.all([
-          getLiveWeek("nfl"),
-          getLiveWeek("cfb"),
-        ]);
-        setLiveWeeks({ nfl: nflLive, cfb: cfbLive });
+        // Resolve safe “live” weeks
+        const [nflW, cfbW] = await Promise.all([getLiveWeek("nfl"), getLiveWeek("cfb")]);
+        setWeeks({ nfl: nflW, cfb: cfbW });
 
-        // Group members
-        if (groupId) {
+        // --- Members ---
+        // 1) Try consolidated view
+        const byView = await supabase
+          .from("group_member_profiles")
+          .select("user_id, role, joined_at, display_name, username, avatar_url")
+          .eq("group_id", groupId)
+          .order("joined_at", { ascending: true });
+
+        if (!byView.error && (byView.data?.length ?? 0) > 0) {
+          setMembers(byView.data as MemberRow[]);
+        } else {
+          // 2) Fallback: group_members → profiles (two-step join)
           const { data: gm, error: gmErr } = await supabase
             .from("group_members")
-            .select("user_id, created_at")
-            .eq("group_id", groupId);
-          if (!gmErr) {
-            // Optionally join with a profile display name if you have a profiles table.
-            const rows: MemberRow[] = (gm ?? []).map((r: any) => ({
+            .select("user_id, role, joined_at")
+            .eq("group_id", groupId)
+            .order("joined_at", { ascending: true });
+
+          if (gmErr) {
+            setMembers([]);
+          } else {
+            const ids = [...new Set((gm ?? []).map((r) => r.user_id))];
+            let profiles: Record<string, { username: string | null; avatar_url: string | null }> =
+              {};
+            if (ids.length) {
+              const { data: pf } = await supabase
+                .from("profiles")
+                .select("id, username, avatar_url")
+                .in("id", ids);
+              for (const p of pf ?? []) {
+                profiles[p.id] = { username: p.username ?? null, avatar_url: p.avatar_url ?? null };
+              }
+            }
+            const mapped: MemberRow[] = (gm ?? []).map((r: any) => ({
               user_id: r.user_id,
-              joined_at: r.created_at,
+              role: r.role ?? null,
+              joined_at: r.joined_at ?? null,
+              display_name: profiles[r.user_id]?.username ?? r.user_id,
+              username: profiles[r.user_id]?.username ?? null,
+              avatar_url: profiles[r.user_id]?.avatar_url ?? null,
             }));
-            setMembers(rows);
+            setMembers(mapped);
           }
         }
 
-        // Count picks for each league limited to the resolved week
-        let nflCount = 0, cfbCount = 0;
-        if (groupId && nflLive != null) {
-          const { data, error } = await supabase
-            .from("picks")
-            .select("id", { count: "exact", head: true })
-            .eq("group_id", groupId)
-            .eq("sport", "nfl")
-            .eq("week", nflLive);
-          if (!error) nflCount = data ? (data as any).length ?? 0 : (typeof (data as any) === "number" ? (data as any) : 0);
-        }
-        if (groupId && cfbLive != null) {
-          const { data, error } = await supabase
-            .from("picks")
-            .select("id", { count: "exact", head: true })
-            .eq("group_id", groupId)
-            .eq("sport", "cfb")
-            .eq("week", cfbLive);
-          if (!error) cfbCount = data ? (data as any).length ?? 0 : (typeof (data as any) === "number" ? (data as any) : 0);
-        }
-        setCounts({ nfl: nflCount, cfb: cfbCount });
+        // --- Counts ---
+        // NFL
+        const nflHead = await supabase
+          .from("picks")
+          .select("*", { count: "exact", head: true })
+          .eq("group_id", groupId)
+          .eq("week", nflW)
+          .or("sport.eq.nfl,league.eq.nfl"); // support enum or legacy column
+        if (nflHead.error) setBanner((b) => (b ? b + " | " : "") + `[NFL] ${nflHead.error.message}`);
+        // The count is exposed on `count` for head requests
+        setCounts((c) => ({ ...c, nfl: nflHead.count ?? 0 }));
 
-        setDebug(
-          `debug: groupId=${groupId ?? "—"} · nflW=${nflLive ?? "—"} · cfbW=${cfbLive ?? "—"}`
-        );
+        // CFB
+        const cfbHead = await supabase
+          .from("picks")
+          .select("*", { count: "exact", head: true })
+          .eq("group_id", groupId)
+          .eq("week", cfbW)
+          .or("sport.eq.cfb,league.eq.cfb");
+        if (cfbHead.error) setBanner((b) => (b ? b + " | " : "") + `[CFB] ${cfbHead.error.message}`);
+        setCounts((c) => ({ ...c, cfb: cfbHead.count ?? 0 }));
+      } catch (e: any) {
+        console.error("[groups] load error", e);
+        setBanner(String(e?.message || e));
       } finally {
         setLoading(false);
       }
     })();
   }, [groupId]);
 
-  const nflWeekLabel = useMemo(() => (liveWeeks.nfl != null ? `NFL (Wk ${liveWeeks.nfl})` : "NFL"), [liveWeeks.nfl]);
-  const cfbWeekLabel = useMemo(() => (liveWeeks.cfb != null ? `CFB (Wk ${liveWeeks.cfb})` : "CFB"), [liveWeeks.cfb]);
-
   if (!groupId) {
     return (
-      <View style={s.center}>
-        <Text>No group id.</Text>
-        <Link href="/groups">Back</Link>
+      <View style={styles.center}>
+        <Text>Invalid group.</Text>
       </View>
     );
   }
 
-  if (loading) return <ActivityIndicator style={s.center} size="large" />;
+  if (loading) return <ActivityIndicator style={styles.center} size="large" />;
+
+  const nflWeekLabel = `NFL (Wk ${weeks.nfl})`;
+  const cfbWeekLabel = `CFB (Wk ${weeks.cfb})`;
 
   return (
-    <View style={s.page}>
-      <Text style={s.debug}>{debug}</Text>
+    <View style={styles.screen}>
+      <Text style={styles.title}>{groupName}</Text>
 
-      <View style={s.card}>
-        <Text style={s.h2}>This Week’s Picks</Text>
-        <View style={s.tableHeader}>
-          <Text style={[s.th, { flex: 2 }]}>User</Text>
-          <Text style={s.th}>{cfbWeekLabel}</Text>
-          <Text style={s.th}>{nflWeekLabel}</Text>
-        </View>
-
-        {members.map((m) => (
-          <View style={s.tr} key={m.user_id}>
-            <Text style={[s.td, { flex: 2 }]}>{m.user_id}</Text>
-            <Text style={s.td}>{counts.cfb}</Text>
-            <Text style={s.td}>{counts.nfl}</Text>
-          </View>
-        ))}
-
-        {!members.length && (
-          <View style={s.tr}>
-            <Text style={[s.td, { flex: 2, opacity: 0.7 }]}>No members yet</Text>
-            <Text style={[s.td, { opacity: 0.7 }]}>0</Text>
-            <Text style={[s.td, { opacity: 0.7 }]}>0</Text>
-          </View>
-        )}
+      <View style={styles.debug}>
+        <Text style={styles.debugText}>
+          debug: groupId={groupId} · nflW={weeks.nfl} · cfbW={weeks.cfb}
+          {banner ? ` · ${banner}` : ""}
+        </Text>
       </View>
 
-      <View style={s.card}>
-        <Text style={s.h2}>Make Your Picks</Text>
+      {/* This Week’s Picks */}
+      <View style={styles.card}>
+        <Text style={styles.h2}>This Week’s Picks</Text>
 
-        <Text style={s.sectionLabel}>College Football</Text>
-        <View style={s.row}>
-          <Link
-            href={{ pathname: "/picks/college", params: { group: groupId } }}
-            asChild
-          >
-            <Pressable style={s.btn}>
-              <Text style={s.btnText}>Go to CFB picks</Text>
-            </Pressable>
-          </Link>
+        <View style={[styles.row, styles.headerRow]}>
+          <Text style={[styles.cellUser, styles.headerText]}>User</Text>
+          <Text style={[styles.cell, styles.headerText, styles.centerText]}>{cfbWeekLabel}</Text>
+          <Text style={[styles.cell, styles.headerText, styles.centerText]}>{nflWeekLabel}</Text>
         </View>
 
-        <Text style={[s.sectionLabel, { marginTop: 14 }]}>NFL</Text>
-        <View style={s.row}>
-          <Link href={{ pathname: "/picks/page", params: { group: groupId } }} asChild>
-            <Pressable style={s.btn}>
-              <Text style={s.btnText}>Go to NFL picks</Text>
-            </Pressable>
-          </Link>
-        </View>
+        <FlatList
+          data={members}
+          keyExtractor={(m) => m.user_id}
+          renderItem={({ item }) => {
+            const name = item.display_name ?? item.username ?? item.user_id ?? "—";
+            return (
+              <View style={styles.row}>
+                <View style={styles.cellUser}>
+                  <View style={styles.userCell}>
+                    {!!item.avatar_url && (
+                      <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
+                    )}
+                    <Text>{name}</Text>
+                  </View>
+                </View>
+                {/* Group-wide weekly totals for now (per-user breakdown later) */}
+                <Text style={[styles.cell, styles.centerText]}>{counts.cfb}</Text>
+                <Text style={[styles.cell, styles.centerText]}>{counts.nfl}</Text>
+              </View>
+            );
+          }}
+          ListEmptyComponent={<Text style={styles.muted}>No members yet.</Text>}
+        />
       </View>
 
-      <View style={s.card}>
-        <Text style={s.h2}>Members</Text>
-        {members.map((m) => (
-          <View style={s.tr} key={m.user_id}>
-            <Text style={[s.td, { flex: 2 }]}>{m.user_id}</Text>
-            <Text style={[s.td, { opacity: 0.7 }]}>{m.joined_at ? `joined ${new Date(m.joined_at).toLocaleDateString()}` : ""}</Text>
-          </View>
-        ))}
-        {!members.length && (
-          <View style={s.tr}><Text style={[s.td, { opacity: 0.7 }]}>No members</Text></View>
-        )}
+      {/* Make Your Picks */}
+      <View style={styles.card}>
+        <Text style={styles.h2}>Make Your Picks</Text>
+
+        <Text style={styles.h3}>College Football</Text>
+        <Pressable
+          style={styles.cta}
+          onPress={() => router.push({ pathname: "/picks/college", params: { group: groupId } })}
+        >
+          <Text style={styles.ctaText}>Go to CFB picks</Text>
+        </Pressable>
+
+        <Text style={[styles.h3, { marginTop: 18 }]}>NFL</Text>
+        <Pressable
+          style={styles.cta}
+          onPress={() => router.push({ pathname: "/picks/page", params: { group: groupId } })}
+        >
+          <Text style={styles.ctaText}>Go to NFL picks</Text>
+        </Pressable>
+      </View>
+
+      {/* Members */}
+      <View style={styles.card}>
+        <Text style={styles.h2}>Members</Text>
+        <FlatList
+          data={members}
+          keyExtractor={(m) => m.user_id}
+          renderItem={({ item }) => {
+            const name = item.display_name ?? item.username ?? item.user_id ?? "—";
+            return (
+              <View style={styles.memberRow}>
+                <Text style={styles.memberName}>{name}</Text>
+                <Text style={styles.memberSub}>
+                  {(item.role ?? "member") +
+                    (item.joined_at
+                      ? ` • joined ${new Date(item.joined_at).toLocaleDateString()}`
+                      : "")}
+                </Text>
+              </View>
+            );
+          }}
+          ListEmptyComponent={<Text style={styles.muted}>No members yet.</Text>}
+        />
       </View>
     </View>
   );
 }
 
-const s = StyleSheet.create({
-  page: { padding: 12, gap: 12 },
-  debug: { backgroundColor: "#f1f5f9", borderColor: "#cbd5e1", borderWidth: 1, padding: 8, borderRadius: 6, fontSize: 12 },
-  center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
-  card: { padding: 12, borderWidth: 1, borderColor: "#d1d5db", borderRadius: 8, backgroundColor: "white", gap: 8 },
-  h2: { fontSize: 16, fontWeight: "700" },
-  tableHeader: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "#e5e7eb", paddingBottom: 6 },
-  th: { flex: 1, fontWeight: "700", color: "#6b7280" },
-  tr: { flexDirection: "row", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#f3f4f6" },
-  td: { flex: 1, color: "#111827" },
-  sectionLabel: { fontWeight: "700", color: "#374151" },
-  row: { flexDirection: "row", gap: 8 },
-  btn: { backgroundColor: "#0a7cff", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10 },
-  btnText: { color: "white", fontWeight: "700" },
+const styles = StyleSheet.create({
+  screen: { padding: 16, gap: 16 },
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  title: { fontSize: 22, fontWeight: "700", marginBottom: 4 },
+  h2: { fontSize: 18, fontWeight: "700", marginBottom: 8 },
+  h3: { fontSize: 16, fontWeight: "700", marginBottom: 8 },
+  muted: { color: "#6b7280" },
+  card: { backgroundColor: "#e5e7eb33", borderRadius: 8, padding: 12 },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#d1d5db",
+  },
+  headerRow: { borderTopWidth: 0, paddingTop: 0, paddingBottom: 8 },
+  headerText: { fontWeight: "700" },
+  cellUser: { flex: 1.5 },
+  cell: { flex: 0.5 },
+  centerText: { textAlign: "center" },
+  userCell: { flexDirection: "row", alignItems: "center", gap: 8 },
+  avatar: { width: 28, height: 28, borderRadius: 999, marginRight: 8 },
+  cta: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    backgroundColor: "#0b735f",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  ctaText: { color: "white", fontWeight: "700" },
+  memberRow: {
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#d1d5db",
+  },
+  memberName: { fontWeight: "700" },
+  memberSub: { color: "#6b7280", marginTop: 2 },
+  debug: {
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: "#fff7ed",
+    borderWidth: 1,
+    borderColor: "#fed7aa",
+  },
+  debugText: { color: "#9a3412", fontSize: 12 },
 });
