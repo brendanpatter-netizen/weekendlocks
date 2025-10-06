@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Text,
   View,
+  Platform,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { supabase } from "@/lib/supabase";
@@ -28,6 +29,9 @@ type MemberRow = {
 type PickRow = {
   user_id: string;
   pick_team: string;
+  week?: number;
+  sport?: string | null;  // optional; some schemas use "league"
+  league?: string | null; // optional; some schemas use "league"
 };
 
 type ByUser = Map<string, { count: number; preview: string[] }>;
@@ -46,6 +50,10 @@ export default function GroupDetailPage() {
 
   const [nflPicks, setNflPicks] = useState<PickRow[]>([]);
   const [cfbPicks, setCfbPicks] = useState<PickRow[]>([]);
+
+  // debug counters (temporary)
+  const [debugNFLAny, setDebugNFLAny] = useState<number>(0);
+  const [debugCFBAny, setDebugCFBAny] = useState<number>(0);
 
   useEffect(() => {
     if (!groupId) return;
@@ -102,56 +110,54 @@ export default function GroupDetailPage() {
             .from("picks")
             .select("week")
             .eq("group_id", groupId)
-            .eq("sport", "nfl")
             .order("week", { ascending: false }),
           supabase
             .from("picks")
             .select("week")
             .eq("group_id", groupId)
-            .eq("sport", "cfb")
             .order("week", { ascending: false }),
         ]);
 
-      const latestNfl = (nflWeeksWithPicks ?? [])[0]?.week as
-        | number
-        | undefined;
-      const latestCfb = (cfbWeeksWithPicks ?? [])[0]?.week as
-        | number
-        | undefined;
+      const nflWeeks = (nflWeeksWithPicks ?? []).map((r) => Number(r.week)).filter(Number.isFinite);
+      const cfbWeeks = (cfbWeeksWithPicks ?? []).map((r) => Number(r.week)).filter(Number.isFinite);
 
-      if (
-        (nflWeeksWithPicks ?? []).length &&
-        (nflWeeksWithPicks ?? []).every((r: any) => r.week !== nflW)
-      ) {
-        nflW = latestNfl ?? nflW;
-      }
-      if (
-        (cfbWeeksWithPicks ?? []).length &&
-        (cfbWeeksWithPicks ?? []).every((r: any) => r.week !== cfbW)
-      ) {
-        cfbW = latestCfb ?? cfbW;
-      }
+      if (nflWeeks.length && !nflWeeks.includes(nflW)) nflW = nflWeeks[0]!;
+      if (cfbWeeks.length && !cfbWeeks.includes(cfbW)) cfbW = cfbWeeks[0]!;
 
       setNflWeek(nflW);
       setCfbWeek(cfbW);
 
-      const [{ data: np }, { data: cp }] = await Promise.all([
-        supabase
-          .from("picks")
-          .select("user_id, pick_team")
-          .eq("group_id", groupId)
-          .eq("sport", "nfl")
-          .eq("week", nflW),
-        supabase
-          .from("picks")
-          .select("user_id, pick_team")
-          .eq("group_id", groupId)
-          .eq("sport", "cfb")
-          .eq("week", cfbW),
-      ]);
+      // --- IMPORTANT: filter by sport OR league (to match your schema) ---
+      // nfl
+      const nflQuery = supabase
+        .from("picks")
+        .select("user_id, pick_team, week, sport, league")
+        .eq("group_id", groupId)
+        .eq("week", nflW)
+        .or("sport.eq.nfl,league.eq.nfl");
+
+      // cfb
+      const cfbQuery = supabase
+        .from("picks")
+        .select("user_id, pick_team, week, sport, league")
+        .eq("group_id", groupId)
+        .eq("week", cfbW)
+        .or("sport.eq.cfb,league.eq.cfb");
+
+      const [{ data: np }, { data: cp }] = await Promise.all([nflQuery, cfbQuery]);
 
       setNflPicks((np ?? []) as PickRow[]);
       setCfbPicks((cp ?? []) as PickRow[]);
+
+      // tiny debug: also count any picks for that week regardless of sport/league field name
+      const [nflAny, cfbAny] = await Promise.all([
+        supabase.from("picks").select("id", { count: "exact", head: true })
+          .eq("group_id", groupId).eq("week", nflW),
+        supabase.from("picks").select("id", { count: "exact", head: true })
+          .eq("group_id", groupId).eq("week", cfbW),
+      ]);
+      setDebugNFLAny(nflAny.count ?? 0);
+      setDebugCFBAny(cfbAny.count ?? 0);
 
       setLoading(false);
     })();
@@ -163,7 +169,7 @@ export default function GroupDetailPage() {
     for (const p of nflPicks) {
       const cur = map.get(p.user_id) ?? { count: 0, preview: [] };
       cur.count += 1;
-      if (cur.preview.length < 3) cur.preview.push(p.pick_team);
+      if (cur.preview.length < 3 && p.pick_team) cur.preview.push(p.pick_team);
       map.set(p.user_id, cur);
     }
     return map;
@@ -174,7 +180,7 @@ export default function GroupDetailPage() {
     for (const p of cfbPicks) {
       const cur = map.get(p.user_id) ?? { count: 0, preview: [] };
       cur.count += 1;
-      if (cur.preview.length < 3) cur.preview.push(p.pick_team);
+      if (cur.preview.length < 3 && p.pick_team) cur.preview.push(p.pick_team);
       map.set(p.user_id, cur);
     }
     return map;
@@ -195,6 +201,15 @@ export default function GroupDetailPage() {
   return (
     <View style={styles.screen}>
       <Text style={styles.title}>{groupName}</Text>
+
+      {/* TEMP DEBUG STRIP (web only) */}
+      {Platform.OS === "web" && (
+        <View style={styles.debug}>
+          <Text style={styles.debugText}>
+            debug: groupId={groupId} · nflW={nflWeek} (any rows: {debugNFLAny}) · cfbW={cfbWeek} (any rows: {debugCFBAny})
+          </Text>
+        </View>
+      )}
 
       {/* This Week's Picks */}
       <View style={styles.card}>
@@ -372,4 +387,12 @@ const styles = StyleSheet.create({
   },
   memberName: { fontWeight: "700" },
   memberSub: { color: "#6b7280", marginTop: 2 },
+  debug: {
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: "#fff7ed",
+    borderWidth: 1,
+    borderColor: "#fed7aa",
+  },
+  debugText: { color: "#9a3412", fontSize: 12 },
 });
