@@ -50,18 +50,24 @@ async function getLiveWeek(league: "nfl" | "cfb"): Promise<number> {
   return (data[data.length - 1].week_num as number) ?? 1;
 }
 
-async function countPicksForWeek(groupId: string, week: number, sport: "nfl" | "cfb") {
-  const base = supabase
+async function countPicksForWeek(
+  groupId: string,
+  week: number,
+  sport: "nfl" | "cfb"
+) {
+  // Get a server-side count without returning rows
+  const { count, error } = await supabase
     .from("picks")
-    .select("*", { count: "exact", head: true })
+    .select("id", { count: "exact", head: true })
     .eq("group_id", groupId)
-    .eq("week", week);
+    .eq("week", week)
+    .eq("sport", sport);
 
-  const withSport = await base.eq("sport", sport);
-  if (!withSport.error) return withSport.count ?? 0;
-
-  const fallback = await base;
-  return fallback.count ?? 0;
+  if (error) {
+    console.warn("countPicksForWeek error:", error.message);
+    return 0;
+  }
+  return count ?? 0;
 }
 
 export default function GroupDetailPage() {

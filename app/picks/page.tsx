@@ -61,9 +61,11 @@ export default function PicksNFL() {
   const params = useLocalSearchParams();
   const groupId = typeof params.group === "string" ? params.group : undefined;
 
-  const [week, setWeek] = useState<number>(
-    typeof params.w === "string" ? Number(params.w) || 1 : getCurrentWeek?.() ?? 1
-  );
+  const [week, setWeek] = useState<number>(() => {
+    const fromUrl = typeof params.w === "string" ? Number(params.w) : NaN;
+    return Number.isFinite(fromUrl) && fromUrl > 0 ? fromUrl : getCurrentWeek(); // <- stable default
+  });
+
   const [betType, setBetType] = useState<BetType>("spreads");
 
   const [userId, setUserId] = useState<string | null>(null);
