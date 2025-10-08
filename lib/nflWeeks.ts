@@ -1,17 +1,38 @@
 // lib/nflWeeks.ts
-// ↻  Update SEASON_START each season
-export const SEASON_START = new Date('2025-09-04T00:00:00Z'); // Week 1 kickoff
+export type WeekRange = { week: number; start: string; end: string };
 
-const MS_DAY = 86_400_000;
-
-export function getWeekRange(week: number) {
-  const start = new Date(SEASON_START.getTime() + (week - 1) * 7 * MS_DAY);
-  const end   = new Date(start.getTime() + 7 * MS_DAY);
-  return { start, end };
+// Helper to generate weekly UTC windows with ISO strings
+function genWeeks(
+  startUtc: Date, // inclusive
+  weeks: number
+): WeekRange[] {
+  const out: WeekRange[] = [];
+  for (let i = 0; i < weeks; i++) {
+    const s = new Date(startUtc.getTime() + i * 7 * 86400000);
+    const e = new Date(s.getTime() + 7 * 86400000);
+    out.push({
+      week: i + 1,
+      start: s.toISOString(), // <- includes 'Z'
+      end: e.toISOString(),
+    });
+  }
+  return out;
 }
 
-export function getCurrentWeek(today = new Date()) {
-  const diff = today.getTime() - SEASON_START.getTime();
-  if (diff < 0) return 0;                      // pre-season
-  return Math.floor(diff / (7 * MS_DAY)) + 1;  // 1-based
+/**
+ * NFL 2025: open each “betting week” at 00:00 UTC on the Tue of kickoff week.
+ * (Kickoff is Thu Sep 4, 2025; use Tue Sep 2, 2025, 00:00:00Z as the open.)
+ * Close the following Tue 00:00Z.
+ */
+const NFL_SEASON_OPEN_UTC = new Date(Date.UTC(2025, 8, 2, 0, 0, 0)); // 2025-09-02T00:00:00Z
+export const nflWeeks: WeekRange[] = genWeeks(NFL_SEASON_OPEN_UTC, 18);
+
+/** Return the current NFL week based on the UTC windows above. */
+export function getCurrentWeek(at: Date = new Date()): number {
+  const t = at.getTime();
+  for (const w of nflWeeks) {
+    if (t >= Date.parse(w.start) && t < Date.parse(w.end)) return w.week;
+  }
+  if (t < Date.parse(nflWeeks[0].start)) return nflWeeks[0].week;
+  return nflWeeks[nflWeeks.length - 1].week;
 }

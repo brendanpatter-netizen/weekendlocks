@@ -24,7 +24,6 @@ type BetType = "spreads" | "totals" | "h2h";
 const NFL_SPORT_KEY = "americanfootball_nfl";
 const SEASON = 2025;
 
-// NFL team name normalization is a bit simpler than CFB
 function normTeamNFL(name: string) {
   return name.toLowerCase().replace(/[^\w\s-]/g, "").replace(/\s+/g, " ").trim();
 }
@@ -80,7 +79,6 @@ export default function PicksNFL() {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
   }, []);
 
-  // week + games + my picks (scoped to group or solo)
   useEffect(() => {
     (async () => {
       setNotice(null);
@@ -141,10 +139,7 @@ export default function PicksNFL() {
   const isOpen = useMemo(() => {
     if (!weekRow) return false;
     const now = Date.now();
-    return (
-      now >= Date.parse(weekRow.opens_at) &&
-      now < Date.parse(weekRow.closes_at)
-    );
+    return now >= Date.parse(weekRow.opens_at) && now < Date.parse(weekRow.closes_at);
   }, [weekRow]);
 
   const openLabel = useMemo(() => {
@@ -167,11 +162,7 @@ export default function PicksNFL() {
   }, [data]);
 
   const labelFor = (type: BetType, o: any) =>
-    type === "spreads"
-      ? `${o.name} ${o.point}`
-      : type === "h2h"
-      ? `${o.name} ML`
-      : `${o.name} ${o.point}`;
+    type === "spreads" ? `${o.name} ${o.point}` : type === "h2h" ? `${o.name} ML` : `${o.name} ${o.point}`;
 
   const savePick = async (oddsGame: any, type: BetType, o: any) => {
     if (!userId) {
@@ -180,26 +171,14 @@ export default function PicksNFL() {
     }
     if (!isOpen) Alert.alert("Heads up", openLabel);
 
-    const key = `${normTeamNFL(oddsGame.away_team)}@${normTeamNFL(
-      oddsGame.home_team
-    )}`;
+    const key = `${normTeamNFL(oddsGame.away_team)}@${normTeamNFL(oddsGame.home_team)}`;
     const mappedId = gameMap[key];
-
     if (!mappedId) {
-      Alert.alert(
-        "Not linked to games table",
-        "This matchup isn’t linked to a row in your games table yet, so it can’t be saved to the group."
-      );
+      Alert.alert("Not linked to games table", "This matchup isn’t linked to a row in your games table yet, so it can’t be saved to the group.");
       return;
     }
 
-    const label =
-      type === "spreads"
-        ? `${o.name} ${o.point}`
-        : type === "h2h"
-        ? `${o.name} ML`
-        : `${o.name} ${o.point}`;
-
+    const label = labelFor(type, o);
     const row = {
       user_id: userId,
       group_id: groupId ?? null,
@@ -218,21 +197,9 @@ export default function PicksNFL() {
         Alert.alert("Save failed", error.message);
         return;
       }
-
       setMyPicks((m) => ({ ...m, [mappedId]: label }));
-      events.emitPickSaved({
-        league: "nfl",
-        week,
-        game_id: mappedId,
-        user_id: userId!,
-        pick_team: label,
-        group_id: groupId ?? null,
-      });
-
-      Alert.alert(
-        "Saved",
-        `Added ${label} to Week ${week}${groupId ? " (group)" : ""}.`
-      );
+      events.emitPickSaved({ league: "nfl", week, game_id: mappedId, user_id: userId!, pick_team: label, group_id: groupId ?? null });
+      Alert.alert("Saved", `Added ${label} to Week ${week}${groupId ? " (group)" : ""}.`);
     } catch (e: any) {
       console.error("[NFL] unexpected save error", e);
       Alert.alert("Error", String(e?.message || e));
@@ -249,55 +216,23 @@ export default function PicksNFL() {
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>NFL — Week {week}</Text>
-        <Link
-          href={{
-            pathname: "/picks/college",
-            params: groupId ? { group: groupId } : {},
-          }}
-          style={styles.switch}
-        >
+        <Link href={{ pathname: "/picks/college", params: groupId ? { group: groupId } : {} }} style={styles.switch}>
           NCAA ↗︎
         </Link>
       </View>
 
-      <Text
-        style={[
-          styles.badge,
-          isOpen ? styles.badgeOpen : styles.badgeClosed,
-        ]}
-      >
-        {openLabel}
-      </Text>
+      <Text style={[styles.badge, isOpen ? styles.badgeOpen : styles.badgeClosed]}>{openLabel}</Text>
 
-      <Picker
-        selectedValue={week}
-        onValueChange={(v) => setWeek(Number(v))}
-        style={{ marginBottom: 12 }}
-      >
+      <Picker selectedValue={week} onValueChange={(v) => setWeek(Number(v))} style={{ marginBottom: 12 }}>
         {Array.from({ length: 18 }).map((_, i) => (
           <Picker.Item key={i + 1} label={`Week ${i + 1}`} value={i + 1} />
         ))}
       </Picker>
 
       <View style={styles.tabsRow}>
-        <Tab
-          label="SPREADS"
-          active={betType === "spreads"}
-          disabled={!marketHas.spreads}
-          onPress={() => setBetType("spreads")}
-        />
-        <Tab
-          label="TOTALS"
-          active={betType === "totals"}
-          disabled={!marketHas.totals}
-          onPress={() => setBetType("totals")}
-        />
-        <Tab
-          label="H2H"
-          active={betType === "h2h"}
-          disabled={!marketHas.h2h}
-          onPress={() => setBetType("h2h")}
-        />
+        <Tab label="SPREADS" active={betType === "spreads"} disabled={!marketHas.spreads} onPress={() => setBetType("spreads")} />
+        <Tab label="TOTALS" active={betType === "totals"} disabled={!marketHas.totals} onPress={() => setBetType("totals")} />
+        <Tab label="H2H" active={betType === "h2h"} disabled={!marketHas.h2h} onPress={() => setBetType("h2h")} />
       </View>
 
       {!!notice && <Text style={styles.warn}>{notice}</Text>}
@@ -312,67 +247,34 @@ export default function PicksNFL() {
           const market = book?.markets?.find((m: any) => m.key === betType);
           if (!market) return null;
 
-          const mappedId =
-            gameMap[
-              `${normTeamNFL(game.away_team)}@${normTeamNFL(
-                game.home_team
-              )}`
-            ];
+          const mappedId = gameMap[`${normTeamNFL(game.away_team)}@${normTeamNFL(game.home_team)}`];
 
           return (
             <View key={game.id} style={styles.card}>
-              <View style={styles.logosRow}>
-                <Image
-                  source={logoSrc(game.away_team, "nfl")}
-                  style={styles.logo}
-                />
+              <View className="logosRow" style={styles.logosRow}>
+                <Image source={logoSrc(game.away_team, "nfl")} style={styles.logo} />
                 <Text style={styles.vs}>@</Text>
-                <Image
-                  source={logoSrc(game.home_team, "nfl")}
-                  style={styles.logo}
-                />
+                <Image source={logoSrc(game.home_team, "nfl")} style={styles.logo} />
               </View>
 
-              <Text style={styles.match}>
-                {game.away_team} @ {game.home_team}
-              </Text>
-              <Text style={styles.kick}>
-                {new Date(game.commence_time).toLocaleString()}
-              </Text>
+              <Text style={styles.match}>{game.away_team} @ {game.home_team}</Text>
+              <Text style={styles.kick}>{new Date(game.commence_time).toLocaleString()}</Text>
 
               <View style={{ marginTop: 8 }}>
                 {(market.outcomes ?? []).map((o: any, idx: number) => {
                   const label = labelFor(betType, o);
                   const isMine = mappedId ? myPicks[mappedId] === label : false;
                   const disabled = saving === mappedId;
-
                   return (
-                    <View
-                      key={o.name + String(o.point ?? "") + idx}
-                      style={{ marginTop: idx ? 8 : 0 }}
-                    >
+                    <View key={o.name + String(o.point ?? "") + idx} style={{ marginTop: idx ? 8 : 0 }}>
                       <Pressable
                         disabled={disabled}
                         onPress={() => savePick(game, betType, o)}
-                        style={
-                          isMine
-                            ? [styles.pickBtn, styles.pickBtnActive]
-                            : disabled
-                            ? [styles.pickBtn, styles.pickBtnDisabled]
-                            : styles.pickBtn
-                        }
+                        style={isMine ? [styles.pickBtn, styles.pickBtnActive] : disabled ? [styles.pickBtn, styles.pickBtnDisabled] : styles.pickBtn}
                       >
-                        <Text
-                          style={
-                            isMine
-                              ? [styles.pickText, styles.pickTextActive]
-                              : styles.pickText
-                          }
-                        >
+                        <Text style={isMine ? [styles.pickText, styles.pickTextActive] : styles.pickText}>
                           {label}
-                          {typeof o.price === "number"
-                            ? `  (${o.price > 0 ? `+${o.price}` : o.price})`
-                            : ""}
+                          {typeof o.price === "number" ? `  (${o.price > 0 ? `+${o.price}` : o.price})` : ""}
                         </Text>
                       </Pressable>
                     </View>
@@ -390,69 +292,26 @@ export default function PicksNFL() {
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
   container: { padding: 16 },
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 10,
-  },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
   title: { fontSize: 20, fontWeight: "600" },
   switch: { color: "#0a84ff", fontSize: 16 },
   warn: { color: "#7a4", marginBottom: 8 },
-
-  badge: {
-    alignSelf: "flex-start",
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    fontWeight: "800",
-    marginBottom: 8,
-  },
+  badge: { alignSelf: "flex-start", paddingVertical: 4, paddingHorizontal: 10, borderRadius: 999, fontWeight: "800", marginBottom: 8 },
   badgeOpen: { backgroundColor: "#E9F4EF", color: "#006241" },
   badgeClosed: { backgroundColor: "#FDECEA", color: "#A4000F" },
-
   tabsRow: { flexDirection: "row", gap: 12, marginBottom: 10 },
-  tab: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#bbb",
-    borderRadius: 6,
-    paddingVertical: 10,
-    alignItems: "center",
-    backgroundColor: "#eee",
-  },
+  tab: { flex: 1, borderWidth: 1, borderColor: "#bbb", borderRadius: 6, paddingVertical: 10, alignItems: "center", backgroundColor: "#eee" },
   tabActive: { backgroundColor: "#111", borderColor: "#111" },
   tabDisabled: { opacity: 0.5 },
   tabText: { fontWeight: "700", color: "#333" },
   tabTextActive: { color: "#fff" },
-
-  card: {
-    padding: 12,
-    borderWidth: 1,
-    borderRadius: 8,
-    borderColor: "#ccc",
-    backgroundColor: "#fff",
-    marginBottom: 12,
-  },
-  logosRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 6,
-  },
+  card: { padding: 12, borderWidth: 1, borderRadius: 8, borderColor: "#ccc", backgroundColor: "#fff", marginBottom: 12 },
+  logosRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginBottom: 6 },
   logo: { width: 42, height: 42, borderRadius: 21 },
   vs: { fontWeight: "bold", fontSize: 16, marginHorizontal: 8 },
   match: { fontWeight: "bold", marginBottom: 2, fontSize: 16 },
   kick: { marginTop: 2, fontSize: 12, opacity: 0.7 },
-
-  pickBtn: {
-    padding: 10,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#bbb",
-    backgroundColor: "#fff",
-  },
+  pickBtn: { padding: 10, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: "#bbb", backgroundColor: "#fff" },
   pickBtnActive: { borderColor: "#006241", backgroundColor: "#E9F4EF" },
   pickBtnDisabled: { opacity: 0.5 },
   pickText: { fontWeight: "800", color: "#222" },

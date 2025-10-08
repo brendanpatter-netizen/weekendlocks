@@ -1,22 +1,30 @@
 // lib/cfbWeeks.ts
-const MS7 = 7 * 24 * 60 * 60 * 1000;
-export const CFB_WEEKS = 15; // adjust if you like
+export type WeekRange = { week: number; start: string; end: string };
 
-export function seasonStart(year = new Date().getUTCFullYear()) {
-  // Roughly Week 0/1 window
-  return new Date(Date.UTC(year, 7, 26, 0, 0, 0)); // Aug 26 UTC
+// Generate weekly UTC windows
+function genWeeks(startUtc: Date, weeks: number): WeekRange[] {
+  const out: WeekRange[] = [];
+  for (let i = 0; i < weeks; i++) {
+    const s = new Date(startUtc.getTime() + i * 7 * 86400000);
+    const e = new Date(s.getTime() + 7 * 86400000);
+    out.push({ week: i + 1, start: s.toISOString(), end: e.toISOString() });
+  }
+  return out;
 }
 
-export function getCfbWeekRange(week: number, year?: number) {
-  const safe = Math.max(1, Math.min(CFB_WEEKS, Math.floor(week)));
-  const start = seasonStart(year);
-  const from = new Date(start.getTime() + (safe - 1) * MS7);
-  const to = new Date(from.getTime() + MS7);
-  return { from, to };
-}
+/**
+ * CFB 2025: “Week 1” opens at 00:00 UTC on Tue Aug 26, 2025.
+ * Close the following Tue 00:00Z. Adjust if you later load weeks from DB.
+ */
+const CFB_SEASON_OPEN_UTC = new Date(Date.UTC(2025, 7, 26, 0, 0, 0)); // 2025-08-26T00:00:00Z
+export const cfbWeeks: WeekRange[] = genWeeks(CFB_SEASON_OPEN_UTC, 15);
 
-export function getCurrentCfbWeek(today = new Date()) {
-  const start = seasonStart(today.getUTCFullYear());
-  const diff = Math.floor((today.getTime() - start.getTime()) / MS7) + 1;
-  return Math.max(1, Math.min(CFB_WEEKS, diff));
+/** Return the current CFB week based on the UTC windows above. */
+export function getCurrentCfbWeek(at: Date = new Date()): number {
+  const t = at.getTime();
+  for (const w of cfbWeeks) {
+    if (t >= Date.parse(w.start) && t < Date.parse(w.end)) return w.week;
+  }
+  if (t < Date.parse(cfbWeeks[0].start)) return cfbWeeks[0].week;
+  return cfbWeeks[cfbWeeks.length - 1].week;
 }

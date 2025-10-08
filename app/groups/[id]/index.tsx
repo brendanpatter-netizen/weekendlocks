@@ -27,12 +27,7 @@ type LiveWeeks = { nfl: number; cfb: number };
 
 const SEASON = 2025;
 
-/** Robust “live week”:
- *  - If a week is open (now ∈ [opens_at, closes_at)), return it.
- *  - Else, use the next upcoming week (first with opens_at > now).
- *  - Else, use the last week in the season.
- *  - If the table is empty, return 1.
- */
+/** Robust “live week” from DB if present; gracefully falls back. */
 async function getLiveWeek(league: "nfl" | "cfb"): Promise<number> {
   const { data, error } = await supabase
     .from("weeks")
@@ -55,26 +50,21 @@ async function getLiveWeek(league: "nfl" | "cfb"): Promise<number> {
   return (data[data.length - 1].week_num as number) ?? 1;
 }
 
-/** Count picks safely even if a sport/league column isn't available. */
 async function countPicksForWeek(groupId: string, week: number, sport: "nfl" | "cfb") {
-  // Base head-count query
   const base = supabase
     .from("picks")
     .select("*", { count: "exact", head: true })
     .eq("group_id", groupId)
     .eq("week", week);
 
-  // Try sport filter (many schemas have it)
   const withSport = await base.eq("sport", sport);
   if (!withSport.error) return withSport.count ?? 0;
 
-  // If sport column doesn't exist (or is different), retry without it.
   const fallback = await base;
   return fallback.count ?? 0;
 }
 
 export default function GroupDetailPage() {
-  // top of component, before any effects
   const { w } = useLocalSearchParams<{ w?: string }>();
   const [week, setWeek] = useState<number>(w ? Number(w) : 1);
 
@@ -98,7 +88,6 @@ export default function GroupDetailPage() {
         setLoading(true);
         setBanner(null);
 
-        // Group name (optional)
         const { data: g } = await supabase
           .from("groups")
           .select("name")
@@ -106,11 +95,10 @@ export default function GroupDetailPage() {
           .maybeSingle();
         if (g?.name) setGroupName(g.name);
 
-        // Resolve weeks
         const [nflW, cfbW] = await Promise.all([getLiveWeek("nfl"), getLiveWeek("cfb")]);
         setWeeks({ nfl: nflW, cfb: cfbW });
+        setWeek(nflW);
 
-        // --- Members ---
         const viaView = await supabase
           .from("group_member_profiles")
           .select("user_id, role, joined_at, display_name, username, avatar_url")
@@ -151,7 +139,6 @@ export default function GroupDetailPage() {
           setMembers(mapped);
         }
 
-        // --- Counts (no more schema errors) ---
         const [nflCount, cfbCount] = await Promise.all([
           countPicksForWeek(groupId, nflW, "nfl"),
           countPicksForWeek(groupId, cfbW, "cfb"),
@@ -215,7 +202,6 @@ export default function GroupDetailPage() {
                     <Text>{name}</Text>
                   </View>
                 </View>
-                {/* For now we show group totals; per-user row can be added next */}
                 <Text style={[styles.cell, styles.centerText]}>{counts.cfb}</Text>
                 <Text style={[styles.cell, styles.centerText]}>{counts.nfl}</Text>
               </View>
