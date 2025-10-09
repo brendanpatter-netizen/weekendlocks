@@ -1,6 +1,6 @@
 export const unstable_settings = { prerender: false };
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -17,14 +17,12 @@ import { getCurrentWeek as getCurrentNFLWeek } from "@/lib/nflWeeks";
 import { getCurrentCfbWeek as getCurrentCFBWeek } from "@/lib/cfbWeeks";
 
 type Sport = "nfl" | "cfb";
-
 type Member = {
   user_id: string;
   display_name: string;
   avatar_url?: string | null;
   picks_count: number;
 };
-
 type FeedItem = {
   id: string;
   created_at: string;
@@ -37,7 +35,6 @@ type FeedItem = {
   team?: string | null;
   line?: string | null;
 };
-
 type RosterRow = { user_id: string; display_name: string; avatar_url?: string | null };
 
 export default function GroupPage() {
@@ -90,7 +87,6 @@ export default function GroupPage() {
             .from("profiles")
             .select("id, avatar_url")
             .in("id", ids);
-
           const avatarMap = new Map((pf ?? []).map((p) => [p.id, p.avatar_url]));
           if (mounted) {
             setMembers(
@@ -101,7 +97,7 @@ export default function GroupPage() {
             );
           }
         } else {
-          // fallback aggregation
+          // fallback from picks
           const { data: raw, error } = await supabase
             .from("picks")
             .select("user_id")
@@ -122,9 +118,7 @@ export default function GroupPage() {
             .in("id", ids);
 
           const nameMap = new Map<string, string>();
-          (pf ?? []).forEach((p: any) =>
-            nameMap.set(p.id, p.username || p.id)
-          );
+          (pf ?? []).forEach((p: any) => nameMap.set(p.id, p.username || p.id));
 
           if (mounted) {
             setMembers(
@@ -133,8 +127,7 @@ export default function GroupPage() {
                   user_id: uid,
                   display_name: nameMap.get(uid) ?? uid,
                   avatar_url:
-                    (pf ?? []).find((p: any) => p.id === uid)?.avatar_url ??
-                    null,
+                    (pf ?? []).find((p: any) => p.id === uid)?.avatar_url ?? null,
                   picks_count: counts.get(uid) ?? 0,
                 }))
                 .sort((a, b) =>
@@ -146,12 +139,10 @@ export default function GroupPage() {
           }
         }
 
-        // ---- Latest picks activity
+        // ---- Activity feed
         const { data: feedRaw } = await supabase
           .from("picks")
-          .select(
-            "id, created_at, user_id, sport, week, market, team, line"
-          )
+          .select("id, created_at, user_id, sport, week, market, team, line")
           .eq("group_id", groupId)
           .order("created_at", { ascending: false })
           .limit(20);
@@ -162,9 +153,9 @@ export default function GroupPage() {
           .select("id, username, avatar_url")
           .in("id", feedIds);
 
-        const nameMap2 = new Map<string, { name: string; avatar: string | null }>();
+        const byId = new Map<string, { name: string; avatar: string | null }>();
         (pf2 ?? []).forEach((p: any) =>
-          nameMap2.set(p.id, { name: p.username || p.id, avatar: p.avatar_url ?? null })
+          byId.set(p.id, { name: p.username || p.id, avatar: p.avatar_url ?? null })
         );
 
         if (mounted) {
@@ -173,8 +164,8 @@ export default function GroupPage() {
               id: r.id,
               created_at: r.created_at,
               user_id: r.user_id,
-              display_name: nameMap2.get(r.user_id)?.name ?? r.user_id,
-              avatar_url: nameMap2.get(r.user_id)?.avatar ?? null,
+              display_name: byId.get(r.user_id)?.name ?? r.user_id,
+              avatar_url: byId.get(r.user_id)?.avatar ?? null,
               sport: r.sport,
               week: r.week,
               market: r.market ?? null,
@@ -184,7 +175,7 @@ export default function GroupPage() {
           );
         }
 
-        // ---- Roster (members mini-table)
+        // ---- Roster
         const { data: gm } = await supabase
           .from("group_members")
           .select("user_id")
@@ -254,12 +245,7 @@ export default function GroupPage() {
             onPress={() => setSport("nfl")}
             style={[styles.sportTab, sport === "nfl" && styles.sportTabActive]}
           >
-            <Text
-              style={[
-                styles.sportTabText,
-                sport === "nfl" && styles.sportTabTextActive,
-              ]}
-            >
+            <Text style={[styles.sportTabText, sport === "nfl" && styles.sportTabTextActive]}>
               NFL
             </Text>
           </Pressable>
@@ -267,18 +253,12 @@ export default function GroupPage() {
             onPress={() => setSport("cfb")}
             style={[styles.sportTab, sport === "cfb" && styles.sportTabActive]}
           >
-            <Text
-              style={[
-                styles.sportTabText,
-                sport === "cfb" && styles.sportTabTextActive,
-              ]}
-            >
+            <Text style={[styles.sportTabText, sport === "cfb" && styles.sportTabTextActive]}>
               CFB
             </Text>
           </Pressable>
         </View>
 
-        {/* Week picker (web select inline-styled) */}
         <View style={styles.weekPicker}>
           <Text style={styles.weekLabel}>Week</Text>
           {Platform.OS === "web" ? (
@@ -316,11 +296,9 @@ export default function GroupPage() {
         </View>
       </View>
 
-      {/* Split layout */}
+      {/* Split: left leaderboard / right feed */}
       <View style={styles.split}>
-        {/* Left: Leaderboard */}
         <View style={styles.leftCol}>
-          {/* Summary tiles */}
           <View style={styles.tiles}>
             <View style={styles.tile}>
               <Text style={styles.tileLabel}>Total Picks</Text>
@@ -341,36 +319,26 @@ export default function GroupPage() {
             {loading ? (
               <ActivityIndicator style={{ marginTop: 12 }} />
             ) : members.length === 0 ? (
-              <Text style={styles.empty}>
-                No picks yet for Week {week}. Be the first!
-              </Text>
+              <Text style={styles.empty}>No picks yet for Week {week}. Be the first!</Text>
             ) : (
               <FlatList
                 data={members}
                 keyExtractor={(m) => m.user_id}
                 renderItem={({ item }) => {
-                  const pct =
-                    max > 0 ? Math.round((item.picks_count / max) * 100) : 0;
+                  const pct = max > 0 ? Math.round((item.picks_count / max) * 100) : 0;
                   return (
                     <View style={styles.tableRow}>
                       <View style={styles.userCell}>
                         {!!item.avatar_url && (
-                          <Image
-                            source={{ uri: item.avatar_url }}
-                            style={styles.avatar}
-                          />
+                          <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
                         )}
                         <Text style={styles.userName}>{item.display_name}</Text>
                       </View>
                       <View style={styles.countCell}>
                         <View style={styles.barBg}>
-                          <View
-                            style={[styles.barFill, { width: `${pct}%` }]}
-                          />
+                          <View style={[styles.barFill, { width: `${pct}%` }]} />
                         </View>
-                        <Text style={styles.countText}>
-                          {item.picks_count}
-                        </Text>
+                        <Text style={styles.countText}>{item.picks_count}</Text>
                       </View>
                     </View>
                   );
@@ -380,12 +348,9 @@ export default function GroupPage() {
           </View>
         </View>
 
-        {/* Right: Activity feed */}
         <View style={styles.rightCol}>
           <View style={styles.card}>
-            <Text style={{ fontWeight: "800", marginBottom: 8 }}>
-              Latest picks
-            </Text>
+            <Text style={{ fontWeight: "800", marginBottom: 8 }}>Latest picks</Text>
             {loading ? (
               <ActivityIndicator />
             ) : feed.length === 0 ? (
@@ -397,15 +362,10 @@ export default function GroupPage() {
                 renderItem={({ item }) => (
                   <View style={styles.feedRow}>
                     {!!item.avatar_url && (
-                      <Image
-                        source={{ uri: item.avatar_url }}
-                        style={styles.feedAvatar}
-                      />
+                      <Image source={{ uri: item.avatar_url }} style={styles.feedAvatar} />
                     )}
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.feedTitle}>
-                        {item.display_name} locked a pick
-                      </Text>
+                      <Text style={styles.feedTitle}>{item.display_name} locked a pick</Text>
                       <Text style={styles.feedSub}>
                         {item.sport.toUpperCase()} • Week {item.week}
                         {item.market ? ` • ${item.market}` : ""}
@@ -472,7 +432,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 8,
     borderColor: "#CBD5E1",
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "#0B735F22",
     alignItems: "center",
   },
   sportTabActive: { backgroundColor: "#0B735F", borderColor: "#0B735F" },
