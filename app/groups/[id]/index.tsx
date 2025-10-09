@@ -1,99 +1,71 @@
-// app/groups/[id]/index.tsx
 export const unstable_settings = { prerender: false };
 
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  FlatList,
   Image,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
-  FlatList,
 } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, router } from "expo-router";
 import { supabase } from "@/lib/supabase";
+import { getCurrentWeek as getCurrentNFLWeek } from "@/lib/nflWeeks";
+import { getCurrentCfbWeek as getCurrentCFBWeek } from "@/lib/cfbWeeks";
 
-type MemberRow = {
+type Sport = "nfl" | "cfb";
+
+type Member = {
   user_id: string;
-  role: string | null;
-  joined_at: string | null;
-  display_name: string | null;
-  username: string | null;
+  display_name: string;
   avatar_url?: string | null;
+  picks_count: number;
 };
 
-type LiveWeeks = { nfl: number; cfb: number };
+type FeedItem = {
+  id: string;
+  created_at: string;
+  user_id: string;
+  display_name: string;
+  avatar_url?: string | null;
+  sport: "nfl" | "cfb";
+  week: number;
+  // Optional columns you might have on picks:
+  market?: string | null;    // "spreads" | "totals" | "h2h"
+  team?: string | null;      // opponent selection label, etc.
+  line?: string | null;      // e.g., "-7" or "o 45.5"
+};
 
-const SEASON = 2025;
-
-/** Robust “live week” from DB if present; gracefully falls back. */
-async function getLiveWeek(league: "nfl" | "cfb"): Promise<number> {
-  const { data, error } = await supabase
-    .from("weeks")
-    .select("week_num, opens_at, closes_at, season, league")
-    .eq("league", league)
-    .eq("season", SEASON)
-    .order("week_num", { ascending: true });
-
-  if (error || !data?.length) return 1;
-
-  const now = Date.now();
-  const open = data.find(
-    (w) => Date.parse(w.opens_at as any) <= now && now < Date.parse(w.closes_at as any)
-  );
-  if (open) return open.week_num as number;
-
-  const upcoming = data.find((w) => Date.parse(w.opens_at as any) > now);
-  if (upcoming) return upcoming.week_num as number;
-
-  return (data[data.length - 1].week_num as number) ?? 1;
-}
-
-async function countPicksForWeek(
-  groupId: string,
-  week: number,
-  sport: "nfl" | "cfb"
-) {
-  // Get a server-side count without returning rows
-  const { count, error } = await supabase
-    .from("picks")
-    .select("id", { count: "exact", head: true })
-    .eq("group_id", groupId)
-    .eq("week", week)
-    .eq("sport", sport);
-
-  if (error) {
-    console.warn("countPicksForWeek error:", error.message);
-    return 0;
-  }
-  return count ?? 0;
-}
-
-export default function GroupDetailPage() {
-  const { w } = useLocalSearchParams<{ w?: string }>();
-  const [week, setWeek] = useState<number>(w ? Number(w) : 1);
-
+export default function GroupPage() {
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const groupId = useMemo(() => (Array.isArray(id) ? id?.[0] : id) ?? "", [id]);
+  const groupId = Array.isArray(id) ? id?.[0] : id;
 
-  const [groupName, setGroupName] = useState<string>("WeekendLocks");
-  const [members, setMembers] = useState<MemberRow[]>([]);
+  const [groupName, setGroupName] = useState<string>("Group");
+  const [sport, setSport] = useState<Sport>("nfl");
+  const [week, setWeek] = useState<number>(getCurrentNFLWeek());
+  const [members, setMembers] = useState<Member[]>([]);
+  const [feed, setFeed] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const [weeks, setWeeks] = useState<LiveWeeks>({ nfl: 1, cfb: 1 });
-  const [counts, setCounts] = useState<{ nfl: number; cfb: number }>({ nfl: 0, cfb: 0 });
-
   const [banner, setBanner] = useState<string | null>(null);
+
+  // keep week aligned with sport
+  useEffect(() => {
+    setWeek(sport === "nfl" ? getCurrentNFLWeek() : getCurrentCFBWeek());
+  }, [sport]);
 
   useEffect(() => {
     if (!groupId) return;
+    let mounted = true;
 
     (async () => {
       try {
         setLoading(true);
         setBanner(null);
 
+        // group name
         const { data: g } = await supabase
           .from("groups")
           .select("name")
@@ -101,63 +73,129 @@ export default function GroupDetailPage() {
           .maybeSingle();
         if (g?.name) setGroupName(g.name);
 
-        const [nflW, cfbW] = await Promise.all([getLiveWeek("nfl"), getLiveWeek("cfb")]);
-        setWeeks({ nfl: nflW, cfb: cfbW });
-        setWeek(nflW);
-
-        const viaView = await supabase
-          .from("group_member_profiles")
-          .select("user_id, role, joined_at, display_name, username, avatar_url")
+        // ---- Leaderboard (prefer the view; else aggregate in client)
+        const { data: vData, error: vErr } = await supabase
+          .from("v_group_week_member_picks")
+          .select("user_id, display_name, picks_count")
           .eq("group_id", groupId)
-          .order("joined_at", { ascending: true });
+          .eq("sport", sport)
+          .eq("week", week)
+          .order("display_name", { ascending: true });
 
-        if (!viaView.error && (viaView.data?.length ?? 0) > 0) {
-          setMembers(viaView.data as MemberRow[]);
-        } else {
-          const { data: gm } = await supabase
-            .from("group_members")
-            .select("user_id, role, joined_at")
-            .eq("group_id", groupId)
-            .order("joined_at", { ascending: true });
+        if (!vErr && vData) {
+          const ids = vData.map((r) => r.user_id);
+          const { data: pf } = await supabase
+            .from("profiles")
+            .select("id, avatar_url")
+            .in("id", ids);
 
-          const ids = [...new Set((gm ?? []).map((r) => r.user_id))];
-          let profiles: Record<string, { username: string | null; avatar_url: string | null }> = {};
-          if (ids.length) {
-            const { data: pf } = await supabase
-              .from("profiles")
-              .select("id, username, avatar_url")
-              .in("id", ids);
-            for (const p of pf ?? []) {
-              profiles[p.id] = {
-                username: p.username ?? null,
-                avatar_url: p.avatar_url ?? null,
-              };
-            }
+          const avatarMap = new Map((pf ?? []).map((p) => [p.id, p.avatar_url]));
+          if (mounted) {
+            setMembers(
+              vData.map((r: any) => ({
+                ...r,
+                avatar_url: avatarMap.get(r.user_id) ?? null,
+              }))
+            );
           }
-          const mapped: MemberRow[] = (gm ?? []).map((r: any) => ({
-            user_id: r.user_id,
-            role: r.role ?? null,
-            joined_at: r.joined_at ?? null,
-            display_name: profiles[r.user_id]?.username ?? r.user_id,
-            username: profiles[r.user_id]?.username ?? null,
-            avatar_url: profiles[r.user_id]?.avatar_url ?? null,
-          }));
-          setMembers(mapped);
+        } else {
+          // fallback aggregation
+          const { data: raw, error } = await supabase
+            .from("picks")
+            .select("user_id")
+            .eq("group_id", groupId)
+            .eq("sport", sport)
+            .eq("week", week);
+          if (error) throw error;
+
+          const counts = new Map<string, number>();
+          (raw ?? []).forEach((r: any) =>
+            counts.set(r.user_id, (counts.get(r.user_id) ?? 0) + 1)
+          );
+
+          const ids = [...counts.keys()];
+          const { data: pf } = await supabase
+            .from("profiles")
+            .select("id, username, avatar_url")
+            .in("id", ids);
+
+          const nameMap = new Map<string, string>();
+          (pf ?? []).forEach((p: any) =>
+            nameMap.set(p.id, p.username || p.id)
+          );
+
+          if (mounted) {
+            setMembers(
+              ids
+                .map((uid) => ({
+                  user_id: uid,
+                  display_name: nameMap.get(uid) ?? uid,
+                  avatar_url:
+                    (pf ?? []).find((p: any) => p.id === uid)?.avatar_url ??
+                    null,
+                  picks_count: counts.get(uid) ?? 0,
+                }))
+                .sort((a, b) =>
+                  a.display_name.localeCompare(b.display_name, undefined, {
+                    sensitivity: "base",
+                  })
+                )
+            );
+          }
         }
 
-        const [nflCount, cfbCount] = await Promise.all([
-          countPicksForWeek(groupId, nflW, "nfl"),
-          countPicksForWeek(groupId, cfbW, "cfb"),
-        ]);
-        setCounts({ nfl: nflCount, cfb: cfbCount });
+        // ---- Latest picks activity
+        // Adjust the selected columns to match your picks table.
+        const { data: feedRaw } = await supabase
+          .from("picks")
+          .select(
+            "id, created_at, user_id, sport, week, market, team, line"
+          )
+          .eq("group_id", groupId)
+          .order("created_at", { ascending: false })
+          .limit(20);
+
+        const feedIds = (feedRaw ?? []).map((r) => r.user_id);
+        const { data: pf2 } = await supabase
+          .from("profiles")
+          .select("id, username, avatar_url")
+          .in("id", feedIds);
+
+        const nameMap2 = new Map<string, { name: string; avatar: string | null }>();
+        (pf2 ?? []).forEach((p: any) =>
+          nameMap2.set(p.id, { name: p.username || p.id, avatar: p.avatar_url ?? null })
+        );
+
+        if (mounted) {
+          setFeed(
+            (feedRaw ?? []).map((r: any) => ({
+              id: r.id,
+              created_at: r.created_at,
+              user_id: r.user_id,
+              display_name: nameMap2.get(r.user_id)?.name ?? r.user_id,
+              avatar_url: nameMap2.get(r.user_id)?.avatar ?? null,
+              sport: r.sport,
+              week: r.week,
+              market: r.market ?? null,
+              team: r.team ?? null,
+              line: r.line ?? null,
+            }))
+          );
+        }
       } catch (e: any) {
-        console.error("[groups] load error", e);
-        setBanner(String(e?.message || e));
+        if (mounted) setBanner(e?.message ?? String(e));
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     })();
-  }, [groupId]);
+
+    return () => {
+      mounted = false;
+    };
+  }, [groupId, sport, week]);
+
+  const total = members.reduce((s, m) => s + m.picks_count, 0) || 0;
+  const max = Math.max(...members.map((m) => m.picks_count), 0);
 
   if (!groupId) {
     return (
@@ -167,158 +205,316 @@ export default function GroupDetailPage() {
     );
   }
 
-  if (loading) return <ActivityIndicator style={styles.center} size="large" />;
-
-  const nflWeekLabel = `NFL (Wk ${weeks.nfl})`;
-  const cfbWeekLabel = `CFB (Wk ${weeks.cfb})`;
-
   return (
-    <View style={styles.screen}>
+    <View style={styles.page}>
       <Text style={styles.title}>{groupName}</Text>
 
-      <View style={styles.debug}>
-        <Text style={styles.debugText}>
-          debug: groupId={groupId} · nflW={weeks.nfl} · cfbW={weeks.cfb}
-          {banner ? ` · ${banner}` : ""}
-        </Text>
-      </View>
+      {banner && (
+        <View style={styles.banner}>
+          <Text style={styles.bannerText}>Heads up: {banner}</Text>
+        </View>
+      )}
 
-      {/* This Week’s Picks */}
-      <View style={styles.card}>
-        <Text style={styles.h2}>This Week’s Picks</Text>
-
-        <View style={[styles.row, styles.headerRow]}>
-          <Text style={[styles.cellUser, styles.headerText]}>User</Text>
-          <Text style={[styles.cell, styles.headerText, styles.centerText]}>{cfbWeekLabel}</Text>
-          <Text style={[styles.cell, styles.headerText, styles.centerText]}>{nflWeekLabel}</Text>
+      {/* Controls */}
+      <View style={styles.controlsRow}>
+        <View style={styles.sportTabs}>
+          <Pressable
+            onPress={() => setSport("nfl")}
+            style={[styles.sportTab, sport === "nfl" && styles.sportTabActive]}
+          >
+            <Text
+              style={[
+                styles.sportTabText,
+                sport === "nfl" && styles.sportTabTextActive,
+              ]}
+            >
+              NFL
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setSport("cfb")}
+            style={[styles.sportTab, sport === "cfb" && styles.sportTabActive]}
+          >
+            <Text
+              style={[
+                styles.sportTabText,
+                sport === "cfb" && styles.sportTabTextActive,
+              ]}
+            >
+              CFB
+            </Text>
+          </Pressable>
         </View>
 
-        <FlatList
-          data={members}
-          keyExtractor={(m) => m.user_id}
-          renderItem={({ item }) => {
-            const name = item.display_name ?? item.username ?? item.user_id ?? "—";
-            return (
-              <View style={styles.row}>
-                <View style={styles.cellUser}>
-                  <View style={styles.userCell}>
+        {/* Week picker (web select inline-styled) */}
+        <View style={styles.weekPicker}>
+          <Text style={styles.weekLabel}>Week</Text>
+          {Platform.OS === "web" ? (
+            <select
+              value={week}
+              onChange={(e) => setWeek(Number(e.target.value))}
+              style={{
+                padding: 8,
+                borderRadius: 8,
+                border: "1px solid #CBD5E1",
+                background: "white",
+              } as any}
+            >
+              {Array.from({ length: sport === "nfl" ? 18 : 15 }).map((_, i) => (
+                <option key={i + 1} value={i + 1}>
+                  {i + 1}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <Text style={{ fontWeight: "600" }}>Week {week}</Text>
+          )}
+
+          <Pressable
+            style={styles.cta}
+            onPress={() =>
+              router.push({
+                pathname: sport === "nfl" ? "/picks/page" : "/picks/college",
+                params: { group: groupId, w: String(week) },
+              })
+            }
+          >
+            <Text style={styles.ctaText}>Make picks</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      {/* Split layout */}
+      <View style={styles.split}>
+        {/* Left: Leaderboard */}
+        <View style={styles.leftCol}>
+          {/* Summary tiles */}
+          <View style={styles.tiles}>
+            <View style={styles.tile}>
+              <Text style={styles.tileLabel}>Total Picks</Text>
+              <Text style={styles.tileValue}>{total}</Text>
+            </View>
+            <View style={styles.tile}>
+              <Text style={styles.tileLabel}>Most by a member</Text>
+              <Text style={styles.tileValue}>{max}</Text>
+            </View>
+          </View>
+
+          <View style={styles.card}>
+            <View style={[styles.tableRow, styles.tableHeader]}>
+              <Text style={[styles.thUser]}>Member</Text>
+              <Text style={[styles.thCount]}>Week {week}</Text>
+            </View>
+
+            {loading ? (
+              <ActivityIndicator style={{ marginTop: 12 }} />
+            ) : members.length === 0 ? (
+              <Text style={styles.empty}>
+                No picks yet for Week {week}. Be the first!
+              </Text>
+            ) : (
+              <FlatList
+                data={members}
+                keyExtractor={(m) => m.user_id}
+                renderItem={({ item }) => {
+                  const pct =
+                    max > 0 ? Math.round((item.picks_count / max) * 100) : 0;
+                  return (
+                    <View style={styles.tableRow}>
+                      <View style={styles.userCell}>
+                        {!!item.avatar_url && (
+                          <Image
+                            source={{ uri: item.avatar_url }}
+                            style={styles.avatar}
+                          />
+                        )}
+                        <Text style={styles.userName}>{item.display_name}</Text>
+                      </View>
+                      <View style={styles.countCell}>
+                        <View style={styles.barBg}>
+                          <View
+                            style={[styles.barFill, { width: `${pct}%` }]}
+                          />
+                        </View>
+                        <Text style={styles.countText}>
+                          {item.picks_count}
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                }}
+              />
+            )}
+          </View>
+        </View>
+
+        {/* Right: Activity feed */}
+        <View style={styles.rightCol}>
+          <View style={styles.card}>
+            <Text style={{ fontWeight: "800", marginBottom: 8 }}>
+              Latest picks
+            </Text>
+            {loading ? (
+              <ActivityIndicator />
+            ) : feed.length === 0 ? (
+              <Text style={styles.empty}>No recent picks.</Text>
+            ) : (
+              <FlatList
+                data={feed}
+                keyExtractor={(f) => f.id}
+                renderItem={({ item }) => (
+                  <View style={styles.feedRow}>
                     {!!item.avatar_url && (
-                      <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
+                      <Image
+                        source={{ uri: item.avatar_url }}
+                        style={styles.feedAvatar}
+                      />
                     )}
-                    <Text>{name}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.feedTitle}>
+                        {item.display_name} locked a pick
+                      </Text>
+                      <Text style={styles.feedSub}>
+                        {item.sport.toUpperCase()} • Week {item.week}
+                        {item.market ? ` • ${item.market}` : ""}
+                        {item.team ? ` • ${item.team}` : ""}
+                        {item.line ? ` ${item.line}` : ""}
+                      </Text>
+                      <Text style={styles.feedTime}>
+                        {new Date(item.created_at).toLocaleString()}
+                      </Text>
+                    </View>
                   </View>
-                </View>
-                <Text style={[styles.cell, styles.centerText]}>{counts.cfb}</Text>
-                <Text style={[styles.cell, styles.centerText]}>{counts.nfl}</Text>
-              </View>
-            );
-          }}
-          ListEmptyComponent={<Text style={styles.muted}>No members yet.</Text>}
-        />
-      </View>
-
-      {/* Make Your Picks */}
-      <View style={styles.card}>
-        <Text style={styles.h2}>Make Your Picks</Text>
-
-        <Text style={styles.h3}>College Football</Text>
-        <Pressable
-          style={styles.cta}
-          onPress={() =>
-            router.push({
-              pathname: "/picks/college",
-              params: { group: groupId, w: String(weeks.cfb) },
-            })
-          }
-        >
-          <Text style={styles.ctaText}>Go to CFB picks</Text>
-        </Pressable>
-
-        <Text style={[styles.h3, { marginTop: 18 }]}>NFL</Text>
-        <Pressable
-          style={styles.cta}
-          onPress={() =>
-            router.push({
-              pathname: "/picks/page",
-              params: { group: groupId, w: String(weeks.nfl) },
-            })
-          }
-        >
-          <Text style={styles.ctaText}>Go to NFL picks</Text>
-        </Pressable>
-      </View>
-
-      {/* Members */}
-      <View style={styles.card}>
-        <Text style={styles.h2}>Members</Text>
-        <FlatList
-          data={members}
-          keyExtractor={(m) => m.user_id}
-          renderItem={({ item }) => {
-            const name = item.display_name ?? item.username ?? item.user_id ?? "—";
-            return (
-              <View style={styles.memberRow}>
-                <Text style={styles.memberName}>{name}</Text>
-                <Text style={styles.memberSub}>
-                  {(item.role ?? "member") +
-                    (item.joined_at
-                      ? ` • joined ${new Date(item.joined_at).toLocaleDateString()}`
-                      : "")}
-                </Text>
-              </View>
-            );
-          }}
-          ListEmptyComponent={<Text style={styles.muted}>No members yet.</Text>}
-        />
+                )}
+              />
+            )}
+          </View>
+        </View>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { padding: 16, gap: 16 },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  title: { fontSize: 22, fontWeight: "700", marginBottom: 4 },
-  h2: { fontSize: 18, fontWeight: "700", marginBottom: 8 },
-  h3: { fontSize: 16, fontWeight: "700", marginBottom: 8 },
-  muted: { color: "#6b7280" },
-  card: { backgroundColor: "#e5e7eb33", borderRadius: 8, padding: 12 },
-  row: {
+  page: { padding: 16, gap: 16 },
+  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  title: { fontSize: 22, fontWeight: "800" },
+
+  banner: {
+    backgroundColor: "#FFF7ED",
+    borderColor: "#FED7AA",
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+  },
+  bannerText: { color: "#9A3412" },
+
+  controlsRow: {
+    gap: 12,
+    flexDirection: "column",
+  },
+  sportTabs: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  sportTab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderRadius: 8,
+    borderColor: "#CBD5E1",
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+  },
+  sportTabActive: {
+    backgroundColor: "#0B735F",
+    borderColor: "#0B735F",
+  },
+  sportTabText: { fontWeight: "700", color: "#0F172A" },
+  sportTabTextActive: { color: "white" },
+
+  weekPicker: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#d1d5db",
+    gap: 10,
   },
-  headerRow: { borderTopWidth: 0, paddingTop: 0, paddingBottom: 8 },
-  headerText: { fontWeight: "700" },
-  cellUser: { flex: 1.5 },
-  cell: { flex: 0.5 },
-  centerText: { textAlign: "center" },
-  userCell: { flexDirection: "row", alignItems: "center", gap: 8 },
-  avatar: { width: 28, height: 28, borderRadius: 999, marginRight: 8 },
+  weekLabel: { fontWeight: "700" },
+
   cta: {
-    marginTop: 8,
-    alignSelf: "flex-start",
-    backgroundColor: "#0b735f",
-    paddingHorizontal: 14,
+    marginLeft: "auto",
+    backgroundColor: "#0B735F",
+    paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 8,
   },
-  ctaText: { color: "white", fontWeight: "700" },
-  memberRow: {
+  ctaText: { color: "white", fontWeight: "800" },
+
+  split: {
+    flexDirection: "row",
+    gap: 16,
+  },
+  leftCol: { flex: 1.6, gap: 12 },
+  rightCol: { flex: 1, gap: 12 },
+
+  tiles: { flexDirection: "row", gap: 12 },
+  tile: {
+    flex: 1,
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    padding: 12,
+  },
+  tileLabel: { fontSize: 12, color: "#64748B" },
+  tileValue: { fontSize: 20, fontWeight: "800", marginTop: 2 },
+
+  card: {
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    padding: 12,
+  },
+
+  tableHeader: { paddingVertical: 6 },
+  tableRow: {
     paddingVertical: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#d1d5db",
+    borderTopColor: "#E5E7EB",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
-  memberName: { fontWeight: "700" },
-  memberSub: { color: "#6b7280", marginTop: 2 },
-  debug: {
-    padding: 8,
-    borderRadius: 6,
-    backgroundColor: "#fff7ed",
-    borderWidth: 1,
-    borderColor: "#fed7aa",
+  thUser: { flex: 1.2, fontWeight: "800" },
+  thCount: { width: 140, fontWeight: "800", textAlign: "right" },
+
+  userCell: { flex: 1.2, flexDirection: "row", alignItems: "center", gap: 8 },
+  avatar: { width: 28, height: 28, borderRadius: 999 },
+  userName: { fontWeight: "700" },
+
+  countCell: { width: 140, flexDirection: "row", alignItems: "center", gap: 8 },
+  barBg: {
+    flex: 1,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "#E5E7EB",
+    overflow: "hidden",
   },
-  debugText: { color: "#9a3412", fontSize: 12 },
+  barFill: { height: 8, backgroundColor: "#0B735F" },
+  countText: { width: 28, textAlign: "right", fontWeight: "800" },
+
+  empty: { paddingVertical: 8, color: "#64748B" },
+
+  // Feed
+  feedRow: {
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#E5E7EB",
+    flexDirection: "row",
+    gap: 10,
+  },
+  feedAvatar: { width: 24, height: 24, borderRadius: 999, marginTop: 2 },
+  feedTitle: { fontWeight: "700" },
+  feedSub: { color: "#334155" },
+  feedTime: { color: "#64748B", fontSize: 12, marginTop: 2 },
 });
