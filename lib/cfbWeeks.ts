@@ -1,9 +1,9 @@
 // lib/cfbWeeks.ts
-export type WeekRange = { week: number; start: string; end: string };
+export type WeekRangeISO = { week: number; start: string; end: string };
 
-// Generate weekly UTC windows as ISO strings (always includes 'Z')
-function genWeeks(startUtc: Date, weeks: number): WeekRange[] {
-  const out: WeekRange[] = [];
+// Generate weekly UTC windows as ISO strings (always 'Z')
+function genWeeks(startUtc: Date, weeks: number): WeekRangeISO[] {
+  const out: WeekRangeISO[] = [];
   for (let i = 0; i < weeks; i++) {
     const s = new Date(startUtc.getTime() + i * 7 * 86400000);
     const e = new Date(s.getTime() + 7 * 86400000);
@@ -14,7 +14,7 @@ function genWeeks(startUtc: Date, weeks: number): WeekRange[] {
 
 // 2025 CFB: open Tue Aug 26 00:00:00Z
 const CFB_SEASON_OPEN_UTC = new Date(Date.UTC(2025, 7, 26, 0, 0, 0)); // 2025-08-26T00:00:00Z
-export const cfbWeeks: WeekRange[] = genWeeks(CFB_SEASON_OPEN_UTC, 15);
+export const cfbWeeks: WeekRangeISO[] = genWeeks(CFB_SEASON_OPEN_UTC, 15);
 
 // --- helpers -----------------------------------------------------------------
 
@@ -36,11 +36,17 @@ export function getCurrentCfbWeek(at?: unknown): number {
   return cfbWeeks[cfbWeeks.length - 1].week;
 }
 
-/** Back-compat: (start,end) ISO window for a given week */
-export function getWeekRange(week: number): { start: string; end: string } {
+/** Back-compat: return Date objects so existing code can call .getTime() */
+export function getWeekRange(week: number): { start: Date; end: Date } {
+  const w = cfbWeeks.find((x) => x.week === week) ?? cfbWeeks[cfbWeeks.length - 1];
+  return { start: new Date(w.start), end: new Date(w.end) };
+}
+
+/** If you need ISO strings explicitly */
+export function getWeekIsoRange(week: number): { start: string; end: string } {
   const w = cfbWeeks.find((x) => x.week === week) ?? cfbWeeks[cfbWeeks.length - 1];
   return { start: w.start, end: w.end };
 }
 
-/** Back-compat alias used by older code */
+/** Back-compat alias some code may import */
 export const getCfbWeekRange = getWeekRange;
