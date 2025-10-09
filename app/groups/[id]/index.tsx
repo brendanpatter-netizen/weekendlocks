@@ -33,11 +33,12 @@ type FeedItem = {
   avatar_url?: string | null;
   sport: "nfl" | "cfb";
   week: number;
-  // Optional columns you might have on picks:
-  market?: string | null;    // "spreads" | "totals" | "h2h"
-  team?: string | null;      // opponent selection label, etc.
-  line?: string | null;      // e.g., "-7" or "o 45.5"
+  market?: string | null;
+  team?: string | null;
+  line?: string | null;
 };
+
+type RosterRow = { user_id: string; display_name: string; avatar_url?: string | null };
 
 export default function GroupPage() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -48,6 +49,7 @@ export default function GroupPage() {
   const [week, setWeek] = useState<number>(getCurrentNFLWeek());
   const [members, setMembers] = useState<Member[]>([]);
   const [feed, setFeed] = useState<FeedItem[]>([]);
+  const [roster, setRoster] = useState<RosterRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
 
@@ -145,7 +147,6 @@ export default function GroupPage() {
         }
 
         // ---- Latest picks activity
-        // Adjust the selected columns to match your picks table.
         const { data: feedRaw } = await supabase
           .from("picks")
           .select(
@@ -181,6 +182,37 @@ export default function GroupPage() {
               line: r.line ?? null,
             }))
           );
+        }
+
+        // ---- Roster (members mini-table)
+        const { data: gm } = await supabase
+          .from("group_members")
+          .select("user_id")
+          .eq("group_id", groupId);
+
+        const rosterIds = (gm ?? []).map((r: any) => r.user_id);
+        if (rosterIds.length) {
+          const { data: pr } = await supabase
+            .from("profiles")
+            .select("id, username, avatar_url")
+            .in("id", rosterIds);
+
+          const rows: RosterRow[] = rosterIds
+            .map((uid) => {
+              const p = (pr ?? []).find((x: any) => x.id === uid);
+              return {
+                user_id: uid,
+                display_name: p?.username ?? uid,
+                avatar_url: p?.avatar_url ?? null,
+              };
+            })
+            .sort((a, b) =>
+              a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" })
+            );
+
+          if (mounted) setRoster(rows);
+        } else if (mounted) {
+          setRoster([]);
         }
       } catch (e: any) {
         if (mounted) setBanner(e?.message ?? String(e));
@@ -391,6 +423,29 @@ export default function GroupPage() {
           </View>
         </View>
       </View>
+
+      {/* Members mini table */}
+      <View style={styles.card}>
+        <Text style={{ fontWeight: "800", marginBottom: 8 }}>Members</Text>
+        {roster.length === 0 ? (
+          <Text style={styles.empty}>No members yet.</Text>
+        ) : (
+          <FlatList
+            data={roster}
+            keyExtractor={(r) => r.user_id}
+            renderItem={({ item }) => (
+              <View style={styles.tableRow}>
+                <View style={styles.userCell}>
+                  {!!item.avatar_url && (
+                    <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
+                  )}
+                  <Text style={styles.userName}>{item.display_name}</Text>
+                </View>
+              </View>
+            )}
+          />
+        )}
+      </View>
     </View>
   );
 }
@@ -409,14 +464,8 @@ const styles = StyleSheet.create({
   },
   bannerText: { color: "#9A3412" },
 
-  controlsRow: {
-    gap: 12,
-    flexDirection: "column",
-  },
-  sportTabs: {
-    flexDirection: "row",
-    gap: 8,
-  },
+  controlsRow: { gap: 12, flexDirection: "column" },
+  sportTabs: { flexDirection: "row", gap: 8 },
   sportTab: {
     flex: 1,
     paddingVertical: 10,
@@ -426,18 +475,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#F1F5F9",
     alignItems: "center",
   },
-  sportTabActive: {
-    backgroundColor: "#0B735F",
-    borderColor: "#0B735F",
-  },
+  sportTabActive: { backgroundColor: "#0B735F", borderColor: "#0B735F" },
   sportTabText: { fontWeight: "700", color: "#0F172A" },
   sportTabTextActive: { color: "white" },
 
-  weekPicker: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
+  weekPicker: { flexDirection: "row", alignItems: "center", gap: 10 },
   weekLabel: { fontWeight: "700" },
 
   cta: {
@@ -449,10 +491,7 @@ const styles = StyleSheet.create({
   },
   ctaText: { color: "white", fontWeight: "800" },
 
-  split: {
-    flexDirection: "row",
-    gap: 16,
-  },
+  split: { flexDirection: "row", gap: 16 },
   leftCol: { flex: 1.6, gap: 12 },
   rightCol: { flex: 1, gap: 12 },
 
