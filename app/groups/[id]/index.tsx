@@ -1,6 +1,6 @@
 export const unstable_settings = { prerender: false };
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -35,22 +35,20 @@ type FeedItem = {
   team?: string | null;
   line?: string | null;
 };
-type RosterRow = { user_id: string; display_name: string; avatar_url?: string | null };
 
-export default function GroupPage() {
+export default function GroupDetailPage() {
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const groupId = Array.isArray(id) ? id?.[0] : id;
+  const groupId = useMemo(() => (Array.isArray(id) ? id?.[0] : id) ?? "", [id]);
 
-  const [groupName, setGroupName] = useState<string>("Group");
+  const [groupName, setGroupName] = useState("WeekendLocks");
   const [sport, setSport] = useState<Sport>("nfl");
   const [week, setWeek] = useState<number>(getCurrentNFLWeek());
   const [members, setMembers] = useState<Member[]>([]);
   const [feed, setFeed] = useState<FeedItem[]>([]);
-  const [roster, setRoster] = useState<RosterRow[]>([]);
+  const [roster, setRoster] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
 
-  // keep week aligned with sport
   useEffect(() => {
     setWeek(sport === "nfl" ? getCurrentNFLWeek() : getCurrentCFBWeek());
   }, [sport]);
@@ -64,7 +62,6 @@ export default function GroupPage() {
         setLoading(true);
         setBanner(null);
 
-        // group name
         const { data: g } = await supabase
           .from("groups")
           .select("name")
@@ -72,8 +69,8 @@ export default function GroupPage() {
           .maybeSingle();
         if (g?.name) setGroupName(g.name);
 
-        // ---- Leaderboard (prefer the view; else aggregate in client)
-        const { data: vData, error: vErr } = await supabase
+        // Try the view first (if you created it)
+        const { data: viewRows, error: viewErr } = await supabase
           .from("v_group_week_member_picks")
           .select("user_id, display_name, picks_count")
           .eq("group_id", groupId)
@@ -81,23 +78,23 @@ export default function GroupPage() {
           .eq("week", week)
           .order("display_name", { ascending: true });
 
-        if (!vErr && vData) {
-          const ids = vData.map((r) => r.user_id);
+        if (!viewErr && viewRows) {
+          const ids = viewRows.map((r) => r.user_id);
           const { data: pf } = await supabase
             .from("profiles")
             .select("id, avatar_url")
             .in("id", ids);
-          const avatarMap = new Map((pf ?? []).map((p) => [p.id, p.avatar_url]));
+          const avatarById = new Map((pf ?? []).map((p) => [p.id, p.avatar_url]));
           if (mounted) {
             setMembers(
-              vData.map((r: any) => ({
+              viewRows.map((r: any) => ({
                 ...r,
-                avatar_url: avatarMap.get(r.user_id) ?? null,
+                avatar_url: avatarById.get(r.user_id) ?? null,
               }))
             );
           }
         } else {
-          // fallback from picks
+          // Fallback aggregate from picks
           const { data: raw, error } = await supabase
             .from("picks")
             .select("user_id")
@@ -105,7 +102,6 @@ export default function GroupPage() {
             .eq("sport", sport)
             .eq("week", week);
           if (error) throw error;
-
           const counts = new Map<string, number>();
           (raw ?? []).forEach((r: any) =>
             counts.set(r.user_id, (counts.get(r.user_id) ?? 0) + 1)
@@ -117,15 +113,15 @@ export default function GroupPage() {
             .select("id, username, avatar_url")
             .in("id", ids);
 
-          const nameMap = new Map<string, string>();
-          (pf ?? []).forEach((p: any) => nameMap.set(p.id, p.username || p.id));
+          const nameById = new Map<string, string>();
+          (pf ?? []).forEach((p: any) => nameById.set(p.id, p.username || p.id));
 
           if (mounted) {
             setMembers(
               ids
                 .map((uid) => ({
                   user_id: uid,
-                  display_name: nameMap.get(uid) ?? uid,
+                  display_name: nameById.get(uid) ?? uid,
                   avatar_url:
                     (pf ?? []).find((p: any) => p.id === uid)?.avatar_url ?? null,
                   picks_count: counts.get(uid) ?? 0,
@@ -139,28 +135,29 @@ export default function GroupPage() {
           }
         }
 
-        // ---- Activity feed
-        const { data: feedRaw } = await supabase
+        // Activity feed
+        const { data: feedRows } = await supabase
           .from("picks")
           .select("id, created_at, user_id, sport, week, market, team, line")
           .eq("group_id", groupId)
           .order("created_at", { ascending: false })
           .limit(20);
 
-        const feedIds = (feedRaw ?? []).map((r) => r.user_id);
+        const feedIds = (feedRows ?? []).map((r) => r.user_id);
         const { data: pf2 } = await supabase
           .from("profiles")
           .select("id, username, avatar_url")
           .in("id", feedIds);
-
-        const byId = new Map<string, { name: string; avatar: string | null }>();
-        (pf2 ?? []).forEach((p: any) =>
-          byId.set(p.id, { name: p.username || p.id, avatar: p.avatar_url ?? null })
+        const byId = new Map(
+          (pf2 ?? []).map((p: any) => [
+            p.id,
+            { name: p.username || p.id, avatar: p.avatar_url ?? null },
+          ])
         );
 
         if (mounted) {
           setFeed(
-            (feedRaw ?? []).map((r: any) => ({
+            (feedRows ?? []).map((r: any) => ({
               id: r.id,
               created_at: r.created_at,
               user_id: r.user_id,
@@ -175,32 +172,30 @@ export default function GroupPage() {
           );
         }
 
-        // ---- Roster
+        // Roster (members list with names)
         const { data: gm } = await supabase
           .from("group_members")
           .select("user_id")
           .eq("group_id", groupId);
-
         const rosterIds = (gm ?? []).map((r: any) => r.user_id);
         if (rosterIds.length) {
           const { data: pr } = await supabase
             .from("profiles")
             .select("id, username, avatar_url")
             .in("id", rosterIds);
-
-          const rows: RosterRow[] = rosterIds
+          const rows: Member[] = rosterIds
             .map((uid) => {
               const p = (pr ?? []).find((x: any) => x.id === uid);
               return {
                 user_id: uid,
                 display_name: p?.username ?? uid,
                 avatar_url: p?.avatar_url ?? null,
+                picks_count: 0,
               };
             })
             .sort((a, b) =>
               a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" })
             );
-
           if (mounted) setRoster(rows);
         } else if (mounted) {
           setRoster([]);
@@ -217,16 +212,8 @@ export default function GroupPage() {
     };
   }, [groupId, sport, week]);
 
-  const total = members.reduce((s, m) => s + m.picks_count, 0) || 0;
-  const max = Math.max(...members.map((m) => m.picks_count), 0);
-
-  if (!groupId) {
-    return (
-      <View style={styles.center}>
-        <Text>Invalid group.</Text>
-      </View>
-    );
-  }
+  const total = members.reduce((s, m) => s + m.picks_count, 0);
+  const max = Math.max(0, ...members.map((m) => m.picks_count));
 
   return (
     <View style={styles.page}>
@@ -296,8 +283,9 @@ export default function GroupPage() {
         </View>
       </View>
 
-      {/* Split: left leaderboard / right feed */}
+      {/* Split */}
       <View style={styles.split}>
+        {/* Left: weekly board */}
         <View style={styles.leftCol}>
           <View style={styles.tiles}>
             <View style={styles.tile}>
@@ -312,8 +300,8 @@ export default function GroupPage() {
 
           <View style={styles.card}>
             <View style={[styles.tableRow, styles.tableHeader]}>
-              <Text style={[styles.thUser]}>Member</Text>
-              <Text style={[styles.thCount]}>Week {week}</Text>
+              <Text style={styles.thUser}>Member</Text>
+              <Text style={styles.thCount}>Week {week}</Text>
             </View>
 
             {loading ? (
@@ -348,6 +336,7 @@ export default function GroupPage() {
           </View>
         </View>
 
+        {/* Right: feed */}
         <View style={styles.rightCol}>
           <View style={styles.card}>
             <Text style={{ fontWeight: "800", marginBottom: 8 }}>Latest picks</Text>
@@ -412,7 +401,6 @@ export default function GroupPage() {
 
 const styles = StyleSheet.create({
   page: { padding: 16, gap: 16 },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
   title: { fontSize: 22, fontWeight: "800" },
 
   banner: {
@@ -504,7 +492,6 @@ const styles = StyleSheet.create({
 
   empty: { paddingVertical: 8, color: "#64748B" },
 
-  // Feed
   feedRow: {
     paddingVertical: 10,
     borderTopWidth: StyleSheet.hairlineWidth,

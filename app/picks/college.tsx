@@ -1,25 +1,112 @@
-import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useMemo, useState } from "react";
+import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, router, Href } from "expo-router";
 import { getCurrentCfbWeek as getCurrentCFBWeek } from "@/lib/cfbWeeks";
 import { useOdds } from "@/lib/useOdds";
 import { supabase } from "@/lib/supabase";
 
-// helpers from section above (paste here)
-function norm(s: string) { return (s||"").toLowerCase().replace(/\./g,"").replace(/state|st\./g,"state").replace(/[\s\-]+/g," ").trim();}
-async function resolveGameId(opts:{sport:"nfl"|"cfb";week:number;home:string;away:string;commenceIso:string;}){const startMs=Date.parse(opts.commenceIso);const windowMs=3*60*60*1000;const {data}=await supabase.from("games").select("id, home_team, away_team, start_time, sport, week").eq("sport",opts.sport).eq("week",opts.week); if(!data) return null; const nHome=norm(opts.home), nAway=norm(opts.away); let best:any=null, bestDelta=1/0; for(const g of data){const dHome=norm(g.home_team), dAway=norm(g.away_team); const time=Date.parse(g.start_time); const delta=Math.abs(time-startMs); const nameMatch=(dHome.includes(nHome)||nHome.includes(dHome)) && (dAway.includes(nAway)||nAway.includes(dAway)); if(nameMatch && delta<bestDelta && delta<=windowMs){best=g; bestDelta=delta;}} return best?.id??null;}
+// ---- tolerant logo helper (same as NFL) ----
+let teamLogosMod: any;
+try {
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  teamLogosMod = require("@/lib/teamLogos");
+} catch {}
+function getTeamLogo(name: string | undefined | null): string | null {
+  if (!name) return null;
+  const m = teamLogosMod ?? {};
+  if (typeof m.getTeamLogo === "function") return m.getTeamLogo(name);
+  if (typeof m.default === "function") return m.default(name);
+  if (m.default && typeof m.default === "object") return m.default[name] ?? null;
+  if (m && typeof m === "object") return m[name] ?? null;
+  return null;
+}
+// --------------------------------------------
 
 type MarketKey = "spreads" | "totals" | "h2h";
 
+/* ---------- same resolver, but without NFL alias table ---------- */
+function norm(s: string) {
+  return (s || "")
+    .toLowerCase()
+    .replace(/\./g, "")
+    .replace(/&/g, "and")
+    .replace(/\s+st\./g, " state")
+    .replace(/[\s\-]+/g, " ")
+    .trim();
+}
+function aliasNameCFB(name: string) {
+  // add specific CFB aliases here if you find mismatches later
+  return norm(name);
+}
+async function resolveGameId(opts: {
+  sport: "nfl" | "cfb";
+  week: number;
+  home: string;
+  away: string;
+  commenceIso: string;
+}) {
+  const center = new Date(opts.commenceIso).getTime();
+  const windowMs = 48 * 60 * 60 * 1000;
+  const fromIso = new Date(center - windowMs).toISOString();
+  const toIso = new Date(center + windowMs).toISOString();
+
+  const { data, error } = await supabase
+    .from("games")
+    .select("id, home, away, kickoff_at, week_id")
+    .gte("kickoff_at", fromIso)
+    .lte("kickoff_at", toIso);
+
+  if (error || !data?.length) return null;
+
+  const feedHome = aliasNameCFB(opts.home);
+  const feedAway = aliasNameCFB(opts.away);
+
+  let best: any = null;
+  let bestDelta = Number.POSITIVE_INFINITY;
+
+  for (const g of data) {
+    const gh = aliasNameCFB(g.home);
+    const ga = aliasNameCFB(g.away);
+    const t = Date.parse(g.kickoff_at);
+    if (!Number.isFinite(t)) continue;
+
+    const delta = Math.abs(t - center);
+    if (delta > windowMs) continue;
+
+    const dir =
+      (gh.includes(feedHome) || feedHome.includes(gh)) &&
+      (ga.includes(feedAway) || feedAway.includes(ga));
+    const swap =
+      (gh.includes(feedAway) || feedAway.includes(gh)) &&
+      (ga.includes(feedHome) || feedHome.includes(ga));
+    if ((dir || swap) && delta < bestDelta) {
+      best = g;
+      bestDelta = delta;
+    }
+  }
+  return best?.id ?? null;
+}
+/* ---------- end resolver ---------- */
+
 export default function CFBBetsPage() {
   const params = useLocalSearchParams<{ group?: string; w?: string }>();
-  const groupId = Array.isArray(params.group) ? params.group[0] : params.group;
+  const groupId = useMemo(
+    () => (Array.isArray(params.group) ? params.group[0] : params.group),
+    [params.group]
+  );
 
   const [tab, setTab] = useState<MarketKey>("spreads");
   const [week, setWeek] = useState<number>(() => {
     const n = Number(Array.isArray(params.w) ? params.w[0] : params.w);
     return Number.isFinite(n) && n > 0 ? n : getCurrentCFBWeek();
   });
+
+  const selectStyle: React.CSSProperties = {
+    padding: 6,
+    borderRadius: 8,
+    border: "1px solid #CBD5E1",
+  };
 
   const { data: games, loading, error } = useOdds("americanfootball_ncaaf", week, {
     markets: ["spreads", "totals", "h2h"],
@@ -67,30 +154,22 @@ export default function CFBBetsPage() {
         alert(`Could not save pick: ${error.message}`);
         return;
       }
-      if (groupId) router.push(`/groups/${groupId}`);
+      if (groupId) router.push(`/groups/${groupId}` as Href);
     } catch (e) {
       console.error(e);
       alert("Could not save pick.");
     }
   }
 
-  const marketsFor = (g: any) => {
-    const bm = g.bookmakers?.[0];
-    return bm?.markets ?? [];
-    };
+  const firstMarkets = (g: any) => g.bookmakers?.[0]?.markets ?? [];
 
   return (
     <View style={{ padding: 12, gap: 12 }}>
       <Text style={{ fontWeight: "800", fontSize: 18 }}>College Football — Week {week}</Text>
 
-      {/* Week select (web) */}
       <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
         <Text>Week</Text>
-        <select
-          value={week}
-          onChange={(e) => setWeek(Number(e.target.value))}
-          style={{ padding: 6, borderRadius: 8, border: "1px solid #CBD5E1" } as any}
-        >
+        <select value={week} onChange={(e) => setWeek(Number(e.target.value))} style={selectStyle}>
           {Array.from({ length: 15 }).map((_, i) => (
             <option key={i + 1} value={i + 1}>
               {i + 1}
@@ -108,9 +187,7 @@ export default function CFBBetsPage() {
                 tab === k && { backgroundColor: "#0B735F", borderColor: "#0B735F" },
               ]}
             >
-              <Text style={[styles.tabText, tab === k && { color: "white" }]}>
-                {k.toUpperCase()}
-              </Text>
+              <Text style={[styles.tabText, tab === k && { color: "white" }]}>{k.toUpperCase()}</Text>
             </Pressable>
           ))}
         </View>
@@ -125,25 +202,28 @@ export default function CFBBetsPage() {
           data={games ?? []}
           keyExtractor={(g) => g.id}
           renderItem={({ item: g }) => {
-            const ms = marketsFor(g);
-            const m = ms.find((x: any) => x.key === tab);
+            const markets = firstMarkets(g);
+            const m = markets.find((x: any) => x.key === tab);
             const outcomes: any[] = m?.outcomes ?? [];
+            const hLogo = getTeamLogo(g.home_team);
+            const aLogo = getTeamLogo(g.away_team);
+
             return (
               <View style={styles.gameCard}>
-                <Text style={{ fontWeight: "800" }}>
-                  {g.away_team} @ {g.home_team}
-                </Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  {!!aLogo && <Image source={{ uri: aLogo }} style={styles.logo} />}
+                  <Text style={{ fontWeight: "800", flex: 1 }}>
+                    {g.away_team} @ {g.home_team}
+                  </Text>
+                  {!!hLogo && <Image source={{ uri: hLogo }} style={styles.logo} />}
+                </View>
                 <Text style={{ color: "#475569" }}>
                   {new Date(g.commence_time).toLocaleString()}
                 </Text>
 
                 <View style={{ gap: 8, marginTop: 8 }}>
                   {outcomes.map((o, i) => (
-                    <Pressable
-                      key={i}
-                      onPress={() => handlePick(g, o, tab)}
-                      style={styles.outcomeBtn}
-                    >
+                    <Pressable key={i} onPress={() => handlePick(g, o, tab)} style={styles.outcomeBtn}>
                       <Text style={{ fontWeight: "700" }}>
                         {o.name}
                         {typeof o.point === "number" ? ` ${o.point > 0 ? "+" : ""}${o.point}` : ""}
@@ -178,7 +258,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     marginBottom: 10,
-    gap: 4,
+    gap: 6,
   },
   outcomeBtn: {
     backgroundColor: "#0B735F22",
@@ -188,4 +268,5 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 10,
   },
+  logo: { width: 28, height: 28, resizeMode: "contain" },
 });

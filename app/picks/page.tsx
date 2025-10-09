@@ -1,19 +1,127 @@
-import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useMemo, useState } from "react";
+import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, router, Href } from "expo-router";
 import { getCurrentWeek as getCurrentNFLWeek } from "@/lib/nflWeeks";
 import { useOdds } from "@/lib/useOdds";
 import { supabase } from "@/lib/supabase";
 
-// helpers from section above (paste here)
-function norm(s: string) { /* same as above */ return (s||"").toLowerCase().replace(/\./g,"").replace(/state|st\./g,"state").replace(/[\s\-]+/g," ").trim();}
-async function resolveGameId(opts:{sport:"nfl"|"cfb";week:number;home:string;away:string;commenceIso:string;}){const startMs=Date.parse(opts.commenceIso);const windowMs=3*60*60*1000;const {data}=await supabase.from("games").select("id, home_team, away_team, start_time, sport, week").eq("sport",opts.sport).eq("week",opts.week); if(!data) return null; const nHome=norm(opts.home), nAway=norm(opts.away); let best:any=null, bestDelta=1/0; for(const g of data){const dHome=norm(g.home_team), dAway=norm(g.away_team); const time=Date.parse(g.start_time); const delta=Math.abs(time-startMs); const nameMatch=(dHome.includes(nHome)||nHome.includes(dHome)) && (dAway.includes(nAway)||nAway.includes(dAway)); if(nameMatch && delta<bestDelta && delta<=windowMs){best=g; bestDelta=delta;}} return best?.id??null;}
+// ---- tolerant logo helper (works with default export, named export, or map) ----
+let teamLogosMod: any;
+try {
+  // If your module doesn't exist or exports differently, this won't crash
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  teamLogosMod = require("@/lib/teamLogos");
+} catch {}
+function getTeamLogo(name: string | undefined | null): string | null {
+  if (!name) return null;
+  const m = teamLogosMod ?? {};
+  // named export function
+  if (typeof m.getTeamLogo === "function") return m.getTeamLogo(name);
+  // default export function
+  if (typeof m.default === "function") return m.default(name);
+  // default export map/object
+  if (m.default && typeof m.default === "object") return m.default[name] ?? null;
+  // object with keys
+  if (m && typeof m === "object") return m[name] ?? null;
+  return null;
+}
+// -----------------------------------------------------------------------------
 
 type MarketKey = "spreads" | "totals" | "h2h";
 
+/* ---------- resolver tuned to your games schema ---------- */
+function norm(s: string) {
+  return (s || "")
+    .toLowerCase()
+    .replace(/\./g, "")
+    .replace(/&/g, "and")
+    .replace(/\s+st\./g, " state")
+    .replace(/[\s\-]+/g, " ")
+    .trim();
+}
+const NFL_ALIASES: Record<string, string> = {
+  "ny giants": "new york giants",
+  giants: "new york giants",
+  "ny jets": "new york jets",
+  jets: "new york jets",
+  "la rams": "los angeles rams",
+  rams: "los angeles rams",
+  "la chargers": "los angeles chargers",
+  chargers: "los angeles chargers",
+  jax: "jacksonville jaguars",
+  bucs: "tampa bay buccaneers",
+  "no saints": "new orleans saints",
+  "ne patriots": "new england patriots",
+  "gb packers": "green bay packers",
+  "kc chiefs": "kansas city chiefs",
+  "lv raiders": "las vegas raiders",
+  "ari cardinals": "arizona cardinals",
+  "sf 49ers": "san francisco 49ers",
+  "sea seahawks": "seattle seahawks",
+  "tb": "tampa bay buccaneers",
+  "wsh": "washington commanders",
+};
+function aliasName(name: string) {
+  const n = norm(name);
+  return NFL_ALIASES[n] ?? n;
+}
+async function resolveGameId(opts: {
+  sport: "nfl" | "cfb";
+  week: number;
+  home: string;
+  away: string;
+  commenceIso: string;
+}) {
+  const center = new Date(opts.commenceIso).getTime();
+  const windowMs = 48 * 60 * 60 * 1000;
+  const fromIso = new Date(center - windowMs).toISOString();
+  const toIso = new Date(center + windowMs).toISOString();
+
+  const { data, error } = await supabase
+    .from("games")
+    .select("id, home, away, kickoff_at, week_id")
+    .gte("kickoff_at", fromIso)
+    .lte("kickoff_at", toIso);
+
+  if (error || !data?.length) return null;
+
+  const feedHome = aliasName(opts.home);
+  const feedAway = aliasName(opts.away);
+
+  let best: any = null;
+  let bestDelta = Number.POSITIVE_INFINITY;
+
+  for (const g of data) {
+    const gh = aliasName(g.home);
+    const ga = aliasName(g.away);
+    const t = Date.parse(g.kickoff_at);
+    if (!Number.isFinite(t)) continue;
+
+    const delta = Math.abs(t - center);
+    if (delta > windowMs) continue;
+
+    const dir =
+      (gh.includes(feedHome) || feedHome.includes(gh)) &&
+      (ga.includes(feedAway) || feedAway.includes(ga));
+    const swap =
+      (gh.includes(feedAway) || feedAway.includes(gh)) &&
+      (ga.includes(feedHome) || feedHome.includes(ga));
+    if ((dir || swap) && delta < bestDelta) {
+      best = g;
+      bestDelta = delta;
+    }
+  }
+  return best?.id ?? null;
+}
+/* ---------- end resolver ---------- */
+
 export default function NFLPicksPage() {
   const params = useLocalSearchParams<{ group?: string; w?: string }>();
-  const groupId = Array.isArray(params.group) ? params.group[0] : params.group;
+  const groupId = useMemo(
+    () => (Array.isArray(params.group) ? params.group[0] : params.group),
+    [params.group]
+  );
 
   const [tab, setTab] = useState<MarketKey>("spreads");
   const [week, setWeek] = useState<number>(() => {
@@ -21,7 +129,12 @@ export default function NFLPicksPage() {
     return Number.isFinite(n) && n > 0 ? n : getCurrentNFLWeek();
   });
 
-  // Odds API hook (you already have this)
+  const selectStyle: React.CSSProperties = {
+    padding: 6,
+    borderRadius: 8,
+    border: "1px solid #CBD5E1",
+  };
+
   const { data: games, loading, error } = useOdds("americanfootball_nfl", week, {
     markets: ["spreads", "totals", "h2h"],
     region: "us",
@@ -68,30 +181,32 @@ export default function NFLPicksPage() {
         alert(`Could not save pick: ${error.message}`);
         return;
       }
-      if (groupId) router.push(`/groups/${groupId}`);
+      if (groupId) router.push(`/groups/${groupId}` as Href);
     } catch (e) {
       console.error(e);
       alert("Could not save pick.");
     }
   }
 
-  const marketsFor = (g: any) => {
-    const bm = g.bookmakers?.[0];
-    return bm?.markets ?? [];
-  };
+  const firstMarkets = (g: any) => g.bookmakers?.[0]?.markets ?? [];
 
   return (
     <View style={{ padding: 12, gap: 12 }}>
-      <Text style={{ fontWeight: "800", fontSize: 18 }}>NFL — Week {week}</Text>
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <Text style={{ fontWeight: "800", fontSize: 18, flex: 1 }}>NFL — Week {week}</Text>
+        <Pressable
+          onPress={() =>
+            router.push({ pathname: "/picks/college", params: { group: groupId, w: String(week) } } as Href)
+          }
+          style={{ paddingVertical: 6, paddingHorizontal: 8 }}
+        >
+          <Text style={{ color: "#0B735F", fontWeight: "700" }}>NCAA ↗</Text>
+        </Pressable>
+      </View>
 
-      {/* Week select (web) */}
       <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
         <Text>Week</Text>
-        <select
-          value={week}
-          onChange={(e) => setWeek(Number(e.target.value))}
-          style={{ padding: 6, borderRadius: 8, border: "1px solid #CBD5E1" } as any}
-        >
+        <select value={week} onChange={(e) => setWeek(Number(e.target.value))} style={selectStyle}>
           {Array.from({ length: 18 }).map((_, i) => (
             <option key={i + 1} value={i + 1}>
               {i + 1}
@@ -109,9 +224,7 @@ export default function NFLPicksPage() {
                 tab === k && { backgroundColor: "#0B735F", borderColor: "#0B735F" },
               ]}
             >
-              <Text style={[styles.tabText, tab === k && { color: "white" }]}>
-                {k.toUpperCase()}
-              </Text>
+              <Text style={[styles.tabText, tab === k && { color: "white" }]}>{k.toUpperCase()}</Text>
             </Pressable>
           ))}
         </View>
@@ -126,25 +239,28 @@ export default function NFLPicksPage() {
           data={games ?? []}
           keyExtractor={(g) => g.id}
           renderItem={({ item: g }) => {
-            const ms = marketsFor(g);
-            const m = ms.find((x: any) => x.key === tab);
+            const markets = firstMarkets(g);
+            const m = markets.find((x: any) => x.key === tab);
             const outcomes: any[] = m?.outcomes ?? [];
+            const hLogo = getTeamLogo(g.home_team);
+            const aLogo = getTeamLogo(g.away_team);
+
             return (
               <View style={styles.gameCard}>
-                <Text style={{ fontWeight: "800" }}>
-                  {g.away_team} @ {g.home_team}
-                </Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  {!!aLogo && <Image source={{ uri: aLogo }} style={styles.logo} />}
+                  <Text style={{ fontWeight: "800", flex: 1 }}>
+                    {g.away_team} @ {g.home_team}
+                  </Text>
+                  {!!hLogo && <Image source={{ uri: hLogo }} style={styles.logo} />}
+                </View>
                 <Text style={{ color: "#475569" }}>
                   {new Date(g.commence_time).toLocaleString()}
                 </Text>
 
                 <View style={{ gap: 8, marginTop: 8 }}>
                   {outcomes.map((o, i) => (
-                    <Pressable
-                      key={i}
-                      onPress={() => handlePick(g, o, tab)}
-                      style={styles.outcomeBtn}
-                    >
+                    <Pressable key={i} onPress={() => handlePick(g, o, tab)} style={styles.outcomeBtn}>
                       <Text style={{ fontWeight: "700" }}>
                         {o.name}
                         {typeof o.point === "number" ? ` ${o.point > 0 ? "+" : ""}${o.point}` : ""}
@@ -179,7 +295,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     marginBottom: 10,
-    gap: 4,
+    gap: 6,
   },
   outcomeBtn: {
     backgroundColor: "#0B735F22",
@@ -189,4 +305,5 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 10,
   },
+  logo: { width: 28, height: 28, resizeMode: "contain" },
 });
