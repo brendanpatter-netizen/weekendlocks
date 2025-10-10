@@ -33,7 +33,7 @@ function getTeamLogo(name?: string | null): string | null {
 type MarketKey = "spreads" | "totals" | "h2h";
 
 /* ---------------- name normalizer & side calculator ---------------- */
-function n(s: string) {
+function norm(s: string) {
   return (s ?? "")
     .toLowerCase()
     .replace(/\./g, "")
@@ -47,68 +47,70 @@ function computeSide(
   outcome: any,
   market: MarketKey
 ): "home" | "away" | "over" | "under" | "team" {
-  const on = n(outcome?.name ?? "");
+  const on = norm(outcome?.name ?? "");
   if (market === "totals") {
     if (on.startsWith("over")) return "over";
     if (on.startsWith("under")) return "under";
     return "team";
   }
-  const home = n(game.home_team ?? game.home ?? "");
-  const away = n(game.away_team ?? game.away ?? "");
+  const home = norm(game.home_team ?? game.home ?? "");
+  const away = norm(game.away_team ?? game.away ?? "");
   if (on.includes(home)) return "home";
   if (on.includes(away)) return "away";
   return "team";
 }
 /* ------------------------------------------------------------------ */
 
-/* --------------------------- resolver (CFB) ------------------------ */
-function aliasCFB(name: string) { return n(name); }
-
-async function resolveGameId(opts: {
+/* ------------- Step 2: resolve OR CREATE a game id in DB ---------- */
+async function resolveOrCreateGameId(opts: {
+  league: "nfl" | "cfb";
   week: number;
   home: string;
   away: string;
   commenceIso: string;
+  externalId?: string | null;
 }) {
   const center = new Date(opts.commenceIso).getTime();
   const windowMs = 48 * 60 * 60 * 1000;
   const fromIso = new Date(center - windowMs).toISOString();
   const toIso = new Date(center + windowMs).toISOString();
 
-  const { data, error } = await supabase
+  const { data: rows } = await supabase
     .from("games")
     .select("id, home, away, kickoff_at")
     .gte("kickoff_at", fromIso)
     .lte("kickoff_at", toIso);
 
-  if (error || !data?.length) return null;
-
-  const feedHome = aliasCFB(opts.home);
-  const feedAway = aliasCFB(opts.away);
-  let best: any = null;
-  let bestDelta = Number.POSITIVE_INFINITY;
-
-  for (const g of data) {
-    const gh = aliasCFB(g.home);
-    const ga = aliasCFB(g.away);
-    const t = Date.parse(g.kickoff_at);
-    if (!Number.isFinite(t)) continue;
-    const delta = Math.abs(t - center);
-    if (delta > windowMs) continue;
-
-    const dir =
-      (gh.includes(feedHome) || feedHome.includes(gh)) &&
-      (ga.includes(feedAway) || feedAway.includes(ga));
-    const swap =
-      (gh.includes(feedAway) || feedAway.includes(gh)) &&
-      (ga.includes(feedHome) || feedHome.includes(ga));
-
-    if ((dir || swap) && delta < bestDelta) {
-      best = g;
-      bestDelta = delta;
+  if (rows?.length) {
+    const feedHome = norm(opts.home);
+    const feedAway = norm(opts.away);
+    for (const r of rows) {
+      const rh = norm(r.home);
+      const ra = norm(r.away);
+      const dir =
+        (rh.includes(feedHome) || feedHome.includes(rh)) &&
+        (ra.includes(feedAway) || feedAway.includes(ra));
+      const swap =
+        (rh.includes(feedAway) || feedAway.includes(rh)) &&
+        (ra.includes(feedHome) || feedHome.includes(ra));
+      if (dir || swap) return r.id;
     }
   }
-  return best?.id ?? null;
+
+  const { data, error } = await supabase.rpc("upsert_game_from_feed", {
+    _league: opts.league,
+    _week: opts.week,
+    _kickoff_at: opts.commenceIso,
+    _home: opts.home,
+    _away: opts.away,
+    _external_id: opts.externalId ?? null,
+  });
+
+  if (error) {
+    console.warn("upsert_game_from_feed error", error);
+    return null;
+  }
+  return data as number | null;
 }
 /* ------------------------------------------------------------------ */
 
@@ -147,14 +149,16 @@ export default function CFBBetsPage() {
       return;
     }
 
-    const gameId = await resolveGameId({
+    const gameId = await resolveOrCreateGameId({
+      league: "cfb",
       week,
       home: game.home_team ?? game.home ?? "",
       away: game.away_team ?? game.away ?? "",
       commenceIso: game.commence_time,
+      externalId: game.id ?? null,
     });
     if (!gameId) {
-      alert("This matchup isn’t synced to your DB yet.");
+      alert("Could not resolve/create matchup in the DB.");
       return;
     }
 
@@ -188,11 +192,13 @@ export default function CFBBetsPage() {
     const user = auth?.user;
     if (!user) return;
 
-    const gameId = await resolveGameId({
+    const gameId = await resolveOrCreateGameId({
+      league: "cfb",
       week,
       home: game.home_team ?? game.home ?? "",
       away: game.away_team ?? game.away ?? "",
       commenceIso: game.commence_time,
+      externalId: game.id ?? null,
     });
     if (!gameId) return;
 
