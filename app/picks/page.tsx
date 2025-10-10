@@ -1,38 +1,41 @@
 import React, { useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useLocalSearchParams, router, Href } from "expo-router";
 import { getCurrentWeek as getCurrentNFLWeek } from "@/lib/nflWeeks";
 import { useOdds } from "@/lib/useOdds";
 import { supabase } from "@/lib/supabase";
 
-// ---- tolerant logo helper (works with default export, named export, or map) ----
+/* -------------------- team logos (tolerant import) -------------------- */
 let teamLogosMod: any;
 try {
-  // If your module doesn't exist or exports differently, this won't crash
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   teamLogosMod = require("@/lib/teamLogos");
 } catch {}
-function getTeamLogo(name: string | undefined | null): string | null {
+function getTeamLogo(name?: string | null): string | null {
   if (!name) return null;
   const m = teamLogosMod ?? {};
-  // named export function
   if (typeof m.getTeamLogo === "function") return m.getTeamLogo(name);
-  // default export function
   if (typeof m.default === "function") return m.default(name);
-  // default export map/object
   if (m.default && typeof m.default === "object") return m.default[name] ?? null;
-  // object with keys
   if (m && typeof m === "object") return m[name] ?? null;
   return null;
 }
-// -----------------------------------------------------------------------------
+/* --------------------------------------------------------------------- */
 
 type MarketKey = "spreads" | "totals" | "h2h";
 
-/* ---------- resolver tuned to your games schema ---------- */
-function norm(s: string) {
-  return (s || "")
+/* ------------------ name normalizer & side calculator ----------------- */
+function n(s: string) {
+  return (s ?? "")
     .toLowerCase()
     .replace(/\./g, "")
     .replace(/&/g, "and")
@@ -40,6 +43,26 @@ function norm(s: string) {
     .replace(/[\s\-]+/g, " ")
     .trim();
 }
+function computeSide(
+  game: any,
+  outcome: any,
+  market: MarketKey
+): "home" | "away" | "over" | "under" | "team" {
+  const on = n(outcome?.name ?? "");
+  if (market === "totals") {
+    if (on.startsWith("over")) return "over";
+    if (on.startsWith("under")) return "under";
+    return "team";
+  }
+  const home = n(game.home_team ?? game.home ?? "");
+  const away = n(game.away_team ?? game.away ?? "");
+  if (on.includes(home)) return "home";
+  if (on.includes(away)) return "away";
+  return "team";
+}
+/* --------------------------------------------------------------------- */
+
+/* --------------------------- resolver (NFL) --------------------------- */
 const NFL_ALIASES: Record<string, string> = {
   "ny giants": "new york giants",
   giants: "new york giants",
@@ -62,12 +85,11 @@ const NFL_ALIASES: Record<string, string> = {
   "tb": "tampa bay buccaneers",
   "wsh": "washington commanders",
 };
-function aliasName(name: string) {
-  const n = norm(name);
-  return NFL_ALIASES[n] ?? n;
+function aliasNFL(name: string) {
+  const s = n(name);
+  return NFL_ALIASES[s] ?? s;
 }
 async function resolveGameId(opts: {
-  sport: "nfl" | "cfb";
   week: number;
   home: string;
   away: string;
@@ -86,18 +108,16 @@ async function resolveGameId(opts: {
 
   if (error || !data?.length) return null;
 
-  const feedHome = aliasName(opts.home);
-  const feedAway = aliasName(opts.away);
-
+  const feedHome = aliasNFL(opts.home);
+  const feedAway = aliasNFL(opts.away);
   let best: any = null;
   let bestDelta = Number.POSITIVE_INFINITY;
 
   for (const g of data) {
-    const gh = aliasName(g.home);
-    const ga = aliasName(g.away);
+    const gh = aliasNFL(g.home);
+    const ga = aliasNFL(g.away);
     const t = Date.parse(g.kickoff_at);
     if (!Number.isFinite(t)) continue;
-
     const delta = Math.abs(t - center);
     if (delta > windowMs) continue;
 
@@ -114,7 +134,7 @@ async function resolveGameId(opts: {
   }
   return best?.id ?? null;
 }
-/* ---------- end resolver ---------- */
+/* --------------------------------------------------------------------- */
 
 export default function NFLPicksPage() {
   const params = useLocalSearchParams<{ group?: string; w?: string }>();
@@ -142,61 +162,62 @@ export default function NFLPicksPage() {
   });
 
   async function handlePick(game: any, outcome: any, market: MarketKey) {
-    try {
-      const { data: auth } = await supabase.auth.getUser();
-      const user = auth?.user;
-      if (!user) {
-        router.push("/auth" as Href);
-        return;
-      }
-
-      const gameId = await resolveGameId({
-        sport: "nfl",
-        week,
-        home: game.home_team ?? game.home ?? "",
-        away: game.away_team ?? game.away ?? "",
-        commenceIso: game.commence_time,
-      });
-      if (!gameId) {
-        alert("This matchup isn’t synced to your DB yet.");
-        return;
-      }
-
-      const insert = {
-        user_id: user.id,
-        group_id: groupId ?? null,
-        sport: "nfl" as const,
-        week,
-        game_id: gameId,
-        market,
-        team: outcome?.name ?? null,
-        price: typeof outcome?.price === "number" ? outcome.price : null,
-        line: typeof outcome?.point === "number" ? String(outcome.point) : null,
-        created_at: new Date().toISOString(),
-      };
-
-      const { error } = await supabase.from("picks").insert(insert);
-      if (error) {
-        console.error("Supabase insert error:", error);
-        alert(`Could not save pick: ${error.message}`);
-        return;
-      }
-      if (groupId) router.push(`/groups/${groupId}` as Href);
-    } catch (e) {
-      console.error(e);
-      alert("Could not save pick.");
+    const { data: auth } = await supabase.auth.getUser();
+    const user = auth?.user;
+    if (!user) {
+      router.push("/auth" as Href);
+      return;
     }
+
+    const gameId = await resolveGameId({
+      week,
+      home: game.home_team ?? game.home ?? "",
+      away: game.away_team ?? game.away ?? "",
+      commenceIso: game.commence_time,
+    });
+    if (!gameId) {
+      alert("This matchup isn’t synced to your DB yet.");
+      return;
+    }
+
+    const insert = {
+      user_id: user.id,
+      group_id: groupId ?? null,
+      sport: "nfl" as const,
+      week,
+      game_id: gameId,
+      market,
+      team: outcome?.name ?? null,
+      price: typeof outcome?.price === "number" ? outcome.price : null,
+      line: typeof outcome?.point === "number" ? String(outcome.point) : null,
+      side: computeSide(game, outcome, market), // <— satisfies NOT NULL side
+      created_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from("picks").insert(insert);
+    if (error) {
+      alert(`Could not save pick: ${error.message}`);
+      return;
+    }
+    if (groupId) router.push(`/groups/${groupId}` as Href);
   }
 
-  const firstMarkets = (g: any) => g.bookmakers?.[0]?.markets ?? [];
+  const weekOptions = Array.from({ length: 18 }, (_, i) => i + 1) as number[];
 
   return (
-    <View style={{ padding: 12, gap: 12 }}>
+    <ScrollView
+      style={{ flex: 1 }}                                // fill the page via flex
+      contentContainerStyle={{ padding: 12, gap: 12, paddingBottom: 24 }}  // spacing and scroll room
+>
+
       <View style={{ flexDirection: "row", alignItems: "center" }}>
         <Text style={{ fontWeight: "800", fontSize: 18, flex: 1 }}>NFL — Week {week}</Text>
         <Pressable
           onPress={() =>
-            router.push({ pathname: "/picks/college", params: { group: groupId, w: String(week) } } as Href)
+            router.push({
+              pathname: "/picks/college",
+              params: { group: groupId, w: String(week) },
+            } as Href)
           }
           style={{ paddingVertical: 6, paddingHorizontal: 8 }}
         >
@@ -207,9 +228,9 @@ export default function NFLPicksPage() {
       <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
         <Text>Week</Text>
         <select value={week} onChange={(e) => setWeek(Number(e.target.value))} style={selectStyle}>
-          {Array.from({ length: 18 }).map((_, i) => (
-            <option key={i + 1} value={i + 1}>
-              {i + 1}
+          {weekOptions.map((w) => (
+            <option key={w} value={w}>
+              {w}
             </option>
           ))}
         </select>
@@ -235,46 +256,42 @@ export default function NFLPicksPage() {
       ) : error ? (
         <Text>Error loading odds.</Text>
       ) : (
-        <FlatList
-          data={games ?? []}
-          keyExtractor={(g) => g.id}
-          renderItem={({ item: g }) => {
-            const markets = firstMarkets(g);
-            const m = markets.find((x: any) => x.key === tab);
-            const outcomes: any[] = m?.outcomes ?? [];
-            const hLogo = getTeamLogo(g.home_team);
-            const aLogo = getTeamLogo(g.away_team);
+        (games ?? []).map((g: any) => {
+          const markets = g.bookmakers?.[0]?.markets ?? [];
+          const m = markets.find((x: any) => x.key === tab);
+          const outcomes: any[] = m?.outcomes ?? [];
+          const hLogo = getTeamLogo(g.home_team);
+          const aLogo = getTeamLogo(g.away_team);
 
-            return (
-              <View style={styles.gameCard}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                  {!!aLogo && <Image source={{ uri: aLogo }} style={styles.logo} />}
-                  <Text style={{ fontWeight: "800", flex: 1 }}>
-                    {g.away_team} @ {g.home_team}
-                  </Text>
-                  {!!hLogo && <Image source={{ uri: hLogo }} style={styles.logo} />}
-                </View>
-                <Text style={{ color: "#475569" }}>
-                  {new Date(g.commence_time).toLocaleString()}
+          return (
+            <View key={g.id} style={styles.gameCard}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                {!!aLogo && <Image source={{ uri: aLogo }} style={styles.logo} />}
+                <Text style={{ fontWeight: "800", flex: 1 }}>
+                  {g.away_team} @ {g.home_team}
                 </Text>
-
-                <View style={{ gap: 8, marginTop: 8 }}>
-                  {outcomes.map((o, i) => (
-                    <Pressable key={i} onPress={() => handlePick(g, o, tab)} style={styles.outcomeBtn}>
-                      <Text style={{ fontWeight: "700" }}>
-                        {o.name}
-                        {typeof o.point === "number" ? ` ${o.point > 0 ? "+" : ""}${o.point}` : ""}
-                        {typeof o.price === "number" ? `  (${o.price})` : ""}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
+                {!!hLogo && <Image source={{ uri: hLogo }} style={styles.logo} />}
               </View>
-            );
-          }}
-        />
+              <Text style={{ color: "#475569" }}>
+                {new Date(g.commence_time).toLocaleString()}
+              </Text>
+
+              <View style={{ gap: 8, marginTop: 8 }}>
+                {outcomes.map((o, i) => (
+                  <Pressable key={i} onPress={() => handlePick(g, o, tab)} style={styles.outcomeBtn}>
+                    <Text style={{ fontWeight: "700" }}>
+                      {o.name}
+                      {typeof o.point === "number" ? ` ${o.point > 0 ? "+" : ""}${o.point}` : ""}
+                      {typeof o.price === "number" ? `  (${o.price})` : ""}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          );
+        })
       )}
-    </View>
+    </ScrollView>
   );
 }
 

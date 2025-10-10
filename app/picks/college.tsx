@@ -1,18 +1,26 @@
 import React, { useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useLocalSearchParams, router, Href } from "expo-router";
 import { getCurrentCfbWeek as getCurrentCFBWeek } from "@/lib/cfbWeeks";
 import { useOdds } from "@/lib/useOdds";
 import { supabase } from "@/lib/supabase";
 
-// ---- tolerant logo helper (same as NFL) ----
+/* -------------------- team logos (tolerant import) -------------------- */
 let teamLogosMod: any;
 try {
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   teamLogosMod = require("@/lib/teamLogos");
 } catch {}
-function getTeamLogo(name: string | undefined | null): string | null {
+function getTeamLogo(name?: string | null): string | null {
   if (!name) return null;
   const m = teamLogosMod ?? {};
   if (typeof m.getTeamLogo === "function") return m.getTeamLogo(name);
@@ -21,13 +29,13 @@ function getTeamLogo(name: string | undefined | null): string | null {
   if (m && typeof m === "object") return m[name] ?? null;
   return null;
 }
-// --------------------------------------------
+/* --------------------------------------------------------------------- */
 
 type MarketKey = "spreads" | "totals" | "h2h";
 
-/* ---------- same resolver, but without NFL alias table ---------- */
-function norm(s: string) {
-  return (s || "")
+/* ------------------ name normalizer & side calculator ----------------- */
+function n(s: string) {
+  return (s ?? "")
     .toLowerCase()
     .replace(/\./g, "")
     .replace(/&/g, "and")
@@ -35,12 +43,30 @@ function norm(s: string) {
     .replace(/[\s\-]+/g, " ")
     .trim();
 }
-function aliasNameCFB(name: string) {
-  // add specific CFB aliases here if you find mismatches later
-  return norm(name);
+function computeSide(
+  game: any,
+  outcome: any,
+  market: MarketKey
+): "home" | "away" | "over" | "under" | "team" {
+  const on = n(outcome?.name ?? "");
+  if (market === "totals") {
+    if (on.startsWith("over")) return "over";
+    if (on.startsWith("under")) return "under";
+    return "team";
+  }
+  const home = n(game.home_team ?? game.home ?? "");
+  const away = n(game.away_team ?? game.away ?? "");
+  if (on.includes(home)) return "home";
+  if (on.includes(away)) return "away";
+  return "team";
+}
+/* --------------------------------------------------------------------- */
+
+/* --------------------------- resolver (CFB) --------------------------- */
+function aliasCFB(name: string) {
+  return n(name); // add special-case aliases later if you find mismatches
 }
 async function resolveGameId(opts: {
-  sport: "nfl" | "cfb";
   week: number;
   home: string;
   away: string;
@@ -59,18 +85,16 @@ async function resolveGameId(opts: {
 
   if (error || !data?.length) return null;
 
-  const feedHome = aliasNameCFB(opts.home);
-  const feedAway = aliasNameCFB(opts.away);
-
+  const feedHome = aliasCFB(opts.home);
+  const feedAway = aliasCFB(opts.away);
   let best: any = null;
   let bestDelta = Number.POSITIVE_INFINITY;
 
   for (const g of data) {
-    const gh = aliasNameCFB(g.home);
-    const ga = aliasNameCFB(g.away);
+    const gh = aliasCFB(g.home);
+    const ga = aliasCFB(g.away);
     const t = Date.parse(g.kickoff_at);
     if (!Number.isFinite(t)) continue;
-
     const delta = Math.abs(t - center);
     if (delta > windowMs) continue;
 
@@ -87,7 +111,7 @@ async function resolveGameId(opts: {
   }
   return best?.id ?? null;
 }
-/* ---------- end resolver ---------- */
+/* --------------------------------------------------------------------- */
 
 export default function CFBBetsPage() {
   const params = useLocalSearchParams<{ group?: string; w?: string }>();
@@ -115,64 +139,62 @@ export default function CFBBetsPage() {
   });
 
   async function handlePick(game: any, outcome: any, market: MarketKey) {
-    try {
-      const { data: auth } = await supabase.auth.getUser();
-      const user = auth?.user;
-      if (!user) {
-        router.push("/auth" as Href);
-        return;
-      }
-
-      const gameId = await resolveGameId({
-        sport: "cfb",
-        week,
-        home: game.home_team ?? game.home ?? "",
-        away: game.away_team ?? game.away ?? "",
-        commenceIso: game.commence_time,
-      });
-      if (!gameId) {
-        alert("This matchup isn’t synced to your DB yet.");
-        return;
-      }
-
-      const insert = {
-        user_id: user.id,
-        group_id: groupId ?? null,
-        sport: "cfb" as const,
-        week,
-        game_id: gameId,
-        market,
-        team: outcome?.name ?? null,
-        price: typeof outcome?.price === "number" ? outcome.price : null,
-        line: typeof outcome?.point === "number" ? String(outcome.point) : null,
-        created_at: new Date().toISOString(),
-      };
-
-      const { error } = await supabase.from("picks").insert(insert);
-      if (error) {
-        console.error("Supabase insert error:", error);
-        alert(`Could not save pick: ${error.message}`);
-        return;
-      }
-      if (groupId) router.push(`/groups/${groupId}` as Href);
-    } catch (e) {
-      console.error(e);
-      alert("Could not save pick.");
+    const { data: auth } = await supabase.auth.getUser();
+    const user = auth?.user;
+    if (!user) {
+      router.push("/auth" as Href);
+      return;
     }
+
+    const gameId = await resolveGameId({
+      week,
+      home: game.home_team ?? game.home ?? "",
+      away: game.away_team ?? game.away ?? "",
+      commenceIso: game.commence_time,
+    });
+    if (!gameId) {
+      alert("This matchup isn’t synced to your DB yet.");
+      return;
+    }
+
+    const insert = {
+      user_id: user.id,
+      group_id: groupId ?? null,
+      sport: "cfb" as const,
+      week,
+      game_id: gameId,
+      market,
+      team: outcome?.name ?? null,
+      price: typeof outcome?.price === "number" ? outcome.price : null,
+      line: typeof outcome?.point === "number" ? String(outcome.point) : null,
+      side: computeSide(game, outcome, market),
+      created_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from("picks").insert(insert);
+    if (error) {
+      alert(`Could not save pick: ${error.message}`);
+      return;
+    }
+    if (groupId) router.push(`/groups/${groupId}` as Href);
   }
 
-  const firstMarkets = (g: any) => g.bookmakers?.[0]?.markets ?? [];
+  const weekOptions = Array.from({ length: 15 }, (_, i) => i + 1) as number[];
 
   return (
-    <View style={{ padding: 12, gap: 12 }}>
+    <ScrollView
+      style={{ flex: 1 }}                                // fill the page via flex
+      contentContainerStyle={{ padding: 12, gap: 12, paddingBottom: 24 }}  // spacing and scroll room
+>
+
       <Text style={{ fontWeight: "800", fontSize: 18 }}>College Football — Week {week}</Text>
 
       <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
         <Text>Week</Text>
         <select value={week} onChange={(e) => setWeek(Number(e.target.value))} style={selectStyle}>
-          {Array.from({ length: 15 }).map((_, i) => (
-            <option key={i + 1} value={i + 1}>
-              {i + 1}
+          {weekOptions.map((w) => (
+            <option key={w} value={w}>
+              {w}
             </option>
           ))}
         </select>
@@ -198,46 +220,42 @@ export default function CFBBetsPage() {
       ) : error ? (
         <Text>Error loading odds.</Text>
       ) : (
-        <FlatList
-          data={games ?? []}
-          keyExtractor={(g) => g.id}
-          renderItem={({ item: g }) => {
-            const markets = firstMarkets(g);
-            const m = markets.find((x: any) => x.key === tab);
-            const outcomes: any[] = m?.outcomes ?? [];
-            const hLogo = getTeamLogo(g.home_team);
-            const aLogo = getTeamLogo(g.away_team);
+        (games ?? []).map((g: any) => {
+          const markets = g.bookmakers?.[0]?.markets ?? [];
+          const m = markets.find((x: any) => x.key === tab);
+          const outcomes: any[] = m?.outcomes ?? [];
+          const hLogo = getTeamLogo(g.home_team);
+          const aLogo = getTeamLogo(g.away_team);
 
-            return (
-              <View style={styles.gameCard}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                  {!!aLogo && <Image source={{ uri: aLogo }} style={styles.logo} />}
-                  <Text style={{ fontWeight: "800", flex: 1 }}>
-                    {g.away_team} @ {g.home_team}
-                  </Text>
-                  {!!hLogo && <Image source={{ uri: hLogo }} style={styles.logo} />}
-                </View>
-                <Text style={{ color: "#475569" }}>
-                  {new Date(g.commence_time).toLocaleString()}
+          return (
+            <View key={g.id} style={styles.gameCard}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                {!!aLogo && <Image source={{ uri: aLogo }} style={styles.logo} />}
+                <Text style={{ fontWeight: "800", flex: 1 }}>
+                  {g.away_team} @ {g.home_team}
                 </Text>
-
-                <View style={{ gap: 8, marginTop: 8 }}>
-                  {outcomes.map((o, i) => (
-                    <Pressable key={i} onPress={() => handlePick(g, o, tab)} style={styles.outcomeBtn}>
-                      <Text style={{ fontWeight: "700" }}>
-                        {o.name}
-                        {typeof o.point === "number" ? ` ${o.point > 0 ? "+" : ""}${o.point}` : ""}
-                        {typeof o.price === "number" ? `  (${o.price})` : ""}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
+                {!!hLogo && <Image source={{ uri: hLogo }} style={styles.logo} />}
               </View>
-            );
-          }}
-        />
+              <Text style={{ color: "#475569" }}>
+                {new Date(g.commence_time).toLocaleString()}
+              </Text>
+
+              <View style={{ gap: 8, marginTop: 8 }}>
+                {outcomes.map((o, i) => (
+                  <Pressable key={i} onPress={() => handlePick(g, o, tab)} style={styles.outcomeBtn}>
+                    <Text style={{ fontWeight: "700" }}>
+                      {o.name}
+                      {typeof o.point === "number" ? ` ${o.point > 0 ? "+" : ""}${o.point}` : ""}
+                      {typeof o.price === "number" ? `  (${o.price})` : ""}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          );
+        })
       )}
-    </View>
+    </ScrollView>
   );
 }
 
