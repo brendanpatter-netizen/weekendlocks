@@ -13,10 +13,9 @@ import { getCurrentCfbWeek as getCurrentCFBWeek } from "@/lib/cfbWeeks";
 import { useOdds } from "@/lib/useOdds";
 import { supabase } from "@/lib/supabase";
 
-/* -------------------- team logos (tolerant import) -------------------- */
+/* ---------- team logos (tolerant import: function or map) ---------- */
 let teamLogosMod: any;
 try {
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   teamLogosMod = require("@/lib/teamLogos");
 } catch {}
@@ -29,11 +28,11 @@ function getTeamLogo(name?: string | null): string | null {
   if (m && typeof m === "object") return m[name] ?? null;
   return null;
 }
-/* --------------------------------------------------------------------- */
+/* ------------------------------------------------------------------ */
 
 type MarketKey = "spreads" | "totals" | "h2h";
 
-/* ------------------ name normalizer & side calculator ----------------- */
+/* ---------------- name normalizer & side calculator ---------------- */
 function n(s: string) {
   return (s ?? "")
     .toLowerCase()
@@ -60,12 +59,11 @@ function computeSide(
   if (on.includes(away)) return "away";
   return "team";
 }
-/* --------------------------------------------------------------------- */
+/* ------------------------------------------------------------------ */
 
-/* --------------------------- resolver (CFB) --------------------------- */
-function aliasCFB(name: string) {
-  return n(name); // add special-case aliases later if you find mismatches
-}
+/* --------------------------- resolver (CFB) ------------------------ */
+function aliasCFB(name: string) { return n(name); }
+
 async function resolveGameId(opts: {
   week: number;
   home: string;
@@ -79,7 +77,7 @@ async function resolveGameId(opts: {
 
   const { data, error } = await supabase
     .from("games")
-    .select("id, home, away, kickoff_at, week_id")
+    .select("id, home, away, kickoff_at")
     .gte("kickoff_at", fromIso)
     .lte("kickoff_at", toIso);
 
@@ -104,6 +102,7 @@ async function resolveGameId(opts: {
     const swap =
       (gh.includes(feedAway) || feedAway.includes(gh)) &&
       (ga.includes(feedHome) || feedHome.includes(ga));
+
     if ((dir || swap) && delta < bestDelta) {
       best = g;
       bestDelta = delta;
@@ -111,12 +110,12 @@ async function resolveGameId(opts: {
   }
   return best?.id ?? null;
 }
-/* --------------------------------------------------------------------- */
+/* ------------------------------------------------------------------ */
 
 export default function CFBBetsPage() {
   const params = useLocalSearchParams<{ group?: string; w?: string }>();
   const groupId = useMemo(
-    () => (Array.isArray(params.group) ? params.group[0] : params.group),
+    () => (Array.isArray(params.group) ? params.group[0] : params.group) ?? null,
     [params.group]
   );
 
@@ -127,9 +126,7 @@ export default function CFBBetsPage() {
   });
 
   const selectStyle: React.CSSProperties = {
-    padding: 6,
-    borderRadius: 8,
-    border: "1px solid #CBD5E1",
+    padding: 6, borderRadius: 8, border: "1px solid #CBD5E1",
   };
 
   const { data: games, loading, error } = useOdds("americanfootball_ncaaf", week, {
@@ -137,6 +134,10 @@ export default function CFBBetsPage() {
     region: "us",
     oddsFormat: "american",
   });
+
+  function conflictCols() {
+    return groupId ? "user_id,group_id,game_id" : "user_id,game_id";
+  }
 
   async function handlePick(game: any, outcome: any, market: MarketKey) {
     const { data: auth } = await supabase.auth.getUser();
@@ -159,7 +160,7 @@ export default function CFBBetsPage() {
 
     const insert = {
       user_id: user.id,
-      group_id: groupId ?? null,
+      group_id: groupId,
       sport: "cfb" as const,
       week,
       game_id: gameId,
@@ -171,7 +172,10 @@ export default function CFBBetsPage() {
       created_at: new Date().toISOString(),
     };
 
-    const { error } = await supabase.from("picks").insert(insert);
+    const { error } = await supabase
+      .from("picks")
+      .upsert(insert, { onConflict: conflictCols() });
+
     if (error) {
       alert(`Could not save pick: ${error.message}`);
       return;
@@ -179,23 +183,48 @@ export default function CFBBetsPage() {
     if (groupId) router.push(`/groups/${groupId}` as Href);
   }
 
+  async function handleClear(game: any) {
+    const { data: auth } = await supabase.auth.getUser();
+    const user = auth?.user;
+    if (!user) return;
+
+    const gameId = await resolveGameId({
+      week,
+      home: game.home_team ?? game.home ?? "",
+      away: game.away_team ?? game.away ?? "",
+      commenceIso: game.commence_time,
+    });
+    if (!gameId) return;
+
+    let q = supabase.from("picks").delete()
+      .eq("user_id", user.id)
+      .eq("game_id", gameId)
+      .eq("sport", "cfb")
+      .eq("week", week);
+
+    if (groupId !== null) q = q.eq("group_id", groupId);
+
+    const { error } = await q;
+    if (error) {
+      alert(`Could not clear pick: ${error.message}`);
+      return;
+    }
+  }
+
   const weekOptions = Array.from({ length: 15 }, (_, i) => i + 1) as number[];
 
   return (
     <ScrollView
-      style={{ flex: 1 }}                                // fill the page via flex
-      contentContainerStyle={{ padding: 12, gap: 12, paddingBottom: 24 }}  // spacing and scroll room
->
-
+      style={{ flex: 1 }}
+      contentContainerStyle={{ padding: 12, gap: 12, paddingBottom: 24 }}
+    >
       <Text style={{ fontWeight: "800", fontSize: 18 }}>College Football — Week {week}</Text>
 
       <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
         <Text>Week</Text>
         <select value={week} onChange={(e) => setWeek(Number(e.target.value))} style={selectStyle}>
           {weekOptions.map((w) => (
-            <option key={w} value={w}>
-              {w}
-            </option>
+            <option key={w} value={w}>{w}</option>
           ))}
         </select>
 
@@ -251,6 +280,12 @@ export default function CFBBetsPage() {
                   </Pressable>
                 ))}
               </View>
+
+              <View style={{ marginTop: 8, alignItems: "flex-end" }}>
+                <Pressable onPress={() => handleClear(g)} style={styles.clearBtn}>
+                  <Text style={{ color: "#EF4444", fontWeight: "700" }}>Clear my pick</Text>
+                </Pressable>
+              </View>
             </View>
           );
         })
@@ -285,6 +320,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 10,
+  },
+  clearBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderRadius: 6,
+    borderColor: "#EF4444",
+    backgroundColor: "#EF44440D",
   },
   logo: { width: 28, height: 28, resizeMode: "contain" },
 });
