@@ -28,11 +28,10 @@ function getTeamLogo(name?: string | null): string | null {
   if (m && typeof m === "object") return m[name] ?? null;
   return null;
 }
-/* ------------------------------------------------------------------ */
 
 type MarketKey = "spreads" | "totals" | "h2h";
 
-/* ---------------- name normalizer & side calculator ---------------- */
+/* ---------------- helpers ---------------- */
 function norm(s: string) {
   return (s ?? "")
     .toLowerCase()
@@ -59,9 +58,7 @@ function computeSide(
   if (on.includes(away)) return "away";
   return "team";
 }
-/* ------------------------------------------------------------------ */
 
-/* --------------------------- aliasing (NFL) ------------------------ */
 const NFL_ALIASES: Record<string, string> = {
   "ny giants": "new york giants",
   giants: "new york giants",
@@ -85,9 +82,8 @@ const NFL_ALIASES: Record<string, string> = {
   wsh: "washington commanders",
 };
 function aliasNFL(name: string) { return NFL_ALIASES[norm(name)] ?? norm(name); }
-/* ------------------------------------------------------------------ */
 
-/* ------------- Step 2: resolve OR CREATE a game id in DB ---------- */
+/* ------------- resolve OR CREATE a game id in DB ------------------ */
 async function resolveOrCreateGameId(opts: {
   league: "nfl" | "cfb";
   week: number;
@@ -101,7 +97,6 @@ async function resolveOrCreateGameId(opts: {
   const fromIso = new Date(center - windowMs).toISOString();
   const toIso = new Date(center + windowMs).toISOString();
 
-  // First try to find an existing game near the feed time
   const { data: rows } = await supabase
     .from("games")
     .select("id, home, away, kickoff_at")
@@ -114,17 +109,12 @@ async function resolveOrCreateGameId(opts: {
     for (const r of rows) {
       const rh = opts.league === "nfl" ? aliasNFL(r.home) : norm(r.home);
       const ra = opts.league === "nfl" ? aliasNFL(r.away) : norm(r.away);
-      const dir =
-        (rh.includes(feedHome) || feedHome.includes(rh)) &&
-        (ra.includes(feedAway) || feedAway.includes(ra));
-      const swap =
-        (rh.includes(feedAway) || feedAway.includes(rh)) &&
-        (ra.includes(feedHome) || feedHome.includes(ra));
+      const dir = (rh.includes(feedHome) || feedHome.includes(rh)) && (ra.includes(feedAway) || feedAway.includes(ra));
+      const swap = (rh.includes(feedAway) || feedAway.includes(rh)) && (ra.includes(feedHome) || feedHome.includes(ra));
       if (dir || swap) return r.id;
     }
   }
 
-  // Not found: create via RPC (requires the DB function upsert_game_from_feed)
   const { data, error } = await supabase.rpc("upsert_game_from_feed", {
     _league: opts.league,
     _week: opts.week,
@@ -134,13 +124,9 @@ async function resolveOrCreateGameId(opts: {
     _external_id: opts.externalId ?? null,
   });
 
-  if (error) {
-    console.warn("upsert_game_from_feed error", error);
-    return null;
-  }
+  if (error) return null;
   return data as number | null;
 }
-/* ------------------------------------------------------------------ */
 
 export default function NFLPicksPage() {
   const params = useLocalSearchParams<{ group?: string; w?: string }>();
@@ -155,27 +141,21 @@ export default function NFLPicksPage() {
     return Number.isFinite(n) && n > 0 ? n : getCurrentNFLWeek();
   });
 
-  const selectStyle: React.CSSProperties = {
-    padding: 6, borderRadius: 8, border: "1px solid #CBD5E1",
-  };
-
   const { data: games, loading, error } = useOdds("americanfootball_nfl", week, {
     markets: ["spreads", "totals", "h2h"],
     region: "us",
     oddsFormat: "american",
   });
 
+  // 🔑 Replace picks (no duplicate-key error) using your unique index (group_id,user_id,sport,week)
   function conflictCols() {
-    return groupId ? "user_id,group_id,game_id" : "user_id,game_id";
+    return groupId ? "group_id,user_id,sport,week" : "user_id,sport,week";
   }
 
   async function handlePick(game: any, outcome: any, market: MarketKey) {
     const { data: auth } = await supabase.auth.getUser();
     const user = auth?.user;
-    if (!user) {
-      router.push("/auth" as Href);
-      return;
-    }
+    if (!user) { router.push("/auth" as Href); return; }
 
     const gameId = await resolveOrCreateGameId({
       league: "nfl",
@@ -185,12 +165,9 @@ export default function NFLPicksPage() {
       commenceIso: game.commence_time,
       externalId: game.id ?? null,
     });
-    if (!gameId) {
-      alert("Could not resolve/create matchup in the DB.");
-      return;
-    }
+    if (!gameId) { alert("Could not resolve/create matchup in the DB."); return; }
 
-    const insert = {
+    const row = {
       user_id: user.id,
       group_id: groupId,
       sport: "nfl" as const,
@@ -201,66 +178,41 @@ export default function NFLPicksPage() {
       price: typeof outcome?.price === "number" ? outcome.price : null,
       line: typeof outcome?.point === "number" ? String(outcome.point) : null,
       side: computeSide(game, outcome, market),
+      updated_at: new Date().toISOString(),
       created_at: new Date().toISOString(),
     };
 
-    const { error } = await supabase
+    const { error: upsertErr } = await supabase
       .from("picks")
-      .upsert(insert, { onConflict: conflictCols() });
+      .upsert(row, { onConflict: conflictCols(), ignoreDuplicates: false });
 
-    if (error) {
-      alert(`Could not save pick: ${error.message}`);
-      return;
-    }
+    if (upsertErr) { alert(`Could not save pick: ${upsertErr.message}`); return; }
     if (groupId) router.push(`/groups/${groupId}` as Href);
   }
 
-  async function handleClear(game: any) {
+  async function handleClear() {
     const { data: auth } = await supabase.auth.getUser();
-    const user = auth?.user;
-    if (!user) return;
+    const user = auth?.user; if (!user) return;
 
-    const gameId = await resolveOrCreateGameId({
-      league: "nfl",
-      week,
-      home: game.home_team ?? game.home ?? "",
-      away: game.away_team ?? game.away ?? "",
-      commenceIso: game.commence_time,
-      externalId: game.id ?? null,
-    });
-    if (!gameId) return;
-
+    // delete by the same uniqueness scope
     let q = supabase.from("picks").delete()
       .eq("user_id", user.id)
-      .eq("game_id", gameId)
       .eq("sport", "nfl")
       .eq("week", week);
-
     if (groupId !== null) q = q.eq("group_id", groupId);
 
-    const { error } = await q;
-    if (error) {
-      alert(`Could not clear pick: ${error.message}`);
-      return;
-    }
+    const { error: delErr } = await q;
+    if (delErr) alert(`Could not clear pick: ${delErr.message}`);
   }
 
-  const weekOptions = Array.from({ length: 18 }, (_, i) => i + 1) as number[];
+  const weekOptions = Array.from({ length: 18 }, (_, i) => i + 1);
 
   return (
-    <ScrollView
-      style={{ flex: 1 }}
-      contentContainerStyle={{ padding: 12, gap: 12, paddingBottom: 24 }}
-    >
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, gap: 12, paddingBottom: 24 }}>
       <View style={{ flexDirection: "row", alignItems: "center" }}>
         <Text style={{ fontWeight: "800", fontSize: 18, flex: 1 }}>NFL — Week {week}</Text>
         <Pressable
-          onPress={() =>
-            router.push({
-              pathname: "/picks/college",
-              params: { group: groupId ?? undefined, w: String(week) },
-            } as Href)
-          }
+          onPress={() => router.push({ pathname: "/picks/college", params: { group: groupId ?? undefined, w: String(week) } } as Href)}
           style={{ paddingVertical: 6, paddingHorizontal: 8 }}
         >
           <Text style={{ color: "#0B735F", fontWeight: "700" }}>NCAA ↗</Text>
@@ -269,22 +221,15 @@ export default function NFLPicksPage() {
 
       <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
         <Text>Week</Text>
-        <select value={week} onChange={(e) => setWeek(Number(e.target.value))} style={selectStyle}>
-          {weekOptions.map((w) => (
-            <option key={w} value={w}>{w}</option>
-          ))}
+        <select value={week} onChange={(e) => setWeek(Number(e.target.value))}
+                style={{ padding: 6, borderRadius: 8, border: "1px solid #CBD5E1" } as any}>
+          {weekOptions.map((w) => (<option key={w} value={w}>{w}</option>))}
         </select>
 
         <View style={{ flexDirection: "row", gap: 8, marginLeft: "auto" }}>
-          {(["spreads", "totals", "h2h"] as MarketKey[]).map((k) => (
-            <Pressable
-              key={k}
-              onPress={() => setTab(k)}
-              style={[
-                styles.tab,
-                tab === k && { backgroundColor: "#0B735F", borderColor: "#0B735F" },
-              ]}
-            >
+          {(["spreads", "totals", "h2h"] as const).map((k) => (
+            <Pressable key={k} onPress={() => setTab(k)}
+              style={[styles.tab, tab === k && { backgroundColor: "#0B735F", borderColor: "#0B735F" }]}>
               <Text style={[styles.tabText, tab === k && { color: "white" }]}>{k.toUpperCase()}</Text>
             </Pressable>
           ))}
@@ -307,14 +252,10 @@ export default function NFLPicksPage() {
             <View key={g.id} style={styles.gameCard}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                 {!!aLogo && <Image source={{ uri: aLogo }} style={styles.logo} />}
-                <Text style={{ fontWeight: "800", flex: 1 }}>
-                  {g.away_team} @ {g.home_team}
-                </Text>
+                <Text style={{ fontWeight: "800", flex: 1 }}>{g.away_team} @ {g.home_team}</Text>
                 {!!hLogo && <Image source={{ uri: hLogo }} style={styles.logo} />}
               </View>
-              <Text style={{ color: "#475569" }}>
-                {new Date(g.commence_time).toLocaleString()}
-              </Text>
+              <Text style={{ color: "#475569" }}>{new Date(g.commence_time).toLocaleString()}</Text>
 
               <View style={{ gap: 8, marginTop: 8 }}>
                 {outcomes.map((o, i) => (
@@ -329,7 +270,7 @@ export default function NFLPicksPage() {
               </View>
 
               <View style={{ marginTop: 8, alignItems: "flex-end" }}>
-                <Pressable onPress={() => handleClear(g)} style={styles.clearBtn}>
+                <Pressable onPress={handleClear} style={styles.clearBtn}>
                   <Text style={{ color: "#EF4444", fontWeight: "700" }}>Clear my pick</Text>
                 </Pressable>
               </View>
@@ -342,39 +283,10 @@ export default function NFLPicksPage() {
 }
 
 const styles = StyleSheet.create({
-  tab: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderRadius: 8,
-    borderColor: "#CBD5E1",
-    backgroundColor: "#F1F5F9",
-  },
+  tab: { paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderRadius: 8, borderColor: "#CBD5E1", backgroundColor: "#F1F5F9" },
   tabText: { fontWeight: "800", color: "#0F172A" },
-  gameCard: {
-    backgroundColor: "white",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
-    gap: 6,
-  },
-  outcomeBtn: {
-    backgroundColor: "#0B735F22",
-    borderWidth: 1,
-    borderColor: "#0B735F55",
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-  },
-  clearBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderWidth: 1,
-    borderRadius: 6,
-    borderColor: "#EF4444",
-    backgroundColor: "#EF44440D",
-  },
+  gameCard: { backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12, marginBottom: 10, gap: 6 },
+  outcomeBtn: { backgroundColor: "#0B735F22", borderWidth: 1, borderColor: "#0B735F55", borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10 },
+  clearBtn: { paddingVertical: 4, paddingHorizontal: 8, borderWidth: 1, borderRadius: 6, borderColor: "#EF4444", backgroundColor: "#EF44440D" },
   logo: { width: 28, height: 28, resizeMode: "contain" },
 });

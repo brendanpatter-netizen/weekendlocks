@@ -2,14 +2,7 @@ export const unstable_settings = { prerender: false };
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  FlatList,
-  Image,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
+  ActivityIndicator, FlatList, Image, Platform, Pressable, StyleSheet, Text, View,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { supabase } from "@/lib/supabase";
@@ -17,23 +10,10 @@ import { getCurrentWeek as getCurrentNFLWeek } from "@/lib/nflWeeks";
 import { getCurrentCfbWeek as getCurrentCFBWeek } from "@/lib/cfbWeeks";
 
 type Sport = "nfl" | "cfb";
-type Member = {
-  user_id: string;
-  display_name: string;
-  avatar_url?: string | null;
-  picks_count: number;
-};
+type Member = { user_id: string; display_name: string; avatar_url?: string | null; picks_count: number; };
 type FeedItem = {
-  id: string;
-  created_at: string;
-  user_id: string;
-  display_name: string;
-  avatar_url?: string | null;
-  sport: "nfl" | "cfb";
-  week: number;
-  market?: string | null;
-  team?: string | null;
-  line?: string | null;
+  id: string; created_at: string; user_id: string; display_name: string; avatar_url?: string | null;
+  sport: "nfl" | "cfb"; week: number; market?: string | null; team?: string | null; line?: string | null;
 };
 
 export default function GroupDetailPage() {
@@ -69,108 +49,49 @@ export default function GroupDetailPage() {
           .maybeSingle();
         if (g?.name) setGroupName(g.name);
 
-        // Try the view first (if you created it)
-        const { data: viewRows, error: viewErr } = await supabase
-          .from("v_group_week_member_picks")
-          .select("user_id, display_name, picks_count")
+        // Members with counts for this sport+week
+        const { data: raw } = await supabase
+          .from("picks")
+          .select("user_id")
+          .eq("group_id", groupId)
+          .eq("sport", sport)
+          .eq("week", week);
+
+        const counts = new Map<string, number>();
+        (raw ?? []).forEach((r: any) => counts.set(r.user_id, (counts.get(r.user_id) ?? 0) + 1));
+
+        const ids = [...counts.keys()];
+        const { data: pf } = ids.length
+          ? await supabase.from("profiles").select("id, display_name, avatar_url").in("id", ids)
+          : { data: [] as any[] };
+
+        const nameById = new Map<string, string>();
+        (pf ?? []).forEach((p: any) => nameById.set(p.id, p.display_name || p.id));
+
+        if (mounted) {
+          setMembers(
+            ids
+              .map((uid) => ({
+                user_id: uid,
+                display_name: nameById.get(uid) ?? uid,
+                avatar_url: (pf ?? []).find((p: any) => p.id === uid)?.avatar_url ?? null,
+                picks_count: counts.get(uid) ?? 0,
+              }))
+              .sort((a, b) => a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }))
+          );
+        }
+
+        // Latest picks — NOW FILTERED by sport + week
+        const { data: feedRows } = await supabase
+          .from("picks_feed") // view with names
+          .select("id, created_at, user_id, display_name, avatar_url, sport, week, market, team, line")
           .eq("group_id", groupId)
           .eq("sport", sport)
           .eq("week", week)
-          .order("display_name", { ascending: true });
-
-        if (!viewErr && viewRows) {
-          const ids = viewRows.map((r) => r.user_id);
-          const { data: pf } = await supabase
-            .from("profiles")
-            .select("id, avatar_url")
-            .in("id", ids);
-          const avatarById = new Map((pf ?? []).map((p) => [p.id, p.avatar_url]));
-          if (mounted) {
-            setMembers(
-              viewRows.map((r: any) => ({
-                ...r,
-                avatar_url: avatarById.get(r.user_id) ?? null,
-              }))
-            );
-          }
-        } else {
-          // Fallback aggregate from picks
-          const { data: raw, error } = await supabase
-            .from("picks")
-            .select("user_id")
-            .eq("group_id", groupId)
-            .eq("sport", sport)
-            .eq("week", week);
-          if (error) throw error;
-          const counts = new Map<string, number>();
-          (raw ?? []).forEach((r: any) =>
-            counts.set(r.user_id, (counts.get(r.user_id) ?? 0) + 1)
-          );
-
-          const ids = [...counts.keys()];
-          const { data: pf } = await supabase
-            .from("profiles")
-            .select("id, username, avatar_url")
-            .in("id", ids);
-
-          const nameById = new Map<string, string>();
-          (pf ?? []).forEach((p: any) => nameById.set(p.id, p.username || p.id));
-
-          if (mounted) {
-            setMembers(
-              ids
-                .map((uid) => ({
-                  user_id: uid,
-                  display_name: nameById.get(uid) ?? uid,
-                  avatar_url:
-                    (pf ?? []).find((p: any) => p.id === uid)?.avatar_url ?? null,
-                  picks_count: counts.get(uid) ?? 0,
-                }))
-                .sort((a, b) =>
-                  a.display_name.localeCompare(b.display_name, undefined, {
-                    sensitivity: "base",
-                  })
-                )
-            );
-          }
-        }
-
-        // Activity feed
-        const { data: feedRows } = await supabase
-          .from("picks")
-          .select("id, created_at, user_id, sport, week, market, team, line")
-          .eq("group_id", groupId)
           .order("created_at", { ascending: false })
           .limit(20);
 
-        const feedIds = (feedRows ?? []).map((r) => r.user_id);
-        const { data: pf2 } = await supabase
-          .from("profiles")
-          .select("id, username, avatar_url")
-          .in("id", feedIds);
-        const byId = new Map(
-          (pf2 ?? []).map((p: any) => [
-            p.id,
-            { name: p.username || p.id, avatar: p.avatar_url ?? null },
-          ])
-        );
-
-        if (mounted) {
-          setFeed(
-            (feedRows ?? []).map((r: any) => ({
-              id: r.id,
-              created_at: r.created_at,
-              user_id: r.user_id,
-              display_name: byId.get(r.user_id)?.name ?? r.user_id,
-              avatar_url: byId.get(r.user_id)?.avatar ?? null,
-              sport: r.sport,
-              week: r.week,
-              market: r.market ?? null,
-              team: r.team ?? null,
-              line: r.line ?? null,
-            }))
-          );
-        }
+        if (mounted) setFeed((feedRows ?? []) as any);
 
         // Roster (members list with names)
         const { data: gm } = await supabase
@@ -181,21 +102,19 @@ export default function GroupDetailPage() {
         if (rosterIds.length) {
           const { data: pr } = await supabase
             .from("profiles")
-            .select("id, username, avatar_url")
+            .select("id, display_name, avatar_url")
             .in("id", rosterIds);
           const rows: Member[] = rosterIds
             .map((uid) => {
               const p = (pr ?? []).find((x: any) => x.id === uid);
               return {
                 user_id: uid,
-                display_name: p?.username ?? uid,
+                display_name: p?.display_name ?? uid,
                 avatar_url: p?.avatar_url ?? null,
                 picks_count: 0,
               };
             })
-            .sort((a, b) =>
-              a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" })
-            );
+            .sort((a, b) => a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }));
           if (mounted) setRoster(rows);
         } else if (mounted) {
           setRoster([]);
@@ -207,9 +126,7 @@ export default function GroupDetailPage() {
       }
     })();
 
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, [groupId, sport, week]);
 
   const total = members.reduce((s, m) => s + m.picks_count, 0);
@@ -219,30 +136,18 @@ export default function GroupDetailPage() {
     <View style={styles.page}>
       <Text style={styles.title}>{groupName}</Text>
 
-      {banner && (
-        <View style={styles.banner}>
-          <Text style={styles.bannerText}>Heads up: {banner}</Text>
-        </View>
-      )}
+      {banner && (<View style={styles.banner}><Text style={styles.bannerText}>Heads up: {banner}</Text></View>)}
 
       {/* Controls */}
       <View style={styles.controlsRow}>
         <View style={styles.sportTabs}>
-          <Pressable
-            onPress={() => setSport("nfl")}
-            style={[styles.sportTab, sport === "nfl" && styles.sportTabActive]}
-          >
-            <Text style={[styles.sportTabText, sport === "nfl" && styles.sportTabTextActive]}>
-              NFL
-            </Text>
+          <Pressable onPress={() => setSport("nfl")}
+            style={[styles.sportTab, sport === "nfl" && styles.sportTabActive]}>
+            <Text style={[styles.sportTabText, sport === "nfl" && styles.sportTabTextActive]}>NFL</Text>
           </Pressable>
-          <Pressable
-            onPress={() => setSport("cfb")}
-            style={[styles.sportTab, sport === "cfb" && styles.sportTabActive]}
-          >
-            <Text style={[styles.sportTabText, sport === "cfb" && styles.sportTabTextActive]}>
-              CFB
-            </Text>
+          <Pressable onPress={() => setSport("cfb")}
+            style={[styles.sportTab, sport === "cfb" && styles.sportTabActive]}>
+            <Text style={[styles.sportTabText, sport === "cfb" && styles.sportTabTextActive]}>CFB</Text>
           </Pressable>
         </View>
 
@@ -252,22 +157,13 @@ export default function GroupDetailPage() {
             <select
               value={week}
               onChange={(e) => setWeek(Number(e.target.value))}
-              style={{
-                padding: 8,
-                borderRadius: 8,
-                border: "1px solid #CBD5E1",
-                background: "white",
-              } as any}
+              style={{ padding: 8, borderRadius: 8, border: "1px solid #CBD5E1", background: "white" } as any}
             >
               {Array.from({ length: sport === "nfl" ? 18 : 15 }).map((_, i) => (
-                <option key={i + 1} value={i + 1}>
-                  {i + 1}
-                </option>
+                <option key={i + 1} value={i + 1}>{i + 1}</option>
               ))}
             </select>
-          ) : (
-            <Text style={{ fontWeight: "600" }}>Week {week}</Text>
-          )}
+          ) : (<Text style={{ fontWeight: "600" }}>Week {week}</Text>)}
 
           <Pressable
             style={styles.cta}
@@ -315,17 +211,13 @@ export default function GroupDetailPage() {
                 renderItem={({ item }) => {
                   const pct = max > 0 ? Math.round((item.picks_count / max) * 100) : 0;
                   return (
-                    <View style={styles.tableRow}>
+                    <View className="row" style={styles.tableRow}>
                       <View style={styles.userCell}>
-                        {!!item.avatar_url && (
-                          <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
-                        )}
+                        {!!item.avatar_url && (<Image source={{ uri: item.avatar_url }} style={styles.avatar} />)}
                         <Text style={styles.userName}>{item.display_name}</Text>
                       </View>
                       <View style={styles.countCell}>
-                        <View style={styles.barBg}>
-                          <View style={[styles.barFill, { width: `${pct}%` }]} />
-                        </View>
+                        <View style={styles.barBg}><View style={[styles.barFill, { width: `${pct}%` }]} /></View>
                         <Text style={styles.countText}>{item.picks_count}</Text>
                       </View>
                     </View>
@@ -336,7 +228,7 @@ export default function GroupDetailPage() {
           </View>
         </View>
 
-        {/* Right: feed */}
+        {/* Right: feed (filtered) */}
         <View style={styles.rightCol}>
           <View style={styles.card}>
             <Text style={{ fontWeight: "800", marginBottom: 8 }}>Latest picks</Text>
@@ -350,9 +242,7 @@ export default function GroupDetailPage() {
                 keyExtractor={(f) => f.id}
                 renderItem={({ item }) => (
                   <View style={styles.feedRow}>
-                    {!!item.avatar_url && (
-                      <Image source={{ uri: item.avatar_url }} style={styles.feedAvatar} />
-                    )}
+                    {!!item.avatar_url && (<Image source={{ uri: item.avatar_url }} style={styles.feedAvatar} />)}
                     <View style={{ flex: 1 }}>
                       <Text style={styles.feedTitle}>{item.display_name} locked a pick</Text>
                       <Text style={styles.feedSub}>
@@ -361,9 +251,7 @@ export default function GroupDetailPage() {
                         {item.team ? ` • ${item.team}` : ""}
                         {item.line ? ` ${item.line}` : ""}
                       </Text>
-                      <Text style={styles.feedTime}>
-                        {new Date(item.created_at).toLocaleString()}
-                      </Text>
+                      <Text style={styles.feedTime}>{new Date(item.created_at).toLocaleString()}</Text>
                     </View>
                   </View>
                 )}
@@ -373,7 +261,7 @@ export default function GroupDetailPage() {
         </View>
       </View>
 
-      {/* Members mini table */}
+      {/* Members mini table (names!) */}
       <View style={styles.card}>
         <Text style={{ fontWeight: "800", marginBottom: 8 }}>Members</Text>
         {roster.length === 0 ? (
@@ -385,9 +273,7 @@ export default function GroupDetailPage() {
             renderItem={({ item }) => (
               <View style={styles.tableRow}>
                 <View style={styles.userCell}>
-                  {!!item.avatar_url && (
-                    <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
-                  )}
+                  {!!item.avatar_url && (<Image source={{ uri: item.avatar_url }} style={styles.avatar} />)}
                   <Text style={styles.userName}>{item.display_name}</Text>
                 </View>
               </View>
@@ -403,25 +289,14 @@ const styles = StyleSheet.create({
   page: { padding: 16, gap: 16 },
   title: { fontSize: 22, fontWeight: "800" },
 
-  banner: {
-    backgroundColor: "#FFF7ED",
-    borderColor: "#FED7AA",
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 10,
-  },
+  banner: { backgroundColor: "#FFF7ED", borderColor: "#FED7AA", borderWidth: 1, borderRadius: 8, padding: 10 },
   bannerText: { color: "#9A3412" },
 
   controlsRow: { gap: 12, flexDirection: "column" },
   sportTabs: { flexDirection: "row", gap: 8 },
   sportTab: {
-    flex: 1,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderRadius: 8,
-    borderColor: "#CBD5E1",
-    backgroundColor: "#0B735F22",
-    alignItems: "center",
+    flex: 1, paddingVertical: 10, borderWidth: 1, borderRadius: 8,
+    borderColor: "#CBD5E1", backgroundColor: "#0B735F22", alignItems: "center",
   },
   sportTabActive: { backgroundColor: "#0B735F", borderColor: "#0B735F" },
   sportTabText: { fontWeight: "700", color: "#0F172A" },
@@ -430,13 +305,7 @@ const styles = StyleSheet.create({
   weekPicker: { flexDirection: "row", alignItems: "center", gap: 10 },
   weekLabel: { fontWeight: "700" },
 
-  cta: {
-    marginLeft: "auto",
-    backgroundColor: "#0B735F",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
+  cta: { marginLeft: "auto", backgroundColor: "#0B735F", paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8 },
   ctaText: { color: "white", fontWeight: "800" },
 
   split: { flexDirection: "row", gap: 16 },
@@ -444,34 +313,15 @@ const styles = StyleSheet.create({
   rightCol: { flex: 1, gap: 12 },
 
   tiles: { flexDirection: "row", gap: 12 },
-  tile: {
-    flex: 1,
-    backgroundColor: "white",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 12,
-    padding: 12,
-  },
+  tile: { flex: 1, backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12 },
   tileLabel: { fontSize: 12, color: "#64748B" },
   tileValue: { fontSize: 20, fontWeight: "800", marginTop: 2 },
 
-  card: {
-    backgroundColor: "white",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 12,
-    padding: 12,
-  },
+  card: { backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12 },
 
   tableHeader: { paddingVertical: 6 },
-  tableRow: {
-    paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#E5E7EB",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
+  tableRow: { paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#E5E7EB",
+              flexDirection: "row", alignItems: "center", gap: 10 },
   thUser: { flex: 1.2, fontWeight: "800" },
   thCount: { width: 140, fontWeight: "800", textAlign: "right" },
 
@@ -480,25 +330,13 @@ const styles = StyleSheet.create({
   userName: { fontWeight: "700" },
 
   countCell: { width: 140, flexDirection: "row", alignItems: "center", gap: 8 },
-  barBg: {
-    flex: 1,
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: "#E5E7EB",
-    overflow: "hidden",
-  },
+  barBg: { flex: 1, height: 8, borderRadius: 999, backgroundColor: "#E5E7EB", overflow: "hidden" },
   barFill: { height: 8, backgroundColor: "#0B735F" },
   countText: { width: 28, textAlign: "right", fontWeight: "800" },
 
   empty: { paddingVertical: 8, color: "#64748B" },
 
-  feedRow: {
-    paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#E5E7EB",
-    flexDirection: "row",
-    gap: 10,
-  },
+  feedRow: { paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#E5E7EB", flexDirection: "row", gap: 10 },
   feedAvatar: { width: 24, height: 24, borderRadius: 999, marginTop: 2 },
   feedTitle: { fontWeight: "700" },
   feedSub: { color: "#334155" },
