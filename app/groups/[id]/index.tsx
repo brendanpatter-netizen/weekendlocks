@@ -2,36 +2,38 @@ export const unstable_settings = { prerender: false };
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator, FlatList, Image, Platform, Pressable, StyleSheet, Text, View,
+  ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View,
 } from "react-native";
-import { useLocalSearchParams, router } from "expo-router";
+import { useLocalSearchParams, router, Href } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { getCurrentWeek as getCurrentNFLWeek } from "@/lib/nflWeeks";
 import { getCurrentCfbWeek as getCurrentCFBWeek } from "@/lib/cfbWeeks";
 
-type Sport = "nfl" | "cfb";
-type Member = { user_id: string; display_name: string; avatar_url?: string | null; picks_count: number; };
-type FeedItem = {
-  id: string; created_at: string; user_id: string; display_name: string; avatar_url?: string | null;
-  sport: "nfl" | "cfb"; week: number; market?: string | null; team?: string | null; line?: string | null;
+type PickInfo = { market: string | null; team: string | null; line: string | null; price: number | null };
+type MemberRow = { user_id: string; display_name: string; nfl: PickInfo | null; cfb: PickInfo | null };
+type ActivityItem = {
+  id: string; user_id: string; display_name: string; sport: "nfl" | "cfb"; week: number;
+  market: string | null; team: string | null; line: string | null; updated_at: string; was_replaced: boolean;
 };
 
-export default function GroupDetailPage() {
+function pickLabel(p: PickInfo | null): string {
+  if (!p) return "—";
+  const line = p.line ? ` ${p.line}` : "";
+  return `${p.team ?? "?"}${line}`;
+}
+
+export default function GroupDashboardPage() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const groupId = useMemo(() => (Array.isArray(id) ? id?.[0] : id) ?? "", [id]);
 
+  const nflWeek = useMemo(() => getCurrentNFLWeek(), []);
+  const cfbWeek = useMemo(() => getCurrentCFBWeek(), []);
+
   const [groupName, setGroupName] = useState("WeekendLocks");
-  const [sport, setSport] = useState<Sport>("nfl");
-  const [week, setWeek] = useState<number>(getCurrentNFLWeek());
-  const [members, setMembers] = useState<Member[]>([]);
-  const [feed, setFeed] = useState<FeedItem[]>([]);
-  const [roster, setRoster] = useState<Member[]>([]);
+  const [members, setMembers] = useState<MemberRow[]>([]);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
-
-  useEffect(() => {
-    setWeek(sport === "nfl" ? getCurrentNFLWeek() : getCurrentCFBWeek());
-  }, [sport]);
 
   useEffect(() => {
     if (!groupId) return;
@@ -47,78 +49,53 @@ export default function GroupDetailPage() {
           .select("name")
           .eq("id", groupId)
           .maybeSingle();
-        if (g?.name) setGroupName(g.name);
+        if (mounted && g?.name) setGroupName(g.name);
 
-        // Members with counts for this sport+week
-        const { data: raw } = await supabase
-          .from("picks")
-          .select("user_id")
-          .eq("group_id", groupId)
-          .eq("sport", sport)
-          .eq("week", week);
-
-        const counts = new Map<string, number>();
-        (raw ?? []).forEach((r: any) => counts.set(r.user_id, (counts.get(r.user_id) ?? 0) + 1));
-
-        const ids = [...counts.keys()];
-        const { data: pf } = ids.length
-          ? await supabase.from("profiles").select("id, display_name, avatar_url").in("id", ids)
-          : { data: [] as any[] };
-
-        const nameById = new Map<string, string>();
-        (pf ?? []).forEach((p: any) => nameById.set(p.id, p.display_name || p.id));
-
-        if (mounted) {
-          setMembers(
-            ids
-              .map((uid) => ({
-                user_id: uid,
-                display_name: nameById.get(uid) ?? uid,
-                avatar_url: (pf ?? []).find((p: any) => p.id === uid)?.avatar_url ?? null,
-                picks_count: counts.get(uid) ?? 0,
-              }))
-              .sort((a, b) => a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }))
-          );
-        }
-
-        // Latest picks — NOW FILTERED by sport + week
-        const { data: feedRows } = await supabase
-          .from("picks_feed") // view with names
-          .select("id, created_at, user_id, display_name, avatar_url, sport, week, market, team, line")
-          .eq("group_id", groupId)
-          .eq("sport", sport)
-          .eq("week", week)
-          .order("created_at", { ascending: false })
-          .limit(20);
-
-        if (mounted) setFeed((feedRows ?? []) as any);
-
-        // Roster (members list with names)
+        // Roster is the source of truth — every member shows up, even with no picks yet.
         const { data: gm } = await supabase
           .from("group_members")
           .select("user_id")
           .eq("group_id", groupId);
-        const rosterIds = (gm ?? []).map((r: any) => r.user_id);
-        if (rosterIds.length) {
-          const { data: pr } = await supabase
-            .from("profiles")
-            .select("id, display_name, avatar_url")
-            .in("id", rosterIds);
-          const rows: Member[] = rosterIds
-            .map((uid) => {
-              const p = (pr ?? []).find((x: any) => x.id === uid);
-              return {
-                user_id: uid,
-                display_name: p?.display_name ?? uid,
-                avatar_url: p?.avatar_url ?? null,
-                picks_count: 0,
-              };
-            })
-            .sort((a, b) => a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }));
-          if (mounted) setRoster(rows);
-        } else if (mounted) {
-          setRoster([]);
-        }
+        const rosterIds = (gm ?? []).map((r: any) => r.user_id as string);
+
+        const { data: profs } = rosterIds.length
+          ? await supabase.from("profiles").select("id, display_name, username").in("id", rosterIds)
+          : { data: [] as any[] };
+        const nameById = new Map<string, string>(
+          rosterIds.map((uid) => {
+            const p = (profs ?? []).find((x: any) => x.id === uid);
+            return [uid, p?.display_name || p?.username || uid];
+          })
+        );
+
+        const [{ data: nflRows }, { data: cfbRows }] = await Promise.all([
+          supabase.from("picks").select("user_id, market, team, line, price")
+            .eq("group_id", groupId).eq("sport", "nfl").eq("week", nflWeek),
+          supabase.from("picks").select("user_id, market, team, line, price")
+            .eq("group_id", groupId).eq("sport", "cfb").eq("week", cfbWeek),
+        ]);
+        const nflByUser = new Map((nflRows ?? []).map((r: any) => [r.user_id, r as PickInfo]));
+        const cfbByUser = new Map((cfbRows ?? []).map((r: any) => [r.user_id, r as PickInfo]));
+
+        const rows: MemberRow[] = rosterIds
+          .map((uid) => ({
+            user_id: uid,
+            display_name: nameById.get(uid) ?? uid,
+            nfl: nflByUser.get(uid) ?? null,
+            cfb: cfbByUser.get(uid) ?? null,
+          }))
+          .sort((a, b) => a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }));
+        if (mounted) setMembers(rows);
+
+        // Broad recent-activity feed (not limited to the current week) — each row is
+        // labeled with sport + week so it's unambiguous.
+        const { data: feedRows } = await supabase
+          .from("picks_feed")
+          .select("id, user_id, display_name, sport, week, market, team, line, updated_at, was_replaced")
+          .eq("group_id", groupId)
+          .order("updated_at", { ascending: false })
+          .limit(20);
+        if (mounted) setActivity((feedRows ?? []) as ActivityItem[]);
       } catch (e: any) {
         if (mounted) setBanner(e?.message ?? String(e));
       } finally {
@@ -127,160 +104,138 @@ export default function GroupDetailPage() {
     })();
 
     return () => { mounted = false; };
-  }, [groupId, sport, week]);
+  }, [groupId, nflWeek, cfbWeek]);
 
-  const total = members.reduce((s, m) => s + m.picks_count, 0);
-  const max = Math.max(0, ...members.map((m) => m.picks_count));
+  const nflPicked = members.filter((m) => m.nfl);
+  const cfbPicked = members.filter((m) => m.cfb);
 
   return (
     <View style={styles.page}>
       <Text style={styles.title}>{groupName}</Text>
+      <Text style={styles.subtitle}>NFL Week {nflWeek} • CFB Week {cfbWeek}</Text>
 
       {banner && (<View style={styles.banner}><Text style={styles.bannerText}>Heads up: {banner}</Text></View>)}
 
-      {/* Controls */}
-      <View style={styles.controlsRow}>
-        <View style={styles.sportTabs}>
-          <Pressable onPress={() => setSport("nfl")}
-            style={[styles.sportTab, sport === "nfl" && styles.sportTabActive]}>
-            <Text style={[styles.sportTabText, sport === "nfl" && styles.sportTabTextActive]}>NFL</Text>
-          </Pressable>
-          <Pressable onPress={() => setSport("cfb")}
-            style={[styles.sportTab, sport === "cfb" && styles.sportTabActive]}>
-            <Text style={[styles.sportTabText, sport === "cfb" && styles.sportTabTextActive]}>CFB</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.weekPicker}>
-          <Text style={styles.weekLabel}>Week</Text>
-          {Platform.OS === "web" ? (
-            <select
-              value={week}
-              onChange={(e) => setWeek(Number(e.target.value))}
-              style={{ padding: 8, borderRadius: 8, border: "1px solid #CBD5E1", background: "white" } as any}
-            >
-              {Array.from({ length: sport === "nfl" ? 18 : 15 }).map((_, i) => (
-                <option key={i + 1} value={i + 1}>{i + 1}</option>
-              ))}
-            </select>
-          ) : (<Text style={{ fontWeight: "600" }}>Week {week}</Text>)}
-
-          <Pressable
-            style={styles.cta}
-            onPress={() =>
-              router.push({
-                pathname: sport === "nfl" ? "/picks/page" : "/picks/college",
-                params: { group: groupId, w: String(week) },
-              })
-            }
-          >
-            <Text style={styles.ctaText}>Make picks</Text>
-          </Pressable>
-        </View>
+      <View style={styles.ctaRow}>
+        <Pressable
+          style={styles.cta}
+          onPress={() => router.push({ pathname: "/picks/page", params: { group: groupId, w: String(nflWeek) } } as Href)}
+        >
+          <Text style={styles.ctaText}>Make NFL pick</Text>
+        </Pressable>
+        <Pressable
+          style={styles.cta}
+          onPress={() => router.push({ pathname: "/picks/college", params: { group: groupId, w: String(cfbWeek) } } as Href)}
+        >
+          <Text style={styles.ctaText}>Make CFB pick</Text>
+        </Pressable>
       </View>
 
-      {/* Split */}
-      <View style={styles.split}>
-        {/* Left: weekly board */}
-        <View style={styles.leftCol}>
-          <View style={styles.tiles}>
-            <View style={styles.tile}>
-              <Text style={styles.tileLabel}>Total Picks</Text>
-              <Text style={styles.tileValue}>{total}</Text>
-            </View>
-            <View style={styles.tile}>
-              <Text style={styles.tileLabel}>Most by a member</Text>
-              <Text style={styles.tileValue}>{max}</Text>
-            </View>
-          </View>
-
+      {loading ? (
+        <ActivityIndicator style={{ marginTop: 12 }} />
+      ) : (
+        <>
+          {/* Combined leaderboard */}
           <View style={styles.card}>
+            <Text style={styles.cardTitle}>Group leaderboard</Text>
             <View style={[styles.tableRow, styles.tableHeader]}>
               <Text style={styles.thUser}>Member</Text>
-              <Text style={styles.thCount}>Week {week}</Text>
+              <Text style={styles.thPick}>NFL Wk {nflWeek}</Text>
+              <Text style={styles.thPick}>CFB Wk {cfbWeek}</Text>
             </View>
-
-            {loading ? (
-              <ActivityIndicator style={{ marginTop: 12 }} />
-            ) : members.length === 0 ? (
-              <Text style={styles.empty}>No picks yet for Week {week}. Be the first!</Text>
+            {members.length === 0 ? (
+              <Text style={styles.empty}>No members yet.</Text>
             ) : (
               <FlatList
                 data={members}
                 keyExtractor={(m) => m.user_id}
-                renderItem={({ item }) => {
-                  const pct = max > 0 ? Math.round((item.picks_count / max) * 100) : 0;
-                  return (
-                    <View className="row" style={styles.tableRow}>
-                      <View style={styles.userCell}>
-                        {!!item.avatar_url && (<Image source={{ uri: item.avatar_url }} style={styles.avatar} />)}
-                        <Text style={styles.userName}>{item.display_name}</Text>
-                      </View>
-                      <View style={styles.countCell}>
-                        <View style={styles.barBg}><View style={[styles.barFill, { width: `${pct}%` }]} /></View>
-                        <Text style={styles.countText}>{item.picks_count}</Text>
-                      </View>
-                    </View>
-                  );
-                }}
+                renderItem={({ item }) => (
+                  <View style={styles.tableRow}>
+                    <Text style={styles.userName}>{item.display_name}</Text>
+                    <Text style={styles.pickCell}>{pickLabel(item.nfl)}</Text>
+                    <Text style={styles.pickCell}>{pickLabel(item.cfb)}</Text>
+                  </View>
+                )}
               />
             )}
+            <Text style={styles.note}>Season records &amp; win % coming soon.</Text>
           </View>
-        </View>
 
-        {/* Right: feed (filtered) */}
-        <View style={styles.rightCol}>
+          <View style={styles.split}>
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Current NFL picks</Text>
+              {nflPicked.length === 0 ? (
+                <Text style={styles.empty}>No picks yet for Week {nflWeek}.</Text>
+              ) : (
+                nflPicked.map((m) => (
+                  <View key={m.user_id} style={styles.tableRow}>
+                    <Text style={styles.userName}>{m.display_name}</Text>
+                    <Text style={styles.pickCell}>{pickLabel(m.nfl)}</Text>
+                  </View>
+                ))
+              )}
+            </View>
+
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Current CFB picks</Text>
+              {cfbPicked.length === 0 ? (
+                <Text style={styles.empty}>No picks yet for Week {cfbWeek}.</Text>
+              ) : (
+                cfbPicked.map((m) => (
+                  <View key={m.user_id} style={styles.tableRow}>
+                    <Text style={styles.userName}>{m.display_name}</Text>
+                    <Text style={styles.pickCell}>{pickLabel(m.cfb)}</Text>
+                  </View>
+                ))
+              )}
+            </View>
+          </View>
+
+          {/* Recent activity */}
           <View style={styles.card}>
-            <Text style={{ fontWeight: "800", marginBottom: 8 }}>Latest picks</Text>
-            {loading ? (
-              <ActivityIndicator />
-            ) : feed.length === 0 ? (
-              <Text style={styles.empty}>No recent picks.</Text>
+            <Text style={styles.cardTitle}>Recent group activity</Text>
+            {activity.length === 0 ? (
+              <Text style={styles.empty}>No recent activity.</Text>
             ) : (
               <FlatList
-                data={feed}
-                keyExtractor={(f) => f.id}
+                data={activity}
+                keyExtractor={(a) => a.id}
                 renderItem={({ item }) => (
                   <View style={styles.feedRow}>
-                    {!!item.avatar_url && (<Image source={{ uri: item.avatar_url }} style={styles.feedAvatar} />)}
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.feedTitle}>{item.display_name} locked a pick</Text>
-                      <Text style={styles.feedSub}>
-                        {item.sport.toUpperCase()} • Week {item.week}
-                        {item.market ? ` • ${item.market}` : ""}
-                        {item.team ? ` • ${item.team}` : ""}
-                        {item.line ? ` ${item.line}` : ""}
-                      </Text>
-                      <Text style={styles.feedTime}>{new Date(item.created_at).toLocaleString()}</Text>
-                    </View>
+                    <Text style={styles.feedTitle}>
+                      {item.display_name} {item.was_replaced ? "replaced their" : "picked"} {item.team ?? "a pick"}
+                      {item.line ? ` ${item.line}` : ""}
+                    </Text>
+                    <Text style={styles.feedSub}>
+                      {item.sport.toUpperCase()} • Week {item.week}
+                      {item.market ? ` • ${item.market}` : ""}
+                    </Text>
+                    <Text style={styles.feedTime}>{new Date(item.updated_at).toLocaleString()}</Text>
                   </View>
                 )}
               />
             )}
           </View>
-        </View>
-      </View>
 
-      {/* Members mini table (names!) */}
-      <View style={styles.card}>
-        <Text style={{ fontWeight: "800", marginBottom: 8 }}>Members</Text>
-        {roster.length === 0 ? (
-          <Text style={styles.empty}>No members yet.</Text>
-        ) : (
-          <FlatList
-            data={roster}
-            keyExtractor={(r) => r.user_id}
-            renderItem={({ item }) => (
-              <View style={styles.tableRow}>
-                <View style={styles.userCell}>
-                  {!!item.avatar_url && (<Image source={{ uri: item.avatar_url }} style={styles.avatar} />)}
-                  <Text style={styles.userName}>{item.display_name}</Text>
-                </View>
-              </View>
+          {/* Members roster */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Group members</Text>
+            {members.length === 0 ? (
+              <Text style={styles.empty}>No members yet.</Text>
+            ) : (
+              <FlatList
+                data={members}
+                keyExtractor={(m) => `roster-${m.user_id}`}
+                renderItem={({ item }) => (
+                  <View style={styles.tableRow}>
+                    <Text style={styles.userName}>{item.display_name}</Text>
+                  </View>
+                )}
+              />
             )}
-          />
-        )}
-      </View>
+          </View>
+        </>
+      )}
     </View>
   );
 }
@@ -288,56 +243,35 @@ export default function GroupDetailPage() {
 const styles = StyleSheet.create({
   page: { padding: 16, gap: 16 },
   title: { fontSize: 22, fontWeight: "800" },
+  subtitle: { color: "#475569", fontWeight: "600", marginTop: -8 },
 
   banner: { backgroundColor: "#FFF7ED", borderColor: "#FED7AA", borderWidth: 1, borderRadius: 8, padding: 10 },
   bannerText: { color: "#9A3412" },
 
-  controlsRow: { gap: 12, flexDirection: "column" },
-  sportTabs: { flexDirection: "row", gap: 8 },
-  sportTab: {
-    flex: 1, paddingVertical: 10, borderWidth: 1, borderRadius: 8,
-    borderColor: "#CBD5E1", backgroundColor: "#0B735F22", alignItems: "center",
-  },
-  sportTabActive: { backgroundColor: "#0B735F", borderColor: "#0B735F" },
-  sportTabText: { fontWeight: "700", color: "#0F172A" },
-  sportTabTextActive: { color: "white" },
-
-  weekPicker: { flexDirection: "row", alignItems: "center", gap: 10 },
-  weekLabel: { fontWeight: "700" },
-
-  cta: { marginLeft: "auto", backgroundColor: "#0B735F", paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8 },
+  ctaRow: { flexDirection: "row", gap: 12 },
+  cta: { flex: 1, backgroundColor: "#0B735F", paddingHorizontal: 12, paddingVertical: 12, borderRadius: 8, alignItems: "center" },
   ctaText: { color: "white", fontWeight: "800" },
 
   split: { flexDirection: "row", gap: 16 },
-  leftCol: { flex: 1.6, gap: 12 },
-  rightCol: { flex: 1, gap: 12 },
 
-  tiles: { flexDirection: "row", gap: 12 },
-  tile: { flex: 1, backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12 },
-  tileLabel: { fontSize: 12, color: "#64748B" },
-  tileValue: { fontSize: 20, fontWeight: "800", marginTop: 2 },
-
-  card: { backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12 },
+  card: { backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12, flex: 1, gap: 4 },
+  cardTitle: { fontWeight: "800", marginBottom: 8 },
 
   tableHeader: { paddingVertical: 6 },
-  tableRow: { paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#E5E7EB",
-              flexDirection: "row", alignItems: "center", gap: 10 },
-  thUser: { flex: 1.2, fontWeight: "800" },
-  thCount: { width: 140, fontWeight: "800", textAlign: "right" },
+  tableRow: {
+    paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#E5E7EB",
+    flexDirection: "row", alignItems: "center", gap: 10,
+  },
+  thUser: { flex: 1.4, fontWeight: "800" },
+  thPick: { flex: 1, fontWeight: "800", textAlign: "right" },
 
-  userCell: { flex: 1.2, flexDirection: "row", alignItems: "center", gap: 8 },
-  avatar: { width: 28, height: 28, borderRadius: 999 },
-  userName: { fontWeight: "700" },
+  userName: { flex: 1.4, fontWeight: "700" },
+  pickCell: { flex: 1, textAlign: "right", color: "#334155" },
 
-  countCell: { width: 140, flexDirection: "row", alignItems: "center", gap: 8 },
-  barBg: { flex: 1, height: 8, borderRadius: 999, backgroundColor: "#E5E7EB", overflow: "hidden" },
-  barFill: { height: 8, backgroundColor: "#0B735F" },
-  countText: { width: 28, textAlign: "right", fontWeight: "800" },
-
+  note: { marginTop: 8, color: "#94A3B8", fontSize: 12 },
   empty: { paddingVertical: 8, color: "#64748B" },
 
-  feedRow: { paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#E5E7EB", flexDirection: "row", gap: 10 },
-  feedAvatar: { width: 24, height: 24, borderRadius: 999, marginTop: 2 },
+  feedRow: { paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#E5E7EB", gap: 2 },
   feedTitle: { fontWeight: "700" },
   feedSub: { color: "#334155" },
   feedTime: { color: "#64748B", fontSize: 12, marginTop: 2 },

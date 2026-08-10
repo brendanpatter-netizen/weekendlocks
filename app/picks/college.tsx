@@ -95,14 +95,13 @@ export default function CFBPicksPage() {
     oddsFormat: "american",
   });
 
-  function conflictCols() {
-    return groupId ? "group_id,user_id,sport,week" : "user_id,sport,week";
-  }
-
+  // Replace picks (no duplicate-key error) using the unique index (group_id,user_id,sport,week).
+  // Every pick belongs to a group — picks.group_id is NOT NULL in the DB.
   async function handlePick(game: any, outcome: any, market: MarketKey) {
     const { data: auth } = await supabase.auth.getUser();
     const user = auth?.user;
-    if (!user) { router.push("/auth" as Href); return; }
+    if (!user) { router.push("/auth/login" as Href); return; }
+    if (!groupId) { alert("Open this page from a group to make picks."); return; }
 
     const gameId = await resolveOrCreateGameId({
       league: "cfb", week,
@@ -113,6 +112,9 @@ export default function CFBPicksPage() {
     });
     if (!gameId) { alert("Could not resolve/create matchup in the DB."); return; }
 
+    // created_at is intentionally omitted: on INSERT the column default (now())
+    // applies, and on the ON CONFLICT DO UPDATE it's left untouched, so
+    // replacing a pick preserves the original created_at.
     const row = {
       user_id: user.id,
       group_id: groupId,
@@ -125,28 +127,26 @@ export default function CFBPicksPage() {
       line: typeof outcome?.point === "number" ? String(outcome.point) : null,
       side: computeSide(game, outcome, market),
       updated_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
     };
 
     const { error: upsertErr } = await supabase
       .from("picks")
-      .upsert(row, { onConflict: conflictCols(), ignoreDuplicates: false });
+      .upsert(row, { onConflict: "group_id,user_id,sport,week", ignoreDuplicates: false });
 
     if (upsertErr) { alert(`Could not save pick: ${upsertErr.message}`); return; }
-    if (groupId) router.push(`/groups/${groupId}` as Href);
+    router.push(`/groups/${groupId}` as Href);
   }
 
   async function handleClear() {
     const { data: auth } = await supabase.auth.getUser();
     const user = auth?.user; if (!user) return;
+    if (!groupId) return;
 
-    let q = supabase.from("picks").delete()
+    const { error: delErr } = await supabase.from("picks").delete()
       .eq("user_id", user.id)
+      .eq("group_id", groupId)
       .eq("sport", "cfb")
       .eq("week", week);
-    if (groupId !== null) q = q.eq("group_id", groupId);
-
-    const { error: delErr } = await q;
     if (delErr) alert(`Could not clear pick: ${delErr.message}`);
   }
 
@@ -155,6 +155,12 @@ export default function CFBPicksPage() {
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, gap: 12, paddingBottom: 24 }}>
       <Text style={{ fontWeight: "800", fontSize: 18 }}>College Football — Week {week}</Text>
+
+      {!groupId && (
+        <View style={{ backgroundColor: "#FFF7ED", borderColor: "#FED7AA", borderWidth: 1, borderRadius: 8, padding: 10 }}>
+          <Text style={{ color: "#9A3412" }}>Open this page from a group to make picks.</Text>
+        </View>
+      )}
 
       <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
         <Text>Week</Text>
