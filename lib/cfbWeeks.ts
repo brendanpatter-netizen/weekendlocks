@@ -12,8 +12,11 @@ function genWeeks(startUtc: Date, weeks: number): WeekRangeISO[] {
   return out;
 }
 
-// 2025 CFB: open Tue Aug 26 00:00:00Z
-const CFB_SEASON_OPEN_UTC = new Date(Date.UTC(2025, 7, 26, 0, 0, 0)); // 2025-08-26T00:00:00Z
+// 2026 CFB: estimated open Tue Aug 25 00:00:00Z (last week of August). Must
+// match the season=2026 rows in public.weeks (see
+// supabase/migrations/2026-08-10f_*.sql) — update both together once the
+// real schedule is published.
+const CFB_SEASON_OPEN_UTC = new Date(Date.UTC(2026, 7, 25, 0, 0, 0)); // 2026-08-25T00:00:00Z
 export const cfbWeeks: WeekRangeISO[] = genWeeks(CFB_SEASON_OPEN_UTC, 15);
 
 // --- helpers -----------------------------------------------------------------

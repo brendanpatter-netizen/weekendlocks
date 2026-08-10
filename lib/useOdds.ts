@@ -2,6 +2,14 @@
 import { useEffect, useRef, useState } from "react";
 import { getWeekRange as getNflWeekRange } from "./nflWeeks";
 import { getCfbWeekRange } from "./cfbWeeks";
+import { getMockGames } from "./mockOdds";
+
+// Set EXPO_PUBLIC_ODDS_MOCK=true in .env.local (git-ignored, local-only) to
+// exercise the picks pages against deterministic fake odds instead of
+// calling the real Odds API — no network call, no API key needed, no
+// credits spent.
+const ODDS_MOCK =
+  process.env.EXPO_PUBLIC_ODDS_MOCK === "true" || process.env.EXPO_PUBLIC_ODDS_MOCK === "1";
 
 /** Types that loosely match The Odds API */
 export type Outcome = { name: string; price?: number; point?: number };
@@ -67,6 +75,14 @@ export function useOdds(
 
   async function fetchOdds(signal?: AbortSignal) {
     setError(null);
+
+    if (ODDS_MOCK) {
+      setLoading(true);
+      setData(getMockGames(sport, Number(week)));
+      setLastUpdated(Date.now());
+      setLoading(false);
+      return;
+    }
 
     // normalize week → ISO strings (no .getTime() anywhere)
     const window = getIsoWindow(sport, Number(week));

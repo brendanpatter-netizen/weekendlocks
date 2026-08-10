@@ -12,8 +12,11 @@ function genWeeks(startUtc: Date, weeks: number): WeekRangeISO[] {
   return out;
 }
 
-// 2025 NFL: kickoff Thu Sep 4 → open Tue Sep 2 00:00:00Z, weekly windows
-const NFL_SEASON_OPEN_UTC = new Date(Date.UTC(2025, 8, 2, 0, 0, 0)); // 2025-09-02T00:00:00Z
+// 2026 NFL: estimated kickoff Thu Sep 10 (Thursday after Labor Day) → open
+// Tue Sep 8 00:00:00Z, weekly windows. Must match the season=2026 rows in
+// public.weeks (see supabase/migrations/2026-08-10f_*.sql) — update both
+// together once the real schedule is published.
+const NFL_SEASON_OPEN_UTC = new Date(Date.UTC(2026, 8, 8, 0, 0, 0)); // 2026-09-08T00:00:00Z
 export const nflWeeks: WeekRangeISO[] = genWeeks(NFL_SEASON_OPEN_UTC, 18);
 
 // --- helpers -----------------------------------------------------------------
