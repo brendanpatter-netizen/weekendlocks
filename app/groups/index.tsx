@@ -5,14 +5,16 @@ import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   FlatList,
   ActivityIndicator,
   StyleSheet,
   Alert,
 } from "react-native";
 import { Link, router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../../lib/supabase";
+import { avatarColor, initials } from "@/lib/avatar";
 
 type Group = {
   id: string;
@@ -27,6 +29,7 @@ export default function GroupsIndex() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [createName, setCreateName] = useState("");
   const [joinCode, setJoinCode] = useState("");
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const sorted = useMemo(
     () =>
@@ -51,6 +54,7 @@ export default function GroupsIndex() {
       setLoading(false);
       return;
     }
+    setCurrentUserId(session.user.id);
 
     // Single, simple query: groups I own OR am a member of
     const { data, error } = await supabase
@@ -144,7 +148,7 @@ export default function GroupsIndex() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator />
+        <ActivityIndicator color="#0B735F" />
         <Text style={styles.muted}>Loading groups…</Text>
       </View>
     );
@@ -152,53 +156,84 @@ export default function GroupsIndex() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.h1}>Your Groups</Text>
-      <Text style={styles.muted}>Create a group or join with a code.</Text>
+      <Text style={styles.h1}>Your groups</Text>
+      <Text style={styles.muted}>Create a group or join one with a code.</Text>
 
-      <View style={styles.card}>
-        <Text style={styles.h2}>Create a group</Text>
-        <TextInput
-          value={createName}
-          onChangeText={setCreateName}
-          placeholder="Group name"
-          style={styles.input}
-        />
-        <TouchableOpacity onPress={createGroup} style={styles.button}>
-          <Text style={styles.buttonText}>Create</Text>
-        </TouchableOpacity>
-      </View>
+      <View style={styles.actionsRow}>
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={[styles.cardIcon, { backgroundColor: "#E1F5EE" }]}>
+              <Ionicons name="add-circle-outline" size={20} color="#085041" />
+            </View>
+            <Text style={styles.h2}>Create a group</Text>
+          </View>
+          <TextInput
+            value={createName}
+            onChangeText={setCreateName}
+            placeholder="Group name"
+            placeholderTextColor="#94A3B8"
+            style={styles.input}
+          />
+          <Pressable onPress={createGroup} style={styles.button}>
+            <Text style={styles.buttonText}>Create</Text>
+          </Pressable>
+        </View>
 
-      <View style={styles.card}>
-        <Text style={styles.h2}>Join with code</Text>
-        <TextInput
-          value={joinCode}
-          onChangeText={setJoinCode}
-          placeholder="e.g. a1b2c3"
-          autoCapitalize="none"
-          style={styles.input}
-        />
-        <TouchableOpacity onPress={joinByCode} style={styles.button}>
-          <Text style={styles.buttonText}>Join</Text>
-        </TouchableOpacity>
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={[styles.cardIcon, { backgroundColor: "#E6F1FB" }]}>
+              <Ionicons name="key-outline" size={20} color="#0C447C" />
+            </View>
+            <Text style={styles.h2}>Join with code</Text>
+          </View>
+          <TextInput
+            value={joinCode}
+            onChangeText={setJoinCode}
+            placeholder="e.g. a1b2c3"
+            placeholderTextColor="#94A3B8"
+            autoCapitalize="none"
+            style={styles.input}
+          />
+          <Pressable onPress={joinByCode} style={styles.buttonSecondary}>
+            <Text style={styles.buttonSecondaryText}>Join</Text>
+          </Pressable>
+        </View>
       </View>
 
       <FlatList
-        style={{ marginTop: 12 }}
+        style={{ marginTop: 20 }}
         data={sorted}
         keyExtractor={(g) => g.id}
-        renderItem={({ item }) => (
-          <Link
-            href={{ pathname: "/groups/[id]", params: { id: item.id } }}
-            style={styles.row}
-          >
-            <Text style={styles.rowTitle}>{item.name}</Text>
-            <Text style={styles.rowSub}>
-              Created {new Date(item.created_at).toLocaleDateString()}
-            </Text>
-          </Link>
-        )}
+        renderItem={({ item }) => {
+          const color = avatarColor(item.id);
+          const isOwner = item.owner_user_id === currentUserId;
+          return (
+            <Link href={{ pathname: "/groups/[id]", params: { id: item.id } }} asChild>
+              <Pressable style={styles.row}>
+                <View style={[styles.rowBadge, { backgroundColor: color.bg }]}>
+                  <Text style={[styles.rowBadgeText, { color: color.fg }]}>{initials(item.name)}</Text>
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <View style={styles.rowTitleLine}>
+                    <Text style={styles.rowTitle} numberOfLines={1}>{item.name}</Text>
+                    {isOwner && (
+                      <View style={styles.ownerTag}><Text style={styles.ownerTagText}>Owner</Text></View>
+                    )}
+                  </View>
+                  <Text style={styles.rowSub}>
+                    Created {new Date(item.created_at).toLocaleDateString()}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+              </Pressable>
+            </Link>
+          );
+        }}
         ListEmptyComponent={
-          <Text style={styles.muted}>You’re not in any groups yet.</Text>
+          <View style={styles.emptyState}>
+            <Ionicons name="people-outline" size={28} color="#94A3B8" />
+            <Text style={styles.muted}>You’re not in any groups yet.</Text>
+          </View>
         }
       />
     </View>
@@ -206,37 +241,68 @@ export default function GroupsIndex() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 8 },
-  h1: { fontSize: 22, fontWeight: "600" },
-  h2: { fontSize: 16, fontWeight: "600", marginBottom: 8 },
-  muted: { color: "#666" },
+  container: { flex: 1, padding: 16, gap: 4, backgroundColor: "#F8FAFC" },
+  h1: { fontSize: 24, fontWeight: "800", color: "#0F172A" },
+  h2: { fontSize: 15, fontWeight: "700", color: "#0F172A" },
+  muted: { color: "#64748B" },
+
+  actionsRow: { flexDirection: "row", gap: 12, marginTop: 16, flexWrap: "wrap" },
   card: {
+    flex: 1,
+    minWidth: 220,
     backgroundColor: "white",
-    padding: 12,
-    borderRadius: 12,
-    elevation: 2,
-    gap: 8,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    gap: 10,
   },
+  cardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  cardIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+
   input: {
     borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
+    borderColor: "#E2E8F0",
+    borderRadius: 10,
     padding: 10,
+    fontSize: 14,
   },
   button: {
-    backgroundColor: "#111",
+    backgroundColor: "#0B735F",
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 12,
+    borderRadius: 999,
     alignSelf: "flex-start",
   },
-  buttonText: { color: "white", fontWeight: "600" },
-  row: {
-    padding: 12,
-    backgroundColor: "white",
-    borderRadius: 12,
-    marginBottom: 8,
+  buttonText: { color: "white", fontWeight: "700" },
+  buttonSecondary: {
+    borderWidth: 1,
+    borderColor: "#0B735F",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    alignSelf: "flex-start",
   },
-  rowTitle: { fontWeight: "600", fontSize: 16 },
-  rowSub: { color: "#666", marginTop: 2 },
+  buttonSecondaryText: { color: "#0B735F", fontWeight: "700" },
+
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    backgroundColor: "white",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    marginBottom: 10,
+  },
+  rowBadge: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  rowBadgeText: { fontSize: 14, fontWeight: "700" },
+  rowTitleLine: { flexDirection: "row", alignItems: "center", gap: 8 },
+  rowTitle: { fontWeight: "700", fontSize: 16, color: "#0F172A", flexShrink: 1 },
+  rowSub: { color: "#94A3B8", marginTop: 2, fontSize: 12 },
+  ownerTag: { backgroundColor: "#FAEEDA", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
+  ownerTagText: { fontSize: 10, fontWeight: "700", color: "#633806" },
+
+  emptyState: { alignItems: "center", gap: 8, paddingVertical: 32 },
 });
