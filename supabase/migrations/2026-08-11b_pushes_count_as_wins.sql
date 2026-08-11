@@ -4,7 +4,11 @@
 -- reports the literal outcome — win/loss/push — as ground truth); this
 -- only changes how member_records aggregates it. Easy to revisit if the
 -- rule changes later.
-create or replace view public.member_records as
+-- CREATE OR REPLACE VIEW can't drop a column (pushes no longer exists in
+-- the new definition), so drop it outright first.
+drop view if exists public.member_records;
+
+create view public.member_records as
 select
   group_id,
   user_id,
