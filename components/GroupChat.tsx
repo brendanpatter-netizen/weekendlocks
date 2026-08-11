@@ -93,12 +93,12 @@ export default function GroupChat({
             const color = avatarColor(item.user_id);
             const mine = item.user_id === currentUserId;
             return (
-              <View style={[styles.msgRow, mine && styles.msgRowMine]}>
+              <View style={styles.msgRow}>
                 <View style={[styles.avatar, { backgroundColor: color.bg }]}>
                   <Text style={[styles.avatarText, { color: color.fg }]}>{initials(name)}</Text>
                 </View>
                 <View style={[styles.bubble, mine && styles.bubbleMine]}>
-                  {!mine && <Text style={styles.msgName}>{name}</Text>}
+                  <Text style={styles.msgName}>{name}</Text>
                   <Text style={styles.msgBody}>{item.body}</Text>
                   <Text style={styles.msgTime}>{new Date(item.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</Text>
                 </View>
@@ -138,7 +138,6 @@ const styles = StyleSheet.create({
   },
   list: { flex: 1 },
   msgRow: { flexDirection: "row", gap: 8, paddingVertical: 6, alignItems: "flex-end" },
-  msgRowMine: { flexDirection: "row-reverse" },
 
   avatar: { width: 28, height: 28, borderRadius: 999, alignItems: "center", justifyContent: "center" },
   avatarText: { fontSize: 11, fontWeight: "700" },

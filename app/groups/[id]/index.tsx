@@ -276,12 +276,6 @@ export default function GroupDashboardPage() {
         <ActivityIndicator style={{ marginTop: 12 }} />
       ) : (
         <>
-        <View style={styles.bodyRow}>
-          <View style={styles.chatCol}>
-            <GroupChat groupId={groupId} nameById={nameById} currentUserId={currentUserId} />
-          </View>
-
-          <View style={styles.tableCol}>
           <View style={styles.card}>
             <View style={styles.leaderboardHeader}>
               <Text style={styles.cardTitle}>Group leaderboard</Text>
@@ -393,8 +387,8 @@ export default function GroupDashboardPage() {
               />
             )}
           </View>
-          </View>
-        </View>
+
+          <GroupChat groupId={groupId} nameById={nameById} currentUserId={currentUserId} />
 
           {isOwner && (
             <View style={styles.dangerZone}>
@@ -453,10 +447,6 @@ const styles = StyleSheet.create({
   weekLabelRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   weekLabel: { fontSize: 12, color: "#64748B", fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.3 },
   jumpToCurrent: { fontSize: 12, color: "#0B735F", fontWeight: "700" },
-
-  bodyRow: { flexDirection: "row", gap: 16, flexWrap: "wrap", alignItems: "flex-start" },
-  chatCol: { flex: 1, minWidth: 320 },
-  tableCol: { flex: 1.4, minWidth: 380, gap: 16 },
 
   card: { backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12, gap: 4 },
   cardTitle: { fontWeight: "800" },
