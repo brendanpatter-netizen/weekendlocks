@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View,
 } from "react-native";
@@ -21,6 +21,7 @@ function getTeamLogo(name?: string | null): string | null {
 }
 
 type MarketKey = "spreads" | "totals" | "h2h";
+type CurrentPick = { market: string; team: string | null; line: string | null };
 
 /* helpers */
 function norm(s: string) {
@@ -95,6 +96,31 @@ export default function CFBPicksPage() {
     oddsFormat: "american",
   });
 
+  const [currentPick, setCurrentPick] = useState<CurrentPick | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  // Load whatever pick already exists for this group + week, so it can be
+  // highlighted and a single "Clear my pick" action can be shown.
+  useEffect(() => {
+    if (!groupId) { setCurrentPick(null); return; }
+    let mounted = true;
+    (async () => {
+      const { data: auth } = await supabase.auth.getUser();
+      const user = auth?.user;
+      if (!user) return;
+      const { data } = await supabase
+        .from("picks")
+        .select("market, team, line")
+        .eq("user_id", user.id)
+        .eq("group_id", groupId)
+        .eq("sport", "cfb")
+        .eq("week", week)
+        .maybeSingle();
+      if (mounted) setCurrentPick((data as CurrentPick) ?? null);
+    })();
+    return () => { mounted = false; };
+  }, [groupId, week]);
+
   // Replace picks (no duplicate-key error) using the unique index (group_id,user_id,sport,week).
   // Every pick belongs to a group — picks.group_id is NOT NULL in the DB.
   async function handlePick(game: any, outcome: any, market: MarketKey) {
@@ -112,6 +138,9 @@ export default function CFBPicksPage() {
     });
     if (!gameId) { alert("Could not resolve/create matchup in the DB."); return; }
 
+    const team = outcome?.name ?? null;
+    const line = typeof outcome?.point === "number" ? String(outcome.point) : null;
+
     // created_at is intentionally omitted: on INSERT the column default (now())
     // applies, and on the ON CONFLICT DO UPDATE it's left untouched, so
     // replacing a pick preserves the original created_at.
@@ -122,9 +151,9 @@ export default function CFBPicksPage() {
       week,
       game_id: gameId,
       market,
-      team: outcome?.name ?? null,
+      team,
       price: typeof outcome?.price === "number" ? outcome.price : null,
-      line: typeof outcome?.point === "number" ? String(outcome.point) : null,
+      line,
       side: computeSide(game, outcome, market),
       updated_at: new Date().toISOString(),
     };
@@ -134,7 +163,9 @@ export default function CFBPicksPage() {
       .upsert(row, { onConflict: "group_id,user_id,sport,week", ignoreDuplicates: false });
 
     if (upsertErr) { alert(`Could not save pick: ${upsertErr.message}`); return; }
-    router.push(`/groups/${groupId}` as Href);
+    setCurrentPick({ market, team, line });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
   }
 
   async function handleClear() {
@@ -147,7 +178,8 @@ export default function CFBPicksPage() {
       .eq("group_id", groupId)
       .eq("sport", "cfb")
       .eq("week", week);
-    if (delErr) alert(`Could not clear pick: ${delErr.message}`);
+    if (delErr) { alert(`Could not clear pick: ${delErr.message}`); return; }
+    setCurrentPick(null);
   }
 
   const weekOptions = Array.from({ length: 20 }, (_, i) => i + 1);
@@ -159,6 +191,23 @@ export default function CFBPicksPage() {
       {!groupId && (
         <View style={{ backgroundColor: "#FFF7ED", borderColor: "#FED7AA", borderWidth: 1, borderRadius: 8, padding: 10 }}>
           <Text style={{ color: "#9A3412" }}>Open this page from a group to make picks.</Text>
+        </View>
+      )}
+
+      {groupId && (
+        <View style={styles.pickStatus}>
+          <Text style={styles.pickStatusText}>
+            {saved ? "✓ Pick saved: " : "Your pick: "}
+            {currentPick ? `${currentPick.team ?? "?"}${currentPick.line ? ` ${currentPick.line}` : ""}` : "none yet"}
+          </Text>
+          {currentPick && (
+            <Pressable onPress={handleClear} style={styles.clearBtn}>
+              <Text style={{ color: "#EF4444", fontWeight: "700", fontSize: 13 }}>Clear my pick</Text>
+            </Pressable>
+          )}
+          <Pressable onPress={() => router.push(`/groups/${groupId}` as Href)} style={styles.backBtn}>
+            <Text style={{ color: "#0B735F", fontWeight: "700", fontSize: 13 }}>Back to group</Text>
+          </Pressable>
         </View>
       )}
 
@@ -201,21 +250,18 @@ export default function CFBPicksPage() {
               <Text style={{ color: "#475569" }}>{new Date(g.commence_time).toLocaleString()}</Text>
 
               <View style={{ gap: 8, marginTop: 8 }}>
-                {outcomes.map((o, i) => (
-                  <Pressable key={i} onPress={() => handlePick(g, o, tab)} style={styles.outcomeBtn}>
-                    <Text style={{ fontWeight: "700" }}>
-                      {o.name}
-                      {typeof o.point === "number" ? ` ${o.point > 0 ? "+" : ""}${o.point}` : ""}
-                      {typeof o.price === "number" ? `  (${o.price})` : ""}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              <View style={{ marginTop: 8, alignItems: "flex-end" }}>
-                <Pressable onPress={handleClear} style={styles.clearBtn}>
-                  <Text style={{ color: "#EF4444", fontWeight: "700" }}>Clear my pick</Text>
-                </Pressable>
+                {outcomes.map((o, i) => {
+                  const isPicked = currentPick?.market === tab && currentPick?.team === o.name;
+                  return (
+                    <Pressable key={i} onPress={() => handlePick(g, o, tab)} style={[styles.outcomeBtn, isPicked && styles.outcomeBtnActive]}>
+                      <Text style={[{ fontWeight: "700" }, isPicked && { color: "white" }]}>
+                        {isPicked ? "✓ " : ""}{o.name}
+                        {typeof o.point === "number" ? ` ${o.point > 0 ? "+" : ""}${o.point}` : ""}
+                        {typeof o.price === "number" ? `  (${o.price})` : ""}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
             </View>
           );
@@ -230,6 +276,13 @@ const styles = StyleSheet.create({
   tabText: { fontWeight: "800", color: "#0F172A" },
   gameCard: { backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12, marginBottom: 10, gap: 6 },
   outcomeBtn: { backgroundColor: "#0B735F22", borderWidth: 1, borderColor: "#0B735F55", borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10 },
+  outcomeBtnActive: { backgroundColor: "#0B735F", borderColor: "#0B735F" },
   clearBtn: { paddingVertical: 4, paddingHorizontal: 8, borderWidth: 1, borderRadius: 6, borderColor: "#EF4444", backgroundColor: "#EF44440D" },
+  backBtn: { paddingVertical: 4, paddingHorizontal: 8, borderWidth: 1, borderRadius: 6, borderColor: "#0B735F", backgroundColor: "#0B735F0D" },
   logo: { width: 28, height: 28, resizeMode: "contain" },
+  pickStatus: {
+    flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#F8FAFC",
+    borderWidth: 1, borderColor: "#E2E8F0", borderRadius: 8, padding: 10,
+  },
+  pickStatusText: { flex: 1, fontWeight: "700", color: "#0F172A" },
 });

@@ -11,6 +11,13 @@ import { getMockGames } from "./mockOdds";
 const ODDS_MOCK =
   process.env.EXPO_PUBLIC_ODDS_MOCK === "true" || process.env.EXPO_PUBLIC_ODDS_MOCK === "1";
 
+// In-memory cache so flipping between weeks/tabs (or remounting the page)
+// doesn't re-spend Odds-API credits within a short window. Cleared on full
+// page reload — this is about avoiding redundant calls in one session, not
+// long-term storage.
+const ODDS_CACHE_TTL_MS = 5 * 60 * 1000;
+const oddsCache = new Map<string, { data: Game[]; at: number }>();
+
 /** Types that loosely match The Odds API */
 export type Outcome = { name: string; price?: number; point?: number };
 export type MarketKey = "spreads" | "h2h" | "totals" | string;
@@ -73,7 +80,7 @@ export function useOdds(
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  async function fetchOdds(signal?: AbortSignal) {
+  async function fetchOdds(signal?: AbortSignal, { skipCache = false } = {}) {
     setError(null);
 
     if (ODDS_MOCK) {
@@ -82,6 +89,16 @@ export function useOdds(
       setLastUpdated(Date.now());
       setLoading(false);
       return;
+    }
+
+    const cacheKey = `${sport}:${week}:${region}:${oddsFormat}:${markets.join(",")}`;
+    if (!skipCache) {
+      const cached = oddsCache.get(cacheKey);
+      if (cached && Date.now() - cached.at < ODDS_CACHE_TTL_MS) {
+        setData(cached.data);
+        setLastUpdated(cached.at);
+        return;
+      }
     }
 
     // normalize week → ISO strings (no .getTime() anywhere)
@@ -127,6 +144,7 @@ export function useOdds(
         });
       }
 
+      oddsCache.set(cacheKey, { data: filtered, at: Date.now() });
       setData(filtered);
       setLastUpdated(Date.now());
       setLoading(false);
@@ -164,6 +182,6 @@ export function useOdds(
     loading,
     error,
     lastUpdated,
-    refresh: () => fetchOdds(),
+    refresh: () => fetchOdds(undefined, { skipCache: true }),
   };
 }
