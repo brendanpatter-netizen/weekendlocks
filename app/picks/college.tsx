@@ -6,6 +6,7 @@ import { useLocalSearchParams, router, Href } from "expo-router";
 import { getCurrentCfbWeek as getCurrentCFBWeek } from "@/lib/cfbWeeks";
 import { useOdds } from "@/lib/useOdds";
 import { supabase } from "@/lib/supabase";
+import { norm, matchupsLikelyMatch } from "@/lib/teamMatch";
 
 /* ---------- team logos (tolerant import: function or map) ---------- */
 let teamLogosMod: any;
@@ -24,10 +25,6 @@ type MarketKey = "spreads" | "totals" | "h2h";
 type CurrentPick = { market: string; team: string | null; line: string | null };
 
 /* helpers */
-function norm(s: string) {
-  return (s ?? "").toLowerCase().replace(/\./g, "").replace(/&/g, "and")
-    .replace(/\s+st\./g, " state").replace(/[\s\-]+/g, " ").trim();
-}
 function computeSide(game: any, outcome: any, market: MarketKey)
   : "home" | "away" | "over" | "under" | "team" {
   const on = norm(outcome?.name ?? "");
@@ -59,12 +56,8 @@ async function resolveOrCreateGameId(opts: {
     .lte("kickoff_at", toIso);
 
   if (rows?.length) {
-    const feedHome = norm(opts.home), feedAway = norm(opts.away);
     for (const r of rows) {
-      const rh = norm(r.home), ra = norm(r.away);
-      const dir = (rh.includes(feedHome) || feedHome.includes(rh)) && (ra.includes(feedAway) || feedAway.includes(ra));
-      const swap = (rh.includes(feedAway) || feedAway.includes(rh)) && (ra.includes(feedHome) || feedHome.includes(ra));
-      if (dir || swap) return r.id;
+      if (matchupsLikelyMatch(r.home, r.away, opts.home, opts.away, opts.league)) return r.id;
     }
   }
 

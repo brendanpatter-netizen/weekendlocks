@@ -9,13 +9,30 @@ import * as Clipboard from "expo-clipboard";
 import { supabase } from "@/lib/supabase";
 import { getCurrentWeek as getCurrentNFLWeek } from "@/lib/nflWeeks";
 import { getCurrentCfbWeek as getCurrentCFBWeek } from "@/lib/cfbWeeks";
+import { refreshScoresForSport } from "@/lib/scores";
 
 type PickInfo = { market: string | null; team: string | null; line: string | null; price: number | null };
-type MemberRow = { user_id: string; display_name: string; nfl: PickInfo | null; cfb: PickInfo | null };
+type SeasonRecord = { wins: number; losses: number; pushes: number };
+type MemberRow = {
+  user_id: string; display_name: string; nfl: PickInfo | null; cfb: PickInfo | null;
+  nflRecord: SeasonRecord; cfbRecord: SeasonRecord;
+};
 type ActivityItem = {
   id: string; user_id: string; display_name: string; sport: "nfl" | "cfb"; week: number;
   market: string | null; team: string | null; line: string | null; updated_at: string; was_replaced: boolean;
 };
+
+const EMPTY_RECORD: SeasonRecord = { wins: 0, losses: 0, pushes: 0 };
+
+function recordLabel(r: SeasonRecord): string | null {
+  if (r.wins === 0 && r.losses === 0 && r.pushes === 0) return null;
+  return r.pushes > 0 ? `${r.wins}-${r.losses}-${r.pushes}` : `${r.wins}-${r.losses}`;
+}
+function winPct(r: SeasonRecord): string | null {
+  const decided = r.wins + r.losses;
+  if (decided === 0) return null;
+  return `${Math.round((100 * r.wins) / decided)}%`;
+}
 
 // NFL runs 18 weeks, CFB 15 — one shared selector covers both; CFB just has
 // no games/picks in the trailing weeks, which shows as a normal empty state.
@@ -90,80 +107,106 @@ export default function GroupDashboardPage() {
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshingScores, setRefreshingScores] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
+
+  async function loadDashboard(mounted: () => boolean) {
+    try {
+      setLoading(true);
+      setBanner(null);
+
+      const { data: g } = await supabase
+        .from("groups")
+        .select("name, invite_code")
+        .eq("id", groupId)
+        .maybeSingle();
+      if (mounted() && g?.name) setGroupName(g.name);
+      if (mounted()) setInviteCode(g?.invite_code ?? null);
+
+      // Roster is the source of truth — every member shows up, even with no picks yet.
+      const { data: gm } = await supabase
+        .from("group_members")
+        .select("user_id")
+        .eq("group_id", groupId);
+      const rosterIds = (gm ?? []).map((r: any) => r.user_id as string);
+
+      const { data: profs } = rosterIds.length
+        ? await supabase.from("profiles").select("id, display_name, username").in("id", rosterIds)
+        : { data: [] as any[] };
+      const nameById = new Map<string, string>(
+        rosterIds.map((uid) => {
+          const p = (profs ?? []).find((x: any) => x.id === uid);
+          // username has the only real edit path (Account page) — prefer it.
+          return [uid, p?.username || p?.display_name || uid];
+        })
+      );
+
+      const [{ data: nflRows }, { data: cfbRows }, { data: recordRows }] = await Promise.all([
+        supabase.from("picks").select("user_id, market, team, line, price")
+          .eq("group_id", groupId).eq("sport", "nfl").eq("week", week),
+        supabase.from("picks").select("user_id, market, team, line, price")
+          .eq("group_id", groupId).eq("sport", "cfb").eq("week", week),
+        supabase.from("member_records").select("user_id, sport, wins, losses, pushes")
+          .eq("group_id", groupId),
+      ]);
+      const nflByUser = new Map((nflRows ?? []).map((r: any) => [r.user_id, r as PickInfo]));
+      const cfbByUser = new Map((cfbRows ?? []).map((r: any) => [r.user_id, r as PickInfo]));
+      const nflRecordByUser = new Map<string, SeasonRecord>();
+      const cfbRecordByUser = new Map<string, SeasonRecord>();
+      (recordRows ?? []).forEach((r: any) => {
+        const rec: SeasonRecord = { wins: r.wins, losses: r.losses, pushes: r.pushes };
+        (r.sport === "nfl" ? nflRecordByUser : cfbRecordByUser).set(r.user_id, rec);
+      });
+
+      const rows: MemberRow[] = rosterIds
+        .map((uid) => ({
+          user_id: uid,
+          display_name: nameById.get(uid) ?? uid,
+          nfl: nflByUser.get(uid) ?? null,
+          cfb: cfbByUser.get(uid) ?? null,
+          nflRecord: nflRecordByUser.get(uid) ?? EMPTY_RECORD,
+          cfbRecord: cfbRecordByUser.get(uid) ?? EMPTY_RECORD,
+        }))
+        .sort((a, b) => a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }));
+      if (mounted()) setMembers(rows);
+
+      // Broad recent-activity feed (not limited to the selected week) — each row is
+      // labeled with sport + week so it's unambiguous.
+      const { data: feedRows } = await supabase
+        .from("picks_feed")
+        .select("id, user_id, display_name, sport, week, market, team, line, updated_at, was_replaced")
+        .eq("group_id", groupId)
+        .order("updated_at", { ascending: false })
+        .limit(20);
+      if (mounted()) setActivity((feedRows ?? []) as ActivityItem[]);
+    } catch (e: any) {
+      if (mounted()) setBanner(e?.message ?? String(e));
+    } finally {
+      if (mounted()) setLoading(false);
+    }
+  }
 
   useEffect(() => {
     if (!groupId) return;
-    let mounted = true;
-
-    (async () => {
-      try {
-        setLoading(true);
-        setBanner(null);
-
-        const { data: g } = await supabase
-          .from("groups")
-          .select("name, invite_code")
-          .eq("id", groupId)
-          .maybeSingle();
-        if (mounted && g?.name) setGroupName(g.name);
-        if (mounted) setInviteCode(g?.invite_code ?? null);
-
-        // Roster is the source of truth — every member shows up, even with no picks yet.
-        const { data: gm } = await supabase
-          .from("group_members")
-          .select("user_id")
-          .eq("group_id", groupId);
-        const rosterIds = (gm ?? []).map((r: any) => r.user_id as string);
-
-        const { data: profs } = rosterIds.length
-          ? await supabase.from("profiles").select("id, display_name, username").in("id", rosterIds)
-          : { data: [] as any[] };
-        const nameById = new Map<string, string>(
-          rosterIds.map((uid) => {
-            const p = (profs ?? []).find((x: any) => x.id === uid);
-            // username has the only real edit path (Account page) — prefer it.
-            return [uid, p?.username || p?.display_name || uid];
-          })
-        );
-
-        const [{ data: nflRows }, { data: cfbRows }] = await Promise.all([
-          supabase.from("picks").select("user_id, market, team, line, price")
-            .eq("group_id", groupId).eq("sport", "nfl").eq("week", week),
-          supabase.from("picks").select("user_id, market, team, line, price")
-            .eq("group_id", groupId).eq("sport", "cfb").eq("week", week),
-        ]);
-        const nflByUser = new Map((nflRows ?? []).map((r: any) => [r.user_id, r as PickInfo]));
-        const cfbByUser = new Map((cfbRows ?? []).map((r: any) => [r.user_id, r as PickInfo]));
-
-        const rows: MemberRow[] = rosterIds
-          .map((uid) => ({
-            user_id: uid,
-            display_name: nameById.get(uid) ?? uid,
-            nfl: nflByUser.get(uid) ?? null,
-            cfb: cfbByUser.get(uid) ?? null,
-          }))
-          .sort((a, b) => a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }));
-        if (mounted) setMembers(rows);
-
-        // Broad recent-activity feed (not limited to the selected week) — each row is
-        // labeled with sport + week so it's unambiguous.
-        const { data: feedRows } = await supabase
-          .from("picks_feed")
-          .select("id, user_id, display_name, sport, week, market, team, line, updated_at, was_replaced")
-          .eq("group_id", groupId)
-          .order("updated_at", { ascending: false })
-          .limit(20);
-        if (mounted) setActivity((feedRows ?? []) as ActivityItem[]);
-      } catch (e: any) {
-        if (mounted) setBanner(e?.message ?? String(e));
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-
-    return () => { mounted = false; };
+    let alive = true;
+    loadDashboard(() => alive);
+    return () => { alive = false; };
   }, [groupId, week]);
+
+  async function handleRefreshScores() {
+    setRefreshingScores(true);
+    try {
+      const [nfl, cfb] = await Promise.all([
+        refreshScoresForSport("nfl"),
+        refreshScoresForSport("cfb"),
+      ]);
+      const err = nfl.error || cfb.error;
+      if (err) setBanner(err);
+      await loadDashboard(() => true);
+    } finally {
+      setRefreshingScores(false);
+    }
+  }
 
   const copyInviteCode = async () => {
     if (!inviteCode) return;
@@ -224,10 +267,17 @@ export default function GroupDashboardPage() {
       ) : (
         <>
           <View style={styles.card}>
+            <View style={styles.leaderboardHeader}>
+              <Text style={styles.cardTitle}>Group leaderboard</Text>
+              <Pressable onPress={handleRefreshScores} disabled={refreshingScores} style={styles.refreshBtn}>
+                <Text style={styles.refreshBtnText}>{refreshingScores ? "Checking…" : "Refresh scores"}</Text>
+              </Pressable>
+            </View>
             <View style={[styles.tableRow, styles.tableHeader]}>
               <Text style={styles.thUser}>Member</Text>
               <Text style={styles.thPick}>NFL wk {week}</Text>
               <Text style={styles.thPick}>CFB wk {week}</Text>
+              <Text style={styles.thOverall}>Overall</Text>
             </View>
             {members.length === 0 ? (
               <Text style={styles.empty}>No members yet.</Text>
@@ -239,6 +289,15 @@ export default function GroupDashboardPage() {
                   const color = avatarColor(item.user_id);
                   const nfl = pickLabel(item.nfl);
                   const cfb = pickLabel(item.cfb);
+                  const nflRec = recordLabel(item.nflRecord);
+                  const cfbRec = recordLabel(item.cfbRecord);
+                  const overall: SeasonRecord = {
+                    wins: item.nflRecord.wins + item.cfbRecord.wins,
+                    losses: item.nflRecord.losses + item.cfbRecord.losses,
+                    pushes: item.nflRecord.pushes + item.cfbRecord.pushes,
+                  };
+                  const overallRec = recordLabel(overall);
+                  const overallPct = winPct(overall);
                   return (
                     <View style={styles.tableRow}>
                       <View style={styles.userCell}>
@@ -253,6 +312,7 @@ export default function GroupDashboardPage() {
                         ) : (
                           <Text style={styles.noPick}>No pick yet</Text>
                         )}
+                        {nflRec && <Text style={styles.recordSub}>{nflRec}</Text>}
                       </View>
                       <View style={styles.pickCell}>
                         {cfb ? (
@@ -260,13 +320,18 @@ export default function GroupDashboardPage() {
                         ) : (
                           <Text style={styles.noPick}>No pick yet</Text>
                         )}
+                        {cfbRec && <Text style={styles.recordSub}>{cfbRec}</Text>}
+                      </View>
+                      <View style={styles.overallCell}>
+                        <Text style={styles.overallRecord}>{overallRec ?? "—"}</Text>
+                        {overallPct && <Text style={styles.overallPct}>{overallPct}</Text>}
                       </View>
                     </View>
                   );
                 }}
               />
             )}
-            <Text style={styles.note}>Season records &amp; win % coming soon.</Text>
+            <Text style={styles.note}>Records update when you tap "Refresh scores" above — pushes don't count as a win or a loss.</Text>
           </View>
 
           <View style={styles.card}>
@@ -349,7 +414,11 @@ const styles = StyleSheet.create({
   liveDotActive: { backgroundColor: "white" },
 
   card: { backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12, gap: 4 },
-  cardTitle: { fontWeight: "800", marginBottom: 8 },
+  cardTitle: { fontWeight: "800" },
+
+  leaderboardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
+  refreshBtn: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: "#0B735F" },
+  refreshBtnText: { color: "#0B735F", fontWeight: "700", fontSize: 12 },
 
   tableHeader: { paddingVertical: 6 },
   tableRow: {
@@ -358,13 +427,14 @@ const styles = StyleSheet.create({
   },
   thUser: { flex: 1.6, fontWeight: "800", fontSize: 12, color: "#64748B", textTransform: "uppercase" },
   thPick: { flex: 1, fontWeight: "800", fontSize: 12, color: "#64748B", textTransform: "uppercase" },
+  thOverall: { width: 64, fontWeight: "800", fontSize: 12, color: "#64748B", textTransform: "uppercase", textAlign: "right" },
 
   userCell: { flex: 1.6, flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0 },
   avatar: { width: 32, height: 32, borderRadius: 999, alignItems: "center", justifyContent: "center" },
   avatarText: { fontSize: 12, fontWeight: "700" },
   userName: { fontWeight: "700", flexShrink: 1 },
 
-  pickCell: { flex: 1 },
+  pickCell: { flex: 1, gap: 2 },
   badge: { alignSelf: "flex-start", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   badgeNfl: { backgroundColor: "#E1F5EE" },
   badgeCfb: { backgroundColor: "#E6F1FB" },
@@ -372,6 +442,11 @@ const styles = StyleSheet.create({
   badgeTextNfl: { color: "#085041" },
   badgeTextCfb: { color: "#0C447C" },
   noPick: { fontSize: 13, color: "#94A3B8" },
+  recordSub: { fontSize: 11, color: "#94A3B8", marginLeft: 2 },
+
+  overallCell: { width: 64, alignItems: "flex-end" },
+  overallRecord: { fontSize: 13, fontWeight: "800", color: "#0F172A" },
+  overallPct: { fontSize: 11, color: "#64748B" },
 
   note: { marginTop: 8, color: "#94A3B8", fontSize: 12 },
   empty: { paddingVertical: 8, color: "#64748B" },
