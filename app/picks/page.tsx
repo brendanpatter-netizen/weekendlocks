@@ -18,21 +18,14 @@ import { supabase } from "@/lib/supabase";
 import { norm, matchupsLikelyMatch } from "@/lib/teamMatch";
 import { pickLabel } from "@/lib/pickLabel";
 import WeekPills from "@/components/WeekPills";
+import { logoUri } from "@/lib/teamLogos";
 
-/* ---------- team logos (tolerant import: function or map) ---------- */
-let teamLogosMod: any;
-try {
-  // @ts-ignore
-  teamLogosMod = require("@/lib/teamLogos");
-} catch {}
+// lib/teamLogos.logoUri returns 'about:blank' when a name doesn't map to a
+// known team (e.g. "Over"/"Under" outcomes) — treat that as "no logo".
 function getTeamLogo(name?: string | null): string | null {
   if (!name) return null;
-  const m = teamLogosMod ?? {};
-  if (typeof m.getTeamLogo === "function") return m.getTeamLogo(name);
-  if (typeof m.default === "function") return m.default(name);
-  if (m.default && typeof m.default === "object") return m.default[name] ?? null;
-  if (m && typeof m === "object") return m[name] ?? null;
-  return null;
+  const uri = logoUri(name, "nfl");
+  return uri === "about:blank" ? null : uri;
 }
 
 type MarketKey = "spreads" | "totals" | "h2h";
@@ -278,8 +271,10 @@ export default function NFLPicksPage() {
                   // card at once — the line (point) disambiguates which specific game.
                   const outcomeLine = typeof o.point === "number" ? String(o.point) : null;
                   const isPicked = currentPick?.market === tab && currentPick?.team === o.name && currentPick?.line === outcomeLine;
+                  const oLogo = getTeamLogo(o.name); // null for Over/Under — no team to show
                   return (
-                    <Pressable key={i} onPress={() => handlePick(g, o, tab)} style={[styles.outcomeBtn, isPicked && styles.outcomeBtnActive]}>
+                    <Pressable key={i} onPress={() => handlePick(g, o, tab)} style={[styles.outcomeBtn, isPicked && styles.outcomeBtnActive, { flexDirection: "row", alignItems: "center", gap: 8 }]}>
+                      {!!oLogo && <Image source={{ uri: oLogo }} style={styles.outcomeLogo} />}
                       <Text style={[{ fontWeight: "700" }, isPicked && { color: "white" }]}>
                         {isPicked ? "✓ " : ""}{o.name}
                         {typeof o.point === "number" ? ` ${o.point > 0 ? "+" : ""}${o.point}` : ""}
@@ -306,6 +301,7 @@ const styles = StyleSheet.create({
   clearBtn: { paddingVertical: 4, paddingHorizontal: 8, borderWidth: 1, borderRadius: 6, borderColor: "#EF4444", backgroundColor: "#EF44440D" },
   backBtn: { paddingVertical: 4, paddingHorizontal: 8, borderWidth: 1, borderRadius: 6, borderColor: "#0B735F", backgroundColor: "#0B735F0D" },
   logo: { width: 28, height: 28, resizeMode: "contain" },
+  outcomeLogo: { width: 20, height: 20, resizeMode: "contain" },
   pickStatus: {
     flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#F8FAFC",
     borderWidth: 1, borderColor: "#E2E8F0", borderRadius: 8, padding: 10,
