@@ -1,3 +1,5 @@
+export const unstable_settings = { prerender: false };
+
 import { useEffect, useState } from "react";
 import {
   View,

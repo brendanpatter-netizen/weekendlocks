@@ -1,4 +1,5 @@
 'use client';
+export const unstable_settings = { prerender: false };
 
 import { useEffect, useMemo, useState } from "react";
 import {

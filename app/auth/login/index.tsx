@@ -1,4 +1,6 @@
 // app/auth/login/index.tsx
+export const unstable_settings = { prerender: false };
+
 import { useEffect, useRef, useState } from "react";
 import {
   View, Text, TextInput, Pressable, ActivityIndicator,

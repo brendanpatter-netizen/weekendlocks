@@ -1,3 +1,5 @@
+export const unstable_settings = { prerender: false };
+
 import { useEffect } from "react";
 import { View, ActivityIndicator, Text } from "react-native";
 import { useRouter } from "expo-router";

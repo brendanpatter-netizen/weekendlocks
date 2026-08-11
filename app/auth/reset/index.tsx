@@ -1,4 +1,6 @@
 // app/auth/reset/index.tsx
+export const unstable_settings = { prerender: false };
+
 import { useEffect, useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, Alert, ActivityIndicator, Platform } from "react-native";
 import { supabase } from "@/lib/supabase";
