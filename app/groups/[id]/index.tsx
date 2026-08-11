@@ -2,7 +2,7 @@ export const unstable_settings = { prerender: false };
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View,
+  ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View,
 } from "react-native";
 import { useLocalSearchParams, router, Href } from "expo-router";
 import * as Clipboard from "expo-clipboard";
@@ -56,6 +56,8 @@ export default function GroupDashboardPage() {
 
   const [groupName, setGroupName] = useState("WeekendLocks");
   const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [ownerUserId, setOwnerUserId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
@@ -80,11 +82,12 @@ export default function GroupDashboardPage() {
 
       const { data: g } = await supabase
         .from("groups")
-        .select("name, invite_code")
+        .select("name, invite_code, owner_user_id")
         .eq("id", groupId)
         .maybeSingle();
       if (mounted() && g?.name) setGroupName(g.name);
       if (mounted()) setInviteCode(g?.invite_code ?? null);
+      if (mounted()) setOwnerUserId(g?.owner_user_id ?? null);
 
       // Roster is the source of truth — every member shows up, even with no picks yet.
       const { data: gm } = await supabase
@@ -177,6 +180,27 @@ export default function GroupDashboardPage() {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const isOwner = !!currentUserId && !!ownerUserId && currentUserId === ownerUserId;
+
+  function confirmDeleteGroup() {
+    Alert.alert(
+      `Delete "${groupName}"?`,
+      "This permanently deletes the group, its members, all picks, and the chat history. This can't be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete group", style: "destructive", onPress: deleteGroup },
+      ]
+    );
+  }
+
+  async function deleteGroup() {
+    setDeleting(true);
+    const { error } = await supabase.from("groups").delete().eq("id", groupId);
+    setDeleting(false);
+    if (error) { Alert.alert("Could not delete group", error.message); return; }
+    router.replace("/groups" as Href);
+  }
 
   return (
     <View style={styles.page}>
@@ -332,6 +356,18 @@ export default function GroupDashboardPage() {
           </View>
 
           <GroupChat groupId={groupId} nameById={nameById} currentUserId={currentUserId} />
+
+          {isOwner && (
+            <View style={styles.dangerZone}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.dangerTitle}>Danger zone</Text>
+                <Text style={styles.dangerBody}>Deleting this group removes it for every member, permanently.</Text>
+              </View>
+              <Pressable onPress={confirmDeleteGroup} disabled={deleting} style={styles.deleteBtn}>
+                <Text style={styles.deleteBtnText}>{deleting ? "Deleting…" : "Delete group"}</Text>
+              </Pressable>
+            </View>
+          )}
         </>
       )}
     </View>
@@ -412,4 +448,13 @@ const styles = StyleSheet.create({
   feedTitle: { fontSize: 13, color: "#0F172A" },
   feedSub: { color: "#334155", fontSize: 12, marginTop: 2 },
   feedTime: { color: "#94A3B8", fontSize: 11, marginTop: 2 },
+
+  dangerZone: {
+    flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#FEF2F2",
+    borderWidth: 1, borderColor: "#FECACA", borderRadius: 12, padding: 14,
+  },
+  dangerTitle: { fontWeight: "800", color: "#991B1B", fontSize: 13 },
+  dangerBody: { color: "#B91C1C", fontSize: 12, marginTop: 2 },
+  deleteBtn: { backgroundColor: "#DC2626", paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999 },
+  deleteBtnText: { color: "white", fontWeight: "700", fontSize: 13 },
 });
