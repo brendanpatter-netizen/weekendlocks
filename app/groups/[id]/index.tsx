@@ -10,6 +10,8 @@ import { supabase } from "@/lib/supabase";
 import { getCurrentWeek as getCurrentNFLWeek } from "@/lib/nflWeeks";
 import { getCurrentCfbWeek as getCurrentCFBWeek } from "@/lib/cfbWeeks";
 import { refreshScoresForSport } from "@/lib/scores";
+import { avatarColor, initials } from "@/lib/avatar";
+import GroupChat from "@/components/GroupChat";
 
 type PickInfo = { market: string | null; team: string | null; line: string | null; price: number | null };
 type SeasonRecord = { wins: number; losses: number; pushes: number };
@@ -37,29 +39,6 @@ function winPct(r: SeasonRecord): string | null {
 // NFL runs 18 weeks, CFB 15 — one shared selector covers both; CFB just has
 // no games/picks in the trailing weeks, which shows as a normal empty state.
 const WEEK_COUNT = 18;
-
-// Deterministic avatar color per member so the same person always gets the
-// same color across the app, without storing anything.
-const AVATAR_COLORS = [
-  { bg: "#E1F5EE", fg: "#085041" },
-  { bg: "#FAECE7", fg: "#712B13" },
-  { bg: "#EEEDFE", fg: "#3C3489" },
-  { bg: "#E6F1FB", fg: "#0C447C" },
-  { bg: "#FBEAF0", fg: "#72243E" },
-  { bg: "#FAEEDA", fg: "#633806" },
-];
-function hashStr(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return h;
-}
-function avatarColor(id: string) {
-  return AVATAR_COLORS[hashStr(id) % AVATAR_COLORS.length];
-}
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  return parts.slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("") || "?";
-}
 
 function pickLabel(p: PickInfo | null): string | null {
   if (!p) return null;
@@ -109,6 +88,16 @@ export default function GroupDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [refreshingScores, setRefreshingScores] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? null));
+  }, []);
+
+  const nameById = useMemo(
+    () => new Map(members.map((m) => [m.user_id, m.display_name])),
+    [members]
+  );
 
   async function loadDashboard(mounted: () => boolean) {
     try {
@@ -367,6 +356,8 @@ export default function GroupDashboardPage() {
               />
             )}
           </View>
+
+          <GroupChat groupId={groupId} nameById={nameById} currentUserId={currentUserId} />
         </>
       )}
     </View>
