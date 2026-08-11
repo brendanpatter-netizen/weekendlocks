@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View,
+  ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View,
 } from "react-native";
 import { useLocalSearchParams, router, Href } from "expo-router";
 import { getCurrentCfbWeek as getCurrentCFBWeek } from "@/lib/cfbWeeks";
 import { useOdds } from "@/lib/useOdds";
 import { supabase } from "@/lib/supabase";
 import { norm, matchupsLikelyMatch } from "@/lib/teamMatch";
+import WeekPills from "@/components/WeekPills";
 
 /* ---------- team logos (tolerant import: function or map) ---------- */
 let teamLogosMod: any;
@@ -120,7 +121,7 @@ export default function CFBPicksPage() {
     const { data: auth } = await supabase.auth.getUser();
     const user = auth?.user;
     if (!user) { router.push("/auth/login" as Href); return; }
-    if (!groupId) { alert("Open this page from a group to make picks."); return; }
+    if (!groupId) { Alert.alert("No group selected", "Open this page from a group to make picks."); return; }
 
     const gameId = await resolveOrCreateGameId({
       league: "cfb", week,
@@ -129,7 +130,7 @@ export default function CFBPicksPage() {
       commenceIso: game.commence_time,
       externalId: game.id ?? null,
     });
-    if (!gameId) { alert("Could not resolve/create matchup in the DB."); return; }
+    if (!gameId) { Alert.alert("Could not save pick", "Could not resolve/create matchup in the DB."); return; }
 
     const team = outcome?.name ?? null;
     const line = typeof outcome?.point === "number" ? String(outcome.point) : null;
@@ -155,7 +156,7 @@ export default function CFBPicksPage() {
       .from("picks")
       .upsert(row, { onConflict: "group_id,user_id,sport,week", ignoreDuplicates: false });
 
-    if (upsertErr) { alert(`Could not save pick: ${upsertErr.message}`); return; }
+    if (upsertErr) { Alert.alert("Could not save pick", upsertErr.message); return; }
     setCurrentPick({ market, team, line });
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
@@ -171,11 +172,9 @@ export default function CFBPicksPage() {
       .eq("group_id", groupId)
       .eq("sport", "cfb")
       .eq("week", week);
-    if (delErr) { alert(`Could not clear pick: ${delErr.message}`); return; }
+    if (delErr) { Alert.alert("Could not clear pick", delErr.message); return; }
     setCurrentPick(null);
   }
-
-  const weekOptions = Array.from({ length: 20 }, (_, i) => i + 1);
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, gap: 12, paddingBottom: 24 }}>
@@ -204,14 +203,10 @@ export default function CFBPicksPage() {
         </View>
       )}
 
-      <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-        <Text>Week</Text>
-        <select value={week} onChange={(e) => setWeek(Number(e.target.value))}
-                style={{ padding: 6, borderRadius: 8, border: "1px solid #CBD5E1" } as any}>
-          {weekOptions.map((w) => (<option key={w} value={w}>{w}</option>))}
-        </select>
+      <View style={{ gap: 8 }}>
+        <WeekPills count={15} selected={week} current={getCurrentCFBWeek()} onSelect={setWeek} />
 
-        <View style={{ flexDirection: "row", gap: 8, marginLeft: "auto" }}>
+        <View style={{ flexDirection: "row", gap: 8 }}>
           {(["spreads", "totals", "h2h"] as const).map((k) => (
             <Pressable key={k} onPress={() => setTab(k)}
               style={[styles.tab, tab === k && { backgroundColor: "#0B735F", borderColor: "#0B735F" }]}>

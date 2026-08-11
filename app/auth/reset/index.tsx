@@ -13,13 +13,16 @@ export default function ResetPassword() {
   const [confirm, setConfirm] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // When user lands from email link, exchange code for a session
+  // When user lands from email link, exchange code for a session.
+  // window only exists on web — guarded so this doesn't throw on native.
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        // Handles links with ?code=... or #access_token=...
-        await supabase.auth.exchangeCodeForSession(window.location.href);
+        if (Platform.OS === "web" && typeof window !== "undefined") {
+          // Handles links with ?code=... or #access_token=...
+          await supabase.auth.exchangeCodeForSession(window.location.href);
+        }
       } catch {
         // ignore — user may already have a session
       } finally {

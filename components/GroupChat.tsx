@@ -1,6 +1,6 @@
 // components/GroupChat.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, TextInput, Pressable, FlatList, StyleSheet } from "react-native";
+import { View, Text, TextInput, Pressable, FlatList, StyleSheet, Alert } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { avatarColor, initials } from "@/lib/avatar";
 
@@ -65,7 +65,7 @@ export default function GroupChat({
       .select("id, user_id, body, created_at")
       .single();
     setSending(false);
-    if (error) { alert(`Could not send message: ${error.message}`); return; }
+    if (error) { Alert.alert("Could not send message", error.message); return; }
     setText("");
     if (data) setMessages((prev) => (prev.some((m) => m.id === data.id) ? prev : [...prev, data as ChatMessage]));
   }
