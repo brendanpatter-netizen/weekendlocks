@@ -148,9 +148,6 @@ export default function RootLayout() {
               <Link href="/" style={{ color: "white", fontWeight: "700" }}>
                 Home
               </Link>
-              <Link href="/picks/page" style={{ color: "white", fontWeight: "700" }}>
-                Picks
-              </Link>
               <Link href="/groups" style={{ color: "white", fontWeight: "700" }}>
                 Groups
               </Link>
