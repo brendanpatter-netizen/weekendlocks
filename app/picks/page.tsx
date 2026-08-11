@@ -14,6 +14,7 @@ import { getCurrentWeek as getCurrentNFLWeek } from "@/lib/nflWeeks";
 import { useOdds } from "@/lib/useOdds";
 import { supabase } from "@/lib/supabase";
 import { norm, matchupsLikelyMatch } from "@/lib/teamMatch";
+import { pickLabel } from "@/lib/pickLabel";
 import WeekPills from "@/components/WeekPills";
 
 /* ---------- team logos (tolerant import: function or map) ---------- */
@@ -221,7 +222,7 @@ export default function NFLPicksPage() {
         <View style={styles.pickStatus}>
           <Text style={styles.pickStatusText}>
             {saved ? "✓ Pick saved: " : "Your pick: "}
-            {currentPick ? `${currentPick.team ?? "?"}${currentPick.line ? ` ${currentPick.line}` : ""}` : "none yet"}
+            {pickLabel(currentPick) ?? "none yet"}
           </Text>
           {currentPick && (
             <Pressable onPress={handleClear} style={styles.clearBtn}>

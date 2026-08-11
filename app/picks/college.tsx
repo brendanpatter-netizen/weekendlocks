@@ -7,6 +7,7 @@ import { getCurrentCfbWeek as getCurrentCFBWeek } from "@/lib/cfbWeeks";
 import { useOdds } from "@/lib/useOdds";
 import { supabase } from "@/lib/supabase";
 import { norm, matchupsLikelyMatch } from "@/lib/teamMatch";
+import { pickLabel } from "@/lib/pickLabel";
 import WeekPills from "@/components/WeekPills";
 
 /* ---------- team logos (tolerant import: function or map) ---------- */
@@ -190,7 +191,7 @@ export default function CFBPicksPage() {
         <View style={styles.pickStatus}>
           <Text style={styles.pickStatusText}>
             {saved ? "✓ Pick saved: " : "Your pick: "}
-            {currentPick ? `${currentPick.team ?? "?"}${currentPick.line ? ` ${currentPick.line}` : ""}` : "none yet"}
+            {pickLabel(currentPick) ?? "none yet"}
           </Text>
           {currentPick && (
             <Pressable onPress={handleClear} style={styles.clearBtn}>

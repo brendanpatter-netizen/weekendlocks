@@ -11,6 +11,7 @@ import { getCurrentWeek as getCurrentNFLWeek } from "@/lib/nflWeeks";
 import { getCurrentCfbWeek as getCurrentCFBWeek } from "@/lib/cfbWeeks";
 import { refreshScoresForSport } from "@/lib/scores";
 import { avatarColor, initials } from "@/lib/avatar";
+import { pickLabel } from "@/lib/pickLabel";
 import GroupChat from "@/components/GroupChat";
 import WeekPills from "@/components/WeekPills";
 
@@ -40,12 +41,6 @@ function winPct(r: SeasonRecord): string | null {
 // NFL runs 18 weeks, CFB 15 — one shared selector covers both; CFB just has
 // no games/picks in the trailing weeks, which shows as a normal empty state.
 const WEEK_COUNT = 18;
-
-function pickLabel(p: PickInfo | null): string | null {
-  if (!p) return null;
-  const line = p.line ? ` ${p.line}` : "";
-  return `${p.team ?? "?"}${line}`;
-}
 
 export default function GroupDashboardPage() {
   const { id } = useLocalSearchParams<{ id?: string }>();
