@@ -140,19 +140,19 @@ const styles = StyleSheet.create({
   msgRow: { flexDirection: "row", gap: 8, paddingVertical: 6, alignItems: "flex-end" },
   msgRowMine: { flexDirection: "row-reverse" },
 
-  avatar: { width: 26, height: 26, borderRadius: 999, alignItems: "center", justifyContent: "center" },
-  avatarText: { fontSize: 10, fontWeight: "700" },
+  avatar: { width: 28, height: 28, borderRadius: 999, alignItems: "center", justifyContent: "center" },
+  avatarText: { fontSize: 11, fontWeight: "700" },
 
-  bubble: { maxWidth: "75%", backgroundColor: "#F1F5F9", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6 },
+  bubble: { maxWidth: "75%", backgroundColor: "#F1F5F9", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 },
   bubbleMine: { backgroundColor: "#0B735F22" },
-  msgName: { fontSize: 11, fontWeight: "700", color: "#0B735F", marginBottom: 1 },
-  msgBody: { fontSize: 13, color: "#0F172A" },
-  msgTime: { fontSize: 10, color: "#94A3B8", marginTop: 2, textAlign: "right" },
+  msgName: { fontSize: 12, fontWeight: "700", color: "#0B735F", marginBottom: 2 },
+  msgBody: { fontSize: 15, color: "#0F172A" },
+  msgTime: { fontSize: 11, color: "#94A3B8", marginTop: 3, textAlign: "right" },
 
   inputRow: { flexDirection: "row", gap: 8, marginTop: 4 },
   input: {
     flex: 1, borderWidth: 1, borderColor: "#E2E8F0", borderRadius: 999,
-    paddingHorizontal: 14, paddingVertical: 8, fontSize: 14,
+    paddingHorizontal: 14, paddingVertical: 8, fontSize: 15,
   },
   sendBtn: { backgroundColor: "#0B735F", paddingHorizontal: 16, borderRadius: 999, justifyContent: "center" },
   sendBtnDisabled: { opacity: 0.5 },

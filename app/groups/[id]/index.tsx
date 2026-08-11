@@ -217,36 +217,30 @@ export default function GroupDashboardPage() {
 
   return (
     <ScrollView style={styles.pageOuter} contentContainerStyle={styles.page}>
-      <View style={styles.headerRow}>
-        <View>
-          <View style={[styles.titleEyebrow, { backgroundColor: groupColor.bg }]}>
-            <Text style={[styles.titleEyebrowText, { color: groupColor.fg }]}>GROUP</Text>
-          </View>
-          <Text style={[styles.title, { textShadowColor: groupColor.fg + "40" }]}>{groupName}</Text>
-          <View style={[styles.titleAccent, { backgroundColor: groupColor.fg }]} />
-          <Text style={styles.subtitle}>{members.length} member{members.length === 1 ? "" : "s"}</Text>
+      <View style={[styles.hero, { backgroundColor: groupColor.fg }]}>
+        <View style={styles.heroEyebrow}>
+          <Text style={styles.heroEyebrowText}>GROUP</Text>
         </View>
-      </View>
+        <Text style={styles.heroTitle}>{groupName}</Text>
+        <Text style={styles.heroSubtitle}>{members.length} member{members.length === 1 ? "" : "s"}</Text>
 
-      <View style={styles.pickCtaSection}>
-        <Text style={styles.pickCtaLabel}>Make this week's picks</Text>
         <View style={styles.pickCtaRow}>
           <Pressable
-            style={[styles.pickCtaBtn, styles.pickCtaBtnNfl]}
+            style={styles.pickCtaBtn}
             onPress={() => router.push({ pathname: "/picks/page", params: { group: groupId, w: String(week) } } as Href)}
           >
             <View style={[styles.pickCtaIcon, { backgroundColor: "#E1F5EE", transform: [{ rotate: "-6deg" }] }]}>
-              <Ionicons name="american-football" size={26} color="#085041" />
+              <Ionicons name="american-football" size={24} color="#085041" />
             </View>
             <Text style={styles.pickCtaTitle}>NFL</Text>
             <Text style={styles.pickCtaSub}>Week {week}</Text>
           </Pressable>
           <Pressable
-            style={[styles.pickCtaBtn, styles.pickCtaBtnCfb]}
+            style={styles.pickCtaBtn}
             onPress={() => router.push({ pathname: "/picks/college", params: { group: groupId, w: String(week) } } as Href)}
           >
             <View style={[styles.pickCtaIcon, { backgroundColor: "#E6F1FB", transform: [{ rotate: "6deg" }] }]}>
-              <Ionicons name="school" size={26} color="#0C447C" />
+              <Ionicons name="school" size={24} color="#0C447C" />
             </View>
             <Text style={styles.pickCtaTitle}>CFB</Text>
             <Text style={styles.pickCtaSub}>Week {week}</Text>
@@ -282,6 +276,12 @@ export default function GroupDashboardPage() {
         <ActivityIndicator style={{ marginTop: 12 }} />
       ) : (
         <>
+        <View style={styles.bodyRow}>
+          <View style={styles.chatCol}>
+            <GroupChat groupId={groupId} nameById={nameById} currentUserId={currentUserId} />
+          </View>
+
+          <View style={styles.tableCol}>
           <View style={styles.card}>
             <View style={styles.leaderboardHeader}>
               <Text style={styles.cardTitle}>Group leaderboard</Text>
@@ -393,8 +393,8 @@ export default function GroupDashboardPage() {
               />
             )}
           </View>
-
-          <GroupChat groupId={groupId} nameById={nameById} currentUserId={currentUserId} />
+          </View>
+        </View>
 
           {isOwner && (
             <View style={styles.dangerZone}>
@@ -417,15 +417,14 @@ const styles = StyleSheet.create({
   pageOuter: { flex: 1 },
   page: { padding: 16, gap: 16 },
 
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" },
-  titleEyebrow: { alignSelf: "flex-start", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3, marginBottom: 6 },
-  titleEyebrowText: { fontSize: 11, fontWeight: "800", letterSpacing: 1 },
-  title: {
-    fontSize: 38, fontWeight: "900", color: "#0F172A", letterSpacing: -0.5,
-    textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 8,
+  hero: { borderRadius: 24, padding: 20, gap: 4 },
+  heroEyebrow: {
+    alignSelf: "flex-start", backgroundColor: "rgba(255,255,255,0.18)",
+    borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3, marginBottom: 4,
   },
-  titleAccent: { width: 48, height: 5, borderRadius: 999, marginTop: 8, marginBottom: 4 },
-  subtitle: { color: "#64748B", fontSize: 13, marginTop: 2 },
+  heroEyebrowText: { fontSize: 11, fontWeight: "800", letterSpacing: 1, color: "white" },
+  heroTitle: { fontSize: 34, fontWeight: "900", color: "white", letterSpacing: -0.5 },
+  heroSubtitle: { fontSize: 13, color: "rgba(255,255,255,0.75)", marginBottom: 18 },
 
   inviteRow: {
     flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#F8FAFC",
@@ -439,25 +438,25 @@ const styles = StyleSheet.create({
   banner: { backgroundColor: "#FFF7ED", borderColor: "#FED7AA", borderWidth: 1, borderRadius: 8, padding: 10 },
   bannerText: { color: "#9A3412" },
 
-  pickCtaSection: { alignItems: "center", gap: 10 },
-  pickCtaLabel: { fontSize: 13, fontWeight: "700", color: "#64748B", textTransform: "uppercase", letterSpacing: 0.4 },
-  pickCtaRow: { flexDirection: "row", gap: 16, justifyContent: "center", flexWrap: "wrap" },
+  pickCtaRow: { flexDirection: "row", gap: 14, flexWrap: "wrap" },
   pickCtaBtn: {
-    width: 160, alignItems: "center", gap: 6, backgroundColor: "white",
-    borderRadius: 20, paddingVertical: 20, paddingHorizontal: 16,
-    borderWidth: 2, shadowColor: "#0F172A", shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08, shadowRadius: 10, elevation: 3,
+    flex: 1, minWidth: 130, alignItems: "center", gap: 6, backgroundColor: "white",
+    borderRadius: 20, paddingVertical: 18, paddingHorizontal: 16,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18, shadowRadius: 10, elevation: 4,
   },
-  pickCtaBtnNfl: { borderColor: "#9FE1CB" },
-  pickCtaBtnCfb: { borderColor: "#85B7EB" },
-  pickCtaIcon: { width: 52, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center", marginBottom: 4 },
-  pickCtaTitle: { fontSize: 18, fontWeight: "800", color: "#0F172A" },
+  pickCtaIcon: { width: 48, height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  pickCtaTitle: { fontSize: 17, fontWeight: "800", color: "#0F172A" },
   pickCtaSub: { fontSize: 12, color: "#64748B", fontWeight: "600" },
 
   weekSelectorCol: { gap: 6 },
   weekLabelRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   weekLabel: { fontSize: 12, color: "#64748B", fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.3 },
   jumpToCurrent: { fontSize: 12, color: "#0B735F", fontWeight: "700" },
+
+  bodyRow: { flexDirection: "row", gap: 16, flexWrap: "wrap", alignItems: "flex-start" },
+  chatCol: { flex: 1, minWidth: 320 },
+  tableCol: { flex: 1.4, minWidth: 380, gap: 16 },
 
   card: { backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12, gap: 4 },
   cardTitle: { fontWeight: "800" },
