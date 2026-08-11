@@ -242,7 +242,11 @@ export default function CFBPicksPage() {
 
               <View style={{ gap: 8, marginTop: 8 }}>
                 {outcomes.map((o, i) => {
-                  const isPicked = currentPick?.market === tab && currentPick?.team === o.name;
+                  // Totals outcomes are literally named "Over"/"Under" on every game, so
+                  // matching by team name alone would highlight that outcome across every
+                  // card at once — the line (point) disambiguates which specific game.
+                  const outcomeLine = typeof o.point === "number" ? String(o.point) : null;
+                  const isPicked = currentPick?.market === tab && currentPick?.team === o.name && currentPick?.line === outcomeLine;
                   return (
                     <Pressable key={i} onPress={() => handlePick(g, o, tab)} style={[styles.outcomeBtn, isPicked && styles.outcomeBtnActive]}>
                       <Text style={[{ fontWeight: "700" }, isPicked && { color: "white" }]}>
