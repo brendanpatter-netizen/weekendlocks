@@ -24,7 +24,9 @@ function pickLogo(team: string | null | undefined, sport: "nfl" | "ncaaf"): stri
 }
 
 type PickInfo = { market: string | null; team: string | null; line: string | null; price: number | null };
-type SeasonRecord = { wins: number; losses: number; pushes: number };
+// A push counts as a win (house rule) — member_records already folds it in,
+// so there's no separate push count to track or display here.
+type SeasonRecord = { wins: number; losses: number };
 type MemberRow = {
   user_id: string; display_name: string; nfl: PickInfo | null; cfb: PickInfo | null;
   nflRecord: SeasonRecord; cfbRecord: SeasonRecord;
@@ -34,11 +36,11 @@ type ActivityItem = {
   market: string | null; team: string | null; line: string | null; updated_at: string; was_replaced: boolean;
 };
 
-const EMPTY_RECORD: SeasonRecord = { wins: 0, losses: 0, pushes: 0 };
+const EMPTY_RECORD: SeasonRecord = { wins: 0, losses: 0 };
 
 function recordLabel(r: SeasonRecord): string | null {
-  if (r.wins === 0 && r.losses === 0 && r.pushes === 0) return null;
-  return r.pushes > 0 ? `${r.wins}-${r.losses}-${r.pushes}` : `${r.wins}-${r.losses}`;
+  if (r.wins === 0 && r.losses === 0) return null;
+  return `${r.wins}-${r.losses}`;
 }
 function winPct(r: SeasonRecord): string | null {
   const decided = r.wins + r.losses;
@@ -120,7 +122,7 @@ export default function GroupDashboardPage() {
           .eq("group_id", groupId).eq("sport", "nfl").eq("week", week),
         supabase.from("picks").select("user_id, market, team, line, price")
           .eq("group_id", groupId).eq("sport", "cfb").eq("week", week),
-        supabase.from("member_records").select("user_id, sport, wins, losses, pushes")
+        supabase.from("member_records").select("user_id, sport, wins, losses")
           .eq("group_id", groupId),
       ]);
       const nflByUser = new Map((nflRows ?? []).map((r: any) => [r.user_id, r as PickInfo]));
@@ -128,7 +130,7 @@ export default function GroupDashboardPage() {
       const nflRecordByUser = new Map<string, SeasonRecord>();
       const cfbRecordByUser = new Map<string, SeasonRecord>();
       (recordRows ?? []).forEach((r: any) => {
-        const rec: SeasonRecord = { wins: r.wins, losses: r.losses, pushes: r.pushes };
+        const rec: SeasonRecord = { wins: r.wins, losses: r.losses };
         (r.sport === "nfl" ? nflRecordByUser : cfbRecordByUser).set(r.user_id, rec);
       });
 
@@ -290,7 +292,6 @@ export default function GroupDashboardPage() {
                   const overall: SeasonRecord = {
                     wins: item.nflRecord.wins + item.cfbRecord.wins,
                     losses: item.nflRecord.losses + item.cfbRecord.losses,
-                    pushes: item.nflRecord.pushes + item.cfbRecord.pushes,
                   };
                   const overallRec = recordLabel(overall);
                   const overallPct = winPct(overall);
@@ -333,7 +334,7 @@ export default function GroupDashboardPage() {
                 }}
               />
             )}
-            <Text style={styles.note}>Records update when you tap "Refresh scores" above — pushes don't count as a win or a loss.</Text>
+            <Text style={styles.note}>Records update when you tap "Refresh scores" above — pushes count as a win.</Text>
           </View>
 
           <View style={styles.card}>
