@@ -2,7 +2,7 @@ export const unstable_settings = { prerender: false };
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View,
+  ActivityIndicator, Alert, FlatList, Image, Pressable, ScrollView, StyleSheet, Text, View,
 } from "react-native";
 import { useLocalSearchParams, router, Href } from "expo-router";
 import * as Clipboard from "expo-clipboard";
@@ -12,8 +12,16 @@ import { getCurrentCfbWeek as getCurrentCFBWeek } from "@/lib/cfbWeeks";
 import { refreshScoresForSport } from "@/lib/scores";
 import { avatarColor, initials } from "@/lib/avatar";
 import { pickLabel } from "@/lib/pickLabel";
+import { logoUri } from "@/lib/teamLogos";
 import GroupChat from "@/components/GroupChat";
 import WeekPills from "@/components/WeekPills";
+
+// null for Over/Under totals picks (no single team) or unmapped names.
+function pickLogo(team: string | null | undefined, sport: "nfl" | "ncaaf"): string | null {
+  if (!team) return null;
+  const uri = logoUri(team, sport);
+  return uri === "about:blank" ? null : uri;
+}
 
 type PickInfo = { market: string | null; team: string | null; line: string | null; price: number | null };
 type SeasonRecord = { wins: number; losses: number; pushes: number };
@@ -203,7 +211,7 @@ export default function GroupDashboardPage() {
   }
 
   return (
-    <View style={styles.page}>
+    <ScrollView style={styles.pageOuter} contentContainerStyle={styles.page}>
       <View style={styles.headerRow}>
         <View>
           <Text style={styles.title}>{groupName}</Text>
@@ -272,6 +280,7 @@ export default function GroupDashboardPage() {
               <FlatList
                 data={members}
                 keyExtractor={(m) => m.user_id}
+                scrollEnabled={false}
                 renderItem={({ item }) => {
                   const color = avatarColor(item.user_id);
                   const nfl = pickLabel(item.nfl);
@@ -295,7 +304,10 @@ export default function GroupDashboardPage() {
                       </View>
                       <View style={styles.pickCell}>
                         {nfl ? (
-                          <View style={[styles.badge, styles.badgeNfl]}><Text style={[styles.badgeText, styles.badgeTextNfl]}>{nfl}</Text></View>
+                          <View style={[styles.badge, styles.badgeNfl]}>
+                            {!!pickLogo(item.nfl?.team, "nfl") && <Image source={{ uri: pickLogo(item.nfl?.team, "nfl")! }} style={styles.badgeLogo} />}
+                            <Text style={[styles.badgeText, styles.badgeTextNfl]}>{nfl}</Text>
+                          </View>
                         ) : (
                           <Text style={styles.noPick}>No pick yet</Text>
                         )}
@@ -303,7 +315,10 @@ export default function GroupDashboardPage() {
                       </View>
                       <View style={styles.pickCell}>
                         {cfb ? (
-                          <View style={[styles.badge, styles.badgeCfb]}><Text style={[styles.badgeText, styles.badgeTextCfb]}>{cfb}</Text></View>
+                          <View style={[styles.badge, styles.badgeCfb]}>
+                            {!!pickLogo(item.cfb?.team, "ncaaf") && <Image source={{ uri: pickLogo(item.cfb?.team, "ncaaf")! }} style={styles.badgeLogo} />}
+                            <Text style={[styles.badgeText, styles.badgeTextCfb]}>{cfb}</Text>
+                          </View>
                         ) : (
                           <Text style={styles.noPick}>No pick yet</Text>
                         )}
@@ -329,13 +344,17 @@ export default function GroupDashboardPage() {
               <FlatList
                 data={activity}
                 keyExtractor={(a) => a.id}
+                style={styles.activityList}
+                nestedScrollEnabled
                 renderItem={({ item }) => {
                   const color = avatarColor(item.user_id);
+                  const logo = pickLogo(item.team, item.sport === "nfl" ? "nfl" : "ncaaf");
                   return (
                     <View style={styles.feedRow}>
                       <View style={[styles.avatarSm, { backgroundColor: color.bg }]}>
                         <Text style={[styles.avatarTextSm, { color: color.fg }]}>{initials(item.display_name)}</Text>
                       </View>
+                      {!!logo && <Image source={{ uri: logo }} style={styles.feedLogo} />}
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text style={styles.feedTitle}>
                           <Text style={{ fontWeight: "700" }}>{item.display_name}</Text>
@@ -370,11 +389,12 @@ export default function GroupDashboardPage() {
           )}
         </>
       )}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  pageOuter: { flex: 1 },
   page: { padding: 16, gap: 16 },
 
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" },
@@ -426,10 +446,11 @@ const styles = StyleSheet.create({
   userName: { fontWeight: "700", flexShrink: 1 },
 
   pickCell: { flex: 1, gap: 2 },
-  badge: { alignSelf: "flex-start", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  badge: { alignSelf: "flex-start", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, flexDirection: "row", alignItems: "center", gap: 5 },
   badgeNfl: { backgroundColor: "#E1F5EE" },
   badgeCfb: { backgroundColor: "#E6F1FB" },
   badgeText: { fontSize: 12, fontWeight: "700" },
+  badgeLogo: { width: 14, height: 14, resizeMode: "contain" },
   badgeTextNfl: { color: "#085041" },
   badgeTextCfb: { color: "#0C447C" },
   noPick: { fontSize: 13, color: "#94A3B8" },
@@ -441,10 +462,12 @@ const styles = StyleSheet.create({
 
   note: { marginTop: 8, color: "#94A3B8", fontSize: 12 },
   empty: { paddingVertical: 8, color: "#64748B" },
+  activityList: { maxHeight: 320 },
 
   feedRow: { paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#E5E7EB", flexDirection: "row", gap: 10 },
   avatarSm: { width: 26, height: 26, borderRadius: 999, alignItems: "center", justifyContent: "center", marginTop: 1 },
   avatarTextSm: { fontSize: 10, fontWeight: "700" },
+  feedLogo: { width: 18, height: 18, resizeMode: "contain", marginTop: 2 },
   feedTitle: { fontSize: 13, color: "#0F172A" },
   feedSub: { color: "#334155", fontSize: 12, marginTop: 2 },
   feedTime: { color: "#94A3B8", fontSize: 11, marginTop: 2 },

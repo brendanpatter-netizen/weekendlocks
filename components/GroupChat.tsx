@@ -83,6 +83,7 @@ export default function GroupChat({
           ref={listRef}
           data={messages}
           keyExtractor={(m) => m.id}
+          nestedScrollEnabled
           style={styles.list}
           renderItem={({ item }) => {
             const name = nameById.get(item.user_id) ?? "Someone";

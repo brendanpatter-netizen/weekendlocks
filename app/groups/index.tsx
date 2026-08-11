@@ -148,7 +148,7 @@ export default function GroupsIndex() {
 
   if (loading) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.outer, { alignItems: "center", justifyContent: "center", gap: 8 }]}>
         <ActivityIndicator color="#0B735F" />
         <Text style={styles.muted}>Loading groups…</Text>
       </View>
@@ -156,55 +156,61 @@ export default function GroupsIndex() {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.h1}>Your groups</Text>
-      <Text style={styles.muted}>Create a group or join one with a code.</Text>
-
-      <View style={styles.actionsRow}>
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={[styles.cardIcon, { backgroundColor: "#E1F5EE" }]}>
-              <Ionicons name="add-circle-outline" size={20} color="#085041" />
-            </View>
-            <Text style={styles.h2}>Create a group</Text>
-          </View>
-          <TextInput
-            value={createName}
-            onChangeText={setCreateName}
-            placeholder="Group name"
-            placeholderTextColor="#94A3B8"
-            style={styles.input}
-          />
-          <Pressable onPress={createGroup} style={styles.button}>
-            <Text style={styles.buttonText}>Create</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={[styles.cardIcon, { backgroundColor: "#E6F1FB" }]}>
-              <Ionicons name="key-outline" size={20} color="#0C447C" />
-            </View>
-            <Text style={styles.h2}>Join with code</Text>
-          </View>
-          <TextInput
-            value={joinCode}
-            onChangeText={setJoinCode}
-            placeholder="e.g. a1b2c3"
-            placeholderTextColor="#94A3B8"
-            autoCapitalize="none"
-            style={styles.input}
-          />
-          <Pressable onPress={joinByCode} style={styles.buttonSecondary}>
-            <Text style={styles.buttonSecondaryText}>Join</Text>
-          </Pressable>
-        </View>
-      </View>
-
+    <View style={styles.outer}>
       <FlatList
-        style={{ marginTop: 20 }}
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.container}
         data={sorted}
         keyExtractor={(g) => g.id}
+        ListHeaderComponent={
+          <>
+            <Text style={styles.h1}>Your groups</Text>
+            <Text style={styles.muted}>Create a group or join one with a code.</Text>
+
+            <View style={styles.actionsRow}>
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <View style={[styles.cardIcon, { backgroundColor: "#E1F5EE" }]}>
+                    <Ionicons name="add-circle-outline" size={20} color="#085041" />
+                  </View>
+                  <Text style={styles.h2}>Create a group</Text>
+                </View>
+                <TextInput
+                  value={createName}
+                  onChangeText={setCreateName}
+                  placeholder="Group name"
+                  placeholderTextColor="#94A3B8"
+                  style={styles.input}
+                />
+                <Pressable onPress={createGroup} style={styles.button}>
+                  <Text style={styles.buttonText}>Create</Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <View style={[styles.cardIcon, { backgroundColor: "#E6F1FB" }]}>
+                    <Ionicons name="key-outline" size={20} color="#0C447C" />
+                  </View>
+                  <Text style={styles.h2}>Join with code</Text>
+                </View>
+                <TextInput
+                  value={joinCode}
+                  onChangeText={setJoinCode}
+                  placeholder="e.g. a1b2c3"
+                  placeholderTextColor="#94A3B8"
+                  autoCapitalize="none"
+                  style={styles.input}
+                />
+                <Pressable onPress={joinByCode} style={styles.buttonSecondary}>
+                  <Text style={styles.buttonSecondaryText}>Join</Text>
+                </Pressable>
+              </View>
+            </View>
+
+            <View style={{ marginTop: 20 }} />
+          </>
+        }
         renderItem={({ item }) => {
           const color = avatarColor(item.id);
           const isOwner = item.owner_user_id === currentUserId;
@@ -242,7 +248,8 @@ export default function GroupsIndex() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 4, backgroundColor: "#F8FAFC" },
+  outer: { flex: 1, backgroundColor: "#F8FAFC" },
+  container: { padding: 16, gap: 4 },
   h1: { fontSize: 24, fontWeight: "800", color: "#0F172A" },
   h2: { fontSize: 15, fontWeight: "700", color: "#0F172A" },
   muted: { color: "#64748B" },
