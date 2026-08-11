@@ -213,11 +213,17 @@ export default function GroupDashboardPage() {
     router.replace("/groups" as Href);
   }
 
+  const groupColor = avatarColor(groupId);
+
   return (
     <ScrollView style={styles.pageOuter} contentContainerStyle={styles.page}>
       <View style={styles.headerRow}>
         <View>
-          <Text style={styles.title}>{groupName}</Text>
+          <View style={[styles.titleEyebrow, { backgroundColor: groupColor.bg }]}>
+            <Text style={[styles.titleEyebrowText, { color: groupColor.fg }]}>GROUP</Text>
+          </View>
+          <Text style={[styles.title, { textShadowColor: groupColor.fg + "40" }]}>{groupName}</Text>
+          <View style={[styles.titleAccent, { backgroundColor: groupColor.fg }]} />
           <Text style={styles.subtitle}>{members.length} member{members.length === 1 ? "" : "s"}</Text>
         </View>
       </View>
@@ -412,7 +418,13 @@ const styles = StyleSheet.create({
   page: { padding: 16, gap: 16 },
 
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" },
-  title: { fontSize: 22, fontWeight: "800" },
+  titleEyebrow: { alignSelf: "flex-start", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3, marginBottom: 6 },
+  titleEyebrowText: { fontSize: 11, fontWeight: "800", letterSpacing: 1 },
+  title: {
+    fontSize: 38, fontWeight: "900", color: "#0F172A", letterSpacing: -0.5,
+    textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 8,
+  },
+  titleAccent: { width: 48, height: 5, borderRadius: 999, marginTop: 8, marginBottom: 4 },
   subtitle: { color: "#64748B", fontSize: 13, marginTop: 2 },
 
   inviteRow: {
