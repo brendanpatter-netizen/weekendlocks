@@ -5,6 +5,7 @@ import {
   ActivityIndicator, Alert, FlatList, Image, Pressable, ScrollView, StyleSheet, Text, View,
 } from "react-native";
 import { useLocalSearchParams, router, Href } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { supabase } from "@/lib/supabase";
 import { getCurrentWeek as getCurrentNFLWeek } from "@/lib/nflWeeks";
@@ -219,18 +220,30 @@ export default function GroupDashboardPage() {
           <Text style={styles.title}>{groupName}</Text>
           <Text style={styles.subtitle}>{members.length} member{members.length === 1 ? "" : "s"}</Text>
         </View>
-        <View style={styles.ctaRow}>
+      </View>
+
+      <View style={styles.pickCtaSection}>
+        <Text style={styles.pickCtaLabel}>Make this week's picks</Text>
+        <View style={styles.pickCtaRow}>
           <Pressable
-            style={styles.cta}
+            style={[styles.pickCtaBtn, styles.pickCtaBtnNfl]}
             onPress={() => router.push({ pathname: "/picks/page", params: { group: groupId, w: String(week) } } as Href)}
           >
-            <Text style={styles.ctaText}>Make NFL pick</Text>
+            <View style={[styles.pickCtaIcon, { backgroundColor: "#E1F5EE", transform: [{ rotate: "-6deg" }] }]}>
+              <Ionicons name="american-football" size={26} color="#085041" />
+            </View>
+            <Text style={styles.pickCtaTitle}>NFL</Text>
+            <Text style={styles.pickCtaSub}>Week {week}</Text>
           </Pressable>
           <Pressable
-            style={styles.ctaSecondary}
+            style={[styles.pickCtaBtn, styles.pickCtaBtnCfb]}
             onPress={() => router.push({ pathname: "/picks/college", params: { group: groupId, w: String(week) } } as Href)}
           >
-            <Text style={styles.ctaSecondaryText}>Make CFB pick</Text>
+            <View style={[styles.pickCtaIcon, { backgroundColor: "#E6F1FB", transform: [{ rotate: "6deg" }] }]}>
+              <Ionicons name="school" size={26} color="#0C447C" />
+            </View>
+            <Text style={styles.pickCtaTitle}>CFB</Text>
+            <Text style={styles.pickCtaSub}>Week {week}</Text>
           </Pressable>
         </View>
       </View>
@@ -414,11 +427,20 @@ const styles = StyleSheet.create({
   banner: { backgroundColor: "#FFF7ED", borderColor: "#FED7AA", borderWidth: 1, borderRadius: 8, padding: 10 },
   bannerText: { color: "#9A3412" },
 
-  ctaRow: { flexDirection: "row", gap: 8 },
-  cta: { backgroundColor: "#0B735F", paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999 },
-  ctaText: { color: "white", fontWeight: "700", fontSize: 13 },
-  ctaSecondary: { borderWidth: 1, borderColor: "#0B735F", paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999 },
-  ctaSecondaryText: { color: "#0B735F", fontWeight: "700", fontSize: 13 },
+  pickCtaSection: { alignItems: "center", gap: 10 },
+  pickCtaLabel: { fontSize: 13, fontWeight: "700", color: "#64748B", textTransform: "uppercase", letterSpacing: 0.4 },
+  pickCtaRow: { flexDirection: "row", gap: 16, justifyContent: "center", flexWrap: "wrap" },
+  pickCtaBtn: {
+    width: 160, alignItems: "center", gap: 6, backgroundColor: "white",
+    borderRadius: 20, paddingVertical: 20, paddingHorizontal: 16,
+    borderWidth: 2, shadowColor: "#0F172A", shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08, shadowRadius: 10, elevation: 3,
+  },
+  pickCtaBtnNfl: { borderColor: "#9FE1CB" },
+  pickCtaBtnCfb: { borderColor: "#85B7EB" },
+  pickCtaIcon: { width: 52, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  pickCtaTitle: { fontSize: 18, fontWeight: "800", color: "#0F172A" },
+  pickCtaSub: { fontSize: 12, color: "#64748B", fontWeight: "600" },
 
   weekSelectorCol: { gap: 6 },
   weekLabelRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },

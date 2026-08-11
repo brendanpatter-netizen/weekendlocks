@@ -74,17 +74,20 @@ export default function GroupChat({
     <View style={styles.card}>
       <Text style={styles.cardTitle}>Chat</Text>
 
-      {loading ? (
-        <Text style={styles.empty}>Loading chat…</Text>
-      ) : messages.length === 0 ? (
-        <Text style={styles.empty}>No messages yet. Say hi!</Text>
-      ) : (
+      <View style={styles.listBox}>
+        {loading ? (
+          <Text style={styles.empty}>Loading chat…</Text>
+        ) : messages.length === 0 ? (
+          <Text style={styles.empty}>No messages yet. Say hi!</Text>
+        ) : (
         <FlatList
           ref={listRef}
           data={messages}
           keyExtractor={(m) => m.id}
           nestedScrollEnabled
+          showsVerticalScrollIndicator
           style={styles.list}
+          contentContainerStyle={{ paddingVertical: 4 }}
           renderItem={({ item }) => {
             const name = nameById.get(item.user_id) ?? "Someone";
             const color = avatarColor(item.user_id);
@@ -103,7 +106,8 @@ export default function GroupChat({
             );
           }}
         />
-      )}
+        )}
+      </View>
 
       <View style={styles.inputRow}>
         <TextInput
@@ -113,6 +117,7 @@ export default function GroupChat({
           style={styles.input}
           onSubmitEditing={send}
           returnKeyType="send"
+          maxLength={1000}
         />
         <Pressable onPress={send} disabled={!canSend} style={[styles.sendBtn, !canSend && styles.sendBtnDisabled]}>
           <Text style={styles.sendBtnText}>Send</Text>
@@ -127,7 +132,11 @@ const styles = StyleSheet.create({
   cardTitle: { fontWeight: "800" },
   empty: { paddingVertical: 8, color: "#64748B" },
 
-  list: { maxHeight: 320 },
+  listBox: {
+    height: 320, backgroundColor: "#F8FAFC", borderRadius: 10,
+    borderWidth: 1, borderColor: "#E2E8F0", padding: 8,
+  },
+  list: { flex: 1 },
   msgRow: { flexDirection: "row", gap: 8, paddingVertical: 6, alignItems: "flex-end" },
   msgRowMine: { flexDirection: "row-reverse" },
 
