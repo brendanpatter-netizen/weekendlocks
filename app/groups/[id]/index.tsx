@@ -5,7 +5,6 @@ import {
   ActivityIndicator, FlatList, Image, Pressable, ScrollView, StyleSheet, Text, View,
 } from "react-native";
 import { useLocalSearchParams, router, Href } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { supabase } from "@/lib/supabase";
 import { getCurrentWeek as getCurrentNFLWeek } from "@/lib/nflWeeks";
@@ -25,6 +24,9 @@ function pickLogo(team: string | null | undefined, sport: "nfl" | "ncaaf"): stri
   const uri = logoUri(team, sport);
   return uri === "about:blank" ? null : uri;
 }
+
+const NFL_LEAGUE_LOGO = "https://a.espncdn.com/i/teamlogos/leagues/500/nfl.png";
+const NCAA_LEAGUE_LOGO = "https://a.espncdn.com/i/espn/misc_logos/500/ncaa.png";
 
 // The leaderboard now shows only the combined season record — per-week
 // picks moved to the WeeklyPicksGrid below it.
@@ -219,7 +221,7 @@ export default function GroupDashboardPage() {
             onPress={() => router.push({ pathname: "/picks/page", params: { group: groupId, w: String(week) } } as Href)}
           >
             <View style={[styles.pickCtaIcon, { backgroundColor: "#E1F5EE", transform: [{ rotate: "-6deg" }] }]}>
-              <Ionicons name="american-football" size={24} color="#085041" />
+              <Image source={{ uri: NFL_LEAGUE_LOGO }} style={styles.pickCtaLogo} resizeMode="contain" />
             </View>
             <Text style={styles.pickCtaTitle}>NFL</Text>
             <Text style={styles.pickCtaSub}>Week {week}</Text>
@@ -229,7 +231,7 @@ export default function GroupDashboardPage() {
             onPress={() => router.push({ pathname: "/picks/college", params: { group: groupId, w: String(week) } } as Href)}
           >
             <View style={[styles.pickCtaIcon, { backgroundColor: "#E6F1FB", transform: [{ rotate: "6deg" }] }]}>
-              <Ionicons name="school" size={24} color="#0C447C" />
+              <Image source={{ uri: NCAA_LEAGUE_LOGO }} style={styles.pickCtaLogo} resizeMode="contain" />
             </View>
             <Text style={styles.pickCtaTitle}>CFB</Text>
             <Text style={styles.pickCtaSub}>Week {week}</Text>
@@ -408,6 +410,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18, shadowRadius: 10, elevation: 4,
   },
   pickCtaIcon: { width: 48, height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  pickCtaLogo: { width: 30, height: 30 },
   pickCtaTitle: { fontSize: 17, fontWeight: "800", color: "#0F172A" },
   pickCtaSub: { fontSize: 12, color: "#64748B", fontWeight: "600" },
 
