@@ -15,7 +15,7 @@ type Cell = { label: string | null; result: Result };
 type Member = { user_id: string; display_name: string };
 
 const WEEK_COL_WIDTH = 56;
-const PICK_COL_WIDTH = 112;
+const PICK_COL_WIDTH = 152;
 
 function cellKey(userId: string, sport: "nfl" | "cfb", week: number) {
   return `${userId}|${sport}|${week}`;
@@ -149,7 +149,7 @@ function PickCell({ cell }: { cell?: Cell }) {
   const resultStyle = cell.result === "loss" ? styles.cellLoss : cell.result ? styles.cellWin : styles.cellPending;
   return (
     <View style={[styles.pickCell, resultStyle]}>
-      <Text style={styles.cellText} numberOfLines={1}>{cell.label}</Text>
+      <Text style={styles.cellText}>{cell.label}</Text>
     </View>
   );
 }
@@ -184,7 +184,7 @@ const styles = StyleSheet.create({
     width: PICK_COL_WIDTH - 2, marginLeft: 1, marginVertical: 1, borderRadius: 6,
     paddingVertical: 7, paddingHorizontal: 8, justifyContent: "center", alignItems: "center",
   },
-  cellText: { fontSize: 11, fontWeight: "700" },
+  cellText: { fontSize: 11, fontWeight: "700", textAlign: "center", lineHeight: 14 },
   cellWin: { backgroundColor: "#DCFCE7" },
   cellLoss: { backgroundColor: "#FEE2E2" },
   cellPending: { backgroundColor: "#F1F5F9" },
