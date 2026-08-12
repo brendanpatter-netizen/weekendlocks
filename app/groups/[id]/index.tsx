@@ -220,7 +220,7 @@ export default function GroupDashboardPage() {
             disabled={!nflOpenWeek}
             onPress={() => router.push({ pathname: "/picks/page", params: { group: groupId } } as Href)}
           >
-            <View style={[styles.pickCtaIcon, { backgroundColor: "#E1F5EE", transform: [{ rotate: "-6deg" }] }]}>
+            <View style={[styles.pickCtaIcon, { backgroundColor: "#E1F5EE" }]}>
               <Image source={{ uri: NFL_LEAGUE_LOGO }} style={styles.pickCtaLogo} resizeMode="contain" />
             </View>
             <Text style={styles.pickCtaTitle}>NFL</Text>
@@ -233,7 +233,7 @@ export default function GroupDashboardPage() {
             disabled={!cfbOpenWeek}
             onPress={() => router.push({ pathname: "/picks/college", params: { group: groupId } } as Href)}
           >
-            <View style={[styles.pickCtaIcon, { backgroundColor: "#E6F1FB", transform: [{ rotate: "6deg" }] }]}>
+            <View style={[styles.pickCtaIcon, { backgroundColor: "#E6F1FB" }]}>
               <Image source={{ uri: NCAA_LEAGUE_LOGO }} style={styles.pickCtaLogo} resizeMode="contain" />
             </View>
             <Text style={styles.pickCtaTitle}>CFB</Text>
