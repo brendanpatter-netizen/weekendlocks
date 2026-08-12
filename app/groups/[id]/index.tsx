@@ -351,7 +351,7 @@ export default function GroupDashboardPage() {
             <Text style={styles.note}>Records update when you tap "Refresh scores" above — pushes count as a win.</Text>
           </View>
 
-          <View style={[styles.card, styles.topRowCol]}>
+          <View style={[styles.card, styles.topRowCol, styles.activityCard]}>
             <Text style={styles.cardTitle}>Recent activity</Text>
             {activity.length === 0 ? (
               <Text style={styles.empty}>No recent activity.</Text>
@@ -450,8 +450,12 @@ const styles = StyleSheet.create({
   weekLabel: { fontSize: 12, color: "#64748B", fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.3 },
   jumpToCurrent: { fontSize: 12, color: "#0B735F", fontWeight: "700" },
 
-  topRow: { flexDirection: "row", gap: 16, flexWrap: "wrap", alignItems: "flex-start" },
+  // No explicit alignItems — default "stretch" makes both columns match the
+  // height of the taller one (the leaderboard, which grows as members join),
+  // and the activity card's own list scrolls to fit within that height.
+  topRow: { flexDirection: "row", gap: 16, flexWrap: "wrap" },
   topRowCol: { flex: 1, minWidth: 320 },
+  activityCard: { flexShrink: 1 },
 
   card: { backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12, gap: 4 },
   cardTitle: { fontWeight: "800" },
@@ -491,7 +495,7 @@ const styles = StyleSheet.create({
 
   note: { marginTop: 8, color: "#94A3B8", fontSize: 12 },
   empty: { paddingVertical: 8, color: "#64748B" },
-  activityList: { maxHeight: 320 },
+  activityList: { flex: 1, maxHeight: 480 },
 
   feedRow: { paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#E5E7EB", flexDirection: "row", gap: 10 },
   avatarSm: { width: 26, height: 26, borderRadius: 999, alignItems: "center", justifyContent: "center", marginTop: 1 },
