@@ -22,7 +22,6 @@
     "@react-native-picker/picker": "2.11.1",
     "@react-navigation/native": "^7.1.6",
     "@supabase/supabase-js": "^2.53.0",
-    "eventemitter3": "^5.0.1",
     "expo": "~53.0.20",
     "expo-clipboard": "~7.1.5",
     "expo-constants": "~17.1.7",
