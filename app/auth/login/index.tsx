@@ -9,15 +9,19 @@ import {
 import { useRouter } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { alert } from "@/lib/alert";
+import { colors as theme } from "@/lib/theme";
+import { LogoBadge } from "@/components/Logo";
 
 type Mode = "code" | "link" | "password";
 
+// Local names kept so the rest of this file reads unchanged — values now
+// come from the one shared palette instead of a page-local hardcoded set.
 const colors = {
-  primary: "#006241",
-  secondary: "#FFD700",
-  bg: "#F5F5F5",
-  text: "#222",
-  subtext: "#555",
+  primary: theme.brand,
+  secondary: theme.brassFill,
+  bg: theme.paper,
+  text: theme.ink,
+  subtext: theme.inkSoft,
 };
 
 export default function Login() {
@@ -152,6 +156,9 @@ export default function Login() {
 
   return (
     <View style={styles.screen}>
+      <View style={styles.brandRow}>
+        <LogoBadge size={44} />
+      </View>
       <View style={styles.card}>
         <Text style={styles.title}>Sign in</Text>
         <Text style={styles.subtitle}>Enter your email and choose a sign-in method.</Text>
@@ -260,6 +267,7 @@ export default function Login() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg, padding: 20, alignItems: "center", justifyContent: "center" },
+  brandRow: { marginBottom: 18 },
   card: {
     width: "100%", maxWidth: 520, backgroundColor: "#fff", borderRadius: 16, padding: 20, gap: 14,
     ...Platform.select({

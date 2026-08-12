@@ -4,6 +4,8 @@ import { View, Platform, Text, Pressable } from "react-native";
 import { Slot, usePathname, useRouter, Link } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { AlertHost } from "@/lib/alert";
+import { BrandLockup } from "@/components/Logo";
+import { colors } from "@/lib/theme";
 
 /** Simple error boundary so we never see a blank page */
 class ErrorBoundary extends React.Component<
@@ -43,7 +45,7 @@ class ErrorBoundary extends React.Component<
               (typeof window !== "undefined" ? window.location.reload() : null)
             }
           >
-            <Text style={{ color: "#006241", textDecorationLine: "underline" }}>
+            <Text style={{ color: colors.brand, textDecorationLine: "underline" }}>
               Reload
             </Text>
           </Pressable>
@@ -136,8 +138,8 @@ export default function RootLayout() {
         {showHeader && (
           <View
             style={{
-              backgroundColor: "#054b3b",
-              paddingHorizontal: 12,
+              backgroundColor: colors.felt,
+              paddingHorizontal: 14,
               paddingVertical: 10,
               flexDirection: "row",
               alignItems: "center",
@@ -145,25 +147,23 @@ export default function RootLayout() {
               gap: 12,
             }}
           >
-            <View style={{ flexDirection: "row", gap: 16, alignItems: "center" }}>
-              <Link href="/" style={{ color: "white", fontWeight: "700" }}>
-                Home
-              </Link>
-              <Link href="/groups" style={{ color: "white", fontWeight: "700" }}>
+            <Link href="/" style={{ textDecorationLine: "none" }}>
+              <BrandLockup size={28} />
+            </Link>
+
+            <View style={{ flexDirection: "row", gap: 18, alignItems: "center" }}>
+              <Link href="/groups" style={{ color: "#CFE3D8", fontWeight: "700" }}>
                 Groups
               </Link>
-            </View>
-
-            <View style={{ flexDirection: "row", gap: 16, alignItems: "center" }}>
-              <Link href="/account" style={{ color: "white", fontWeight: "700" }}>
+              <Link href="/account" style={{ color: "#CFE3D8", fontWeight: "700" }}>
                 Account
               </Link>
               {hasSession ? (
                 <Pressable onPress={signOut}>
-                  <Text style={{ color: "white", fontWeight: "700" }}>Sign out</Text>
+                  <Text style={{ color: "#CFE3D8", fontWeight: "700" }}>Sign out</Text>
                 </Pressable>
               ) : (
-                <Link href="/auth/login" style={{ color: "white", fontWeight: "700" }}>
+                <Link href="/auth/login" style={{ color: "#CFE3D8", fontWeight: "700" }}>
                   Sign in
                 </Link>
               )}

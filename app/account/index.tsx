@@ -10,13 +10,14 @@ import {
 } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { alert } from "@/lib/alert";
+import { colors as theme } from "@/lib/theme";
 
 const colors = {
-  primary: "#006241",
-  secondary: "#FFD700",
-  bg: "#F5F5F5",
-  text: "#222",
-  subtext: "#555",
+  primary: theme.brand,
+  secondary: theme.brassFill,
+  bg: theme.paper,
+  text: theme.ink,
+  subtext: theme.inkSoft,
 };
 
 export default function AccountPage() {

@@ -6,8 +6,9 @@ import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator, Platfo
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "expo-router";
 import { alert } from "@/lib/alert";
+import { colors as theme } from "@/lib/theme";
 
-const colors = { primary: "#006241", bg: "#F5F5F5", text: "#222", subtext: "#555" };
+const colors = { primary: theme.brand, bg: theme.paper, text: theme.ink, subtext: theme.inkSoft };
 
 export default function ResetPassword() {
   const router = useRouter();
