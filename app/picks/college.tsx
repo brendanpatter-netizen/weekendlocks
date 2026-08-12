@@ -226,15 +226,19 @@ export default function CFBPicksPage() {
           const outcomes: any[] = m?.outcomes ?? [];
           const hLogo = getTeamLogo(g.home_team);
           const aLogo = getTeamLogo(g.away_team);
+          const started = new Date(g.commence_time).getTime() <= Date.now();
 
           return (
-            <View key={g.id} style={styles.gameCard}>
+            <View key={g.id} style={[styles.gameCard, started && styles.gameCardStarted]}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                 {!!aLogo && <Image source={{ uri: aLogo }} style={styles.logo} />}
                 <Text style={{ fontWeight: "800", flex: 1 }}>{g.away_team} @ {g.home_team}</Text>
                 {!!hLogo && <Image source={{ uri: hLogo }} style={styles.logo} />}
               </View>
-              <Text style={{ color: "#475569" }}>{new Date(g.commence_time).toLocaleString()}</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Text style={{ color: "#475569" }}>{new Date(g.commence_time).toLocaleString()}</Text>
+                {started && <View style={styles.startedBadge}><Text style={styles.startedBadgeText}>Started</Text></View>}
+              </View>
 
               <View style={{ gap: 8, marginTop: 8 }}>
                 {outcomes.map((o, i) => {
@@ -245,7 +249,12 @@ export default function CFBPicksPage() {
                   const isPicked = currentPick?.market === tab && currentPick?.team === o.name && currentPick?.line === outcomeLine;
                   const oLogo = getTeamLogo(o.name); // null for Over/Under — no team to show
                   return (
-                    <Pressable key={i} onPress={() => handlePick(g, o, tab)} style={[styles.outcomeBtn, isPicked && styles.outcomeBtnActive, { flexDirection: "row", alignItems: "center", gap: 8 }]}>
+                    <Pressable
+                      key={i}
+                      disabled={started}
+                      onPress={() => handlePick(g, o, tab)}
+                      style={[styles.outcomeBtn, isPicked && styles.outcomeBtnActive, { flexDirection: "row", alignItems: "center", gap: 8 }]}
+                    >
                       {!!oLogo && <Image source={{ uri: oLogo }} style={styles.outcomeLogo} />}
                       <Text style={[{ fontWeight: "700" }, isPicked && { color: "white" }]}>
                         {isPicked ? "✓ " : ""}{o.name}
@@ -268,6 +277,9 @@ const styles = StyleSheet.create({
   tab: { paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderRadius: 8, borderColor: "#CBD5E1", backgroundColor: "#F1F5F9" },
   tabText: { fontWeight: "800", color: "#0F172A" },
   gameCard: { backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12, marginBottom: 10, gap: 6 },
+  gameCardStarted: { opacity: 0.55 },
+  startedBadge: { backgroundColor: "#F1F5F9", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
+  startedBadgeText: { fontSize: 11, fontWeight: "700", color: "#64748B" },
   outcomeBtn: { backgroundColor: "#0B735F22", borderWidth: 1, borderColor: "#0B735F55", borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10 },
   outcomeBtnActive: { backgroundColor: "#0B735F", borderColor: "#0B735F" },
   clearBtn: { paddingVertical: 4, paddingHorizontal: 8, borderWidth: 1, borderRadius: 6, borderColor: "#EF4444", backgroundColor: "#EF44440D" },
