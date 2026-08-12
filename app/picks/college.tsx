@@ -5,13 +5,12 @@ import {
   ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View,
 } from "react-native";
 import { useLocalSearchParams, router, Href } from "expo-router";
-import { getCurrentCfbWeek as getCurrentCFBWeek } from "@/lib/cfbWeeks";
 import { useOdds } from "@/lib/useOdds";
 import { supabase } from "@/lib/supabase";
 import { norm, matchupsLikelyMatch } from "@/lib/teamMatch";
 import { pickLabel } from "@/lib/pickLabel";
 import { alert } from "@/lib/alert";
-import WeekPills from "@/components/WeekPills";
+import { getOpenWeek, type OpenWeek } from "@/lib/openWeek";
 import { logoUri } from "@/lib/teamLogos";
 
 // lib/teamLogos.logoUri returns 'about:blank' when a name doesn't map to a
@@ -72,17 +71,21 @@ async function resolveOrCreateGameId(opts: {
 }
 
 export default function CFBPicksPage() {
-  const params = useLocalSearchParams<{ group?: string; w?: string }>();
+  const params = useLocalSearchParams<{ group?: string }>();
   const groupId = useMemo(
     () => (Array.isArray(params.group) ? params.group[0] : params.group) ?? null,
     [params.group]
   );
 
   const [tab, setTab] = useState<MarketKey>("spreads");
-  const [week, setWeek] = useState<number>(() => {
-    const n = Number(Array.isArray(params.w) ? params.w[0] : params.w);
-    return Number.isFinite(n) && n > 0 ? n : getCurrentCFBWeek();
-  });
+  // undefined = still resolving, null = resolved but no CFB week is live right now.
+  const [openWeek, setOpenWeek] = useState<OpenWeek | null | undefined>(undefined);
+  useEffect(() => {
+    let mounted = true;
+    getOpenWeek("cfb").then((w) => { if (mounted) setOpenWeek(w); });
+    return () => { mounted = false; };
+  }, []);
+  const week = openWeek?.week ?? 0;
 
   const { data: games, loading, error } = useOdds("americanfootball_ncaaf", week, {
     markets: ["spreads", "totals", "h2h"],
@@ -116,7 +119,7 @@ export default function CFBPicksPage() {
   }
 
   useEffect(() => {
-    if (!groupId) { setCurrentPick(null); setTakenBy(new Map()); return; }
+    if (!groupId || !week) { setCurrentPick(null); setTakenBy(new Map()); return; }
     let mounted = true;
     (async () => {
       const { data: auth } = await supabase.auth.getUser();
@@ -135,6 +138,7 @@ export default function CFBPicksPage() {
     const user = auth?.user;
     if (!user) { router.push("/auth/login" as Href); return; }
     if (!groupId) { alert("No group selected", "Open this page from a group to make picks."); return; }
+    if (!week) { alert("No live week", "There's no CFB week open for picks right now."); return; }
 
     const gameId = await resolveOrCreateGameId({
       league: "cfb", week,
@@ -201,7 +205,9 @@ export default function CFBPicksPage() {
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, gap: 12, paddingBottom: 24 }}>
-      <Text style={{ fontWeight: "800", fontSize: 18 }}>College Football — Week {week}</Text>
+      <Text style={{ fontWeight: "800", fontSize: 18 }}>
+        College Football{openWeek ? ` — Week ${openWeek.week} is live` : ""}
+      </Text>
 
       {!groupId && (
         <View style={{ backgroundColor: "#FFF7ED", borderColor: "#FED7AA", borderWidth: 1, borderRadius: 8, padding: 10 }}>
@@ -209,7 +215,7 @@ export default function CFBPicksPage() {
         </View>
       )}
 
-      {groupId && (
+      {groupId && week > 0 && (
         <View style={styles.pickStatus}>
           <Text style={styles.pickStatusText}>
             {saved ? "✓ Pick saved: " : "Your pick: "}
@@ -226,17 +232,22 @@ export default function CFBPicksPage() {
         </View>
       )}
 
-      <View style={{ gap: 8 }}>
-        <WeekPills count={15} selected={week} current={getCurrentCFBWeek()} onSelect={setWeek} />
-
-        <View style={{ flexDirection: "row", gap: 8 }}>
-          {(["spreads", "totals", "h2h"] as const).map((k) => (
-            <Pressable key={k} onPress={() => setTab(k)}
-              style={[styles.tab, tab === k && { backgroundColor: "#0B735F", borderColor: "#0B735F" }]}>
-              <Text style={[styles.tabText, tab === k && { color: "white" }]}>{k.toUpperCase()}</Text>
-            </Pressable>
-          ))}
+      {openWeek === undefined ? (
+        <ActivityIndicator style={{ marginTop: 12 }} />
+      ) : openWeek === null ? (
+        <View style={styles.noLiveWeek}>
+          <Text style={styles.noLiveWeekTitle}>No CFB week is live right now</Text>
+          <Text style={styles.noLiveWeekBody}>Picks open once the next week's window starts — check back soon.</Text>
         </View>
+      ) : (
+      <>
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        {(["spreads", "totals", "h2h"] as const).map((k) => (
+          <Pressable key={k} onPress={() => setTab(k)}
+            style={[styles.tab, tab === k && { backgroundColor: "#0B735F", borderColor: "#0B735F" }]}>
+            <Text style={[styles.tabText, tab === k && { color: "white" }]}>{k.toUpperCase()}</Text>
+          </Pressable>
+        ))}
       </View>
 
       {loading ? (
@@ -300,6 +311,8 @@ export default function CFBPicksPage() {
           );
         })
       )}
+      </>
+      )}
     </ScrollView>
   );
 }
@@ -325,4 +338,10 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "#E2E8F0", borderRadius: 8, padding: 10,
   },
   pickStatusText: { flex: 1, fontWeight: "700", color: "#0F172A" },
+  noLiveWeek: {
+    alignItems: "center", gap: 4, backgroundColor: "#F8FAFC", borderWidth: 1,
+    borderColor: "#E2E8F0", borderRadius: 12, padding: 24, marginTop: 8,
+  },
+  noLiveWeekTitle: { fontWeight: "800", fontSize: 15, color: "#0F172A" },
+  noLiveWeekBody: { color: "#64748B", fontSize: 13, textAlign: "center" },
 });

@@ -83,6 +83,14 @@ export function useOdds(
   async function fetchOdds(signal?: AbortSignal, { skipCache = false } = {}) {
     setError(null);
 
+    // week <= 0 means "not resolved yet" (e.g. waiting on the live-week
+    // lookup) — nothing meaningful to fetch, so don't spend a call on it.
+    if (!week || week <= 0) {
+      setData(null);
+      setLoading(false);
+      return;
+    }
+
     if (ODDS_MOCK) {
       setLoading(true);
       setData(getMockGames(sport, Number(week)));

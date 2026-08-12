@@ -7,15 +7,13 @@ import {
 import { useLocalSearchParams, router, Href } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { supabase } from "@/lib/supabase";
-import { getCurrentWeek as getCurrentNFLWeek } from "@/lib/nflWeeks";
-import { getCurrentCfbWeek as getCurrentCFBWeek } from "@/lib/cfbWeeks";
 import { refreshScoresForSport } from "@/lib/scores";
 import { avatarColor, initials } from "@/lib/avatar";
 import { logoUri } from "@/lib/teamLogos";
 import { alert } from "@/lib/alert";
 import { recordLabel, winPct, EMPTY_RECORD, type SeasonRecord } from "@/lib/records";
+import { getOpenWeek, type OpenWeek } from "@/lib/openWeek";
 import GroupChat from "@/components/GroupChat";
-import WeekPills from "@/components/WeekPills";
 import WeeklyPicksGrid from "@/components/WeeklyPicksGrid";
 
 // null for Over/Under totals picks (no single team) or unmapped names.
@@ -51,13 +49,16 @@ export default function GroupDashboardPage() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const groupId = useMemo(() => (Array.isArray(id) ? id?.[0] : id) ?? "", [id]);
 
-  // A single shared week drives both sports — whichever league has
-  // progressed further in real time (they can open on different dates).
-  const currentWeek = useMemo(
-    () => Math.max(getCurrentNFLWeek(), getCurrentCFBWeek()),
-    []
-  );
-  const [week, setWeek] = useState(currentWeek);
+  // NFL and CFB open/close on different real-world dates, so each gets its
+  // own live week — undefined while resolving, null if nothing's live.
+  const [nflOpenWeek, setNflOpenWeek] = useState<OpenWeek | null | undefined>(undefined);
+  const [cfbOpenWeek, setCfbOpenWeek] = useState<OpenWeek | null | undefined>(undefined);
+  useEffect(() => {
+    let mounted = true;
+    getOpenWeek("nfl").then((w) => { if (mounted) setNflOpenWeek(w); });
+    getOpenWeek("cfb").then((w) => { if (mounted) setCfbOpenWeek(w); });
+    return () => { mounted = false; };
+  }, []);
 
   const [groupName, setGroupName] = useState("WeekendLocks");
   const [inviteCode, setInviteCode] = useState<string | null>(null);
@@ -152,8 +153,6 @@ export default function GroupDashboardPage() {
     }
   }
 
-  // Nothing loaded here depends on the selected week (that only drives the
-  // hero's pick CTAs and the WeeklyPicksGrid, which shows every week at once).
   useEffect(() => {
     if (!groupId) return;
     let alive = true;
@@ -217,24 +216,30 @@ export default function GroupDashboardPage() {
 
         <View style={styles.pickCtaRow}>
           <Pressable
-            style={styles.pickCtaBtn}
-            onPress={() => router.push({ pathname: "/picks/page", params: { group: groupId, w: String(week) } } as Href)}
+            style={[styles.pickCtaBtn, !nflOpenWeek && styles.pickCtaBtnDisabled]}
+            disabled={!nflOpenWeek}
+            onPress={() => router.push({ pathname: "/picks/page", params: { group: groupId } } as Href)}
           >
             <View style={[styles.pickCtaIcon, { backgroundColor: "#E1F5EE", transform: [{ rotate: "-6deg" }] }]}>
               <Image source={{ uri: NFL_LEAGUE_LOGO }} style={styles.pickCtaLogo} resizeMode="contain" />
             </View>
             <Text style={styles.pickCtaTitle}>NFL</Text>
-            <Text style={styles.pickCtaSub}>Week {week}</Text>
+            <Text style={styles.pickCtaSub}>
+              {nflOpenWeek ? `Week ${nflOpenWeek.week} now live` : nflOpenWeek === null ? "Not live yet" : "Loading…"}
+            </Text>
           </Pressable>
           <Pressable
-            style={styles.pickCtaBtn}
-            onPress={() => router.push({ pathname: "/picks/college", params: { group: groupId, w: String(week) } } as Href)}
+            style={[styles.pickCtaBtn, !cfbOpenWeek && styles.pickCtaBtnDisabled]}
+            disabled={!cfbOpenWeek}
+            onPress={() => router.push({ pathname: "/picks/college", params: { group: groupId } } as Href)}
           >
             <View style={[styles.pickCtaIcon, { backgroundColor: "#E6F1FB", transform: [{ rotate: "6deg" }] }]}>
               <Image source={{ uri: NCAA_LEAGUE_LOGO }} style={styles.pickCtaLogo} resizeMode="contain" />
             </View>
             <Text style={styles.pickCtaTitle}>CFB</Text>
-            <Text style={styles.pickCtaSub}>Week {week}</Text>
+            <Text style={styles.pickCtaSub}>
+              {cfbOpenWeek ? `Week ${cfbOpenWeek.week} now live` : cfbOpenWeek === null ? "Not live yet" : "Loading…"}
+            </Text>
           </Pressable>
         </View>
       </View>
@@ -250,18 +255,6 @@ export default function GroupDashboardPage() {
       )}
 
       {banner && (<View style={styles.banner}><Text style={styles.bannerText}>Heads up: {banner}</Text></View>)}
-
-      <View style={styles.weekSelectorCol}>
-        <View style={styles.weekLabelRow}>
-          <Text style={styles.weekLabel}>Week</Text>
-          {week !== currentWeek && (
-            <Pressable onPress={() => setWeek(currentWeek)}>
-              <Text style={styles.jumpToCurrent}>Back to current</Text>
-            </Pressable>
-          )}
-        </View>
-        <WeekPills count={WEEK_COUNT} selected={week} current={currentWeek} onSelect={setWeek} />
-      </View>
 
       {loading ? (
         <ActivityIndicator style={{ marginTop: 12 }} />
@@ -409,15 +402,11 @@ const styles = StyleSheet.create({
     shadowColor: "#000", shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.18, shadowRadius: 10, elevation: 4,
   },
+  pickCtaBtnDisabled: { opacity: 0.5 },
   pickCtaIcon: { width: 48, height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center", marginBottom: 4 },
   pickCtaLogo: { width: 30, height: 30 },
   pickCtaTitle: { fontSize: 17, fontWeight: "800", color: "#0F172A" },
   pickCtaSub: { fontSize: 12, color: "#64748B", fontWeight: "600" },
-
-  weekSelectorCol: { gap: 6 },
-  weekLabelRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  weekLabel: { fontSize: 12, color: "#64748B", fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.3 },
-  jumpToCurrent: { fontSize: 12, color: "#0B735F", fontWeight: "700" },
 
   // No explicit alignItems — default "stretch" makes both columns match the
   // height of the taller one (the leaderboard, which grows as members join),
