@@ -276,7 +276,8 @@ export default function GroupDashboardPage() {
         <ActivityIndicator style={{ marginTop: 12 }} />
       ) : (
         <>
-          <View style={styles.card}>
+        <View style={styles.topRow}>
+          <View style={[styles.card, styles.topRowCol]}>
             <View style={styles.leaderboardHeader}>
               <Text style={styles.cardTitle}>Group leaderboard</Text>
               <Pressable onPress={handleRefreshScores} disabled={refreshingScores} style={styles.refreshBtn}>
@@ -350,7 +351,7 @@ export default function GroupDashboardPage() {
             <Text style={styles.note}>Records update when you tap "Refresh scores" above — pushes count as a win.</Text>
           </View>
 
-          <View style={styles.card}>
+          <View style={[styles.card, styles.topRowCol]}>
             <Text style={styles.cardTitle}>Recent activity</Text>
             {activity.length === 0 ? (
               <Text style={styles.empty}>No recent activity.</Text>
@@ -387,6 +388,7 @@ export default function GroupDashboardPage() {
               />
             )}
           </View>
+        </View>
 
           <GroupChat groupId={groupId} nameById={nameById} currentUserId={currentUserId} />
 
@@ -447,6 +449,9 @@ const styles = StyleSheet.create({
   weekLabelRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   weekLabel: { fontSize: 12, color: "#64748B", fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.3 },
   jumpToCurrent: { fontSize: 12, color: "#0B735F", fontWeight: "700" },
+
+  topRow: { flexDirection: "row", gap: 16, flexWrap: "wrap", alignItems: "flex-start" },
+  topRowCol: { flex: 1, minWidth: 320 },
 
   card: { backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12, gap: 4 },
   cardTitle: { fontWeight: "800" },
