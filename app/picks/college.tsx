@@ -92,25 +92,38 @@ export default function CFBPicksPage() {
 
   const [currentPick, setCurrentPick] = useState<CurrentPick | null>(null);
   const [saved, setSaved] = useState(false);
+  // outcome key ("market|team|line") -> the group member who already holds it.
+  const [takenBy, setTakenBy] = useState<Map<string, string>>(new Map());
 
-  // Load whatever pick already exists for this group + week, so it can be
-  // highlighted and a single "Clear my pick" action can be shown.
+  // Load whatever pick already exists for this group + week (to highlight
+  // and enable "Clear my pick"), plus every other group member's current
+  // pick, so outcomes they've already locked in can be shown as taken.
+  async function loadPickState(uid: string) {
+    const [{ data: mine }, { data: groupPicks }] = await Promise.all([
+      supabase.from("picks").select("market, team, line")
+        .eq("user_id", uid).eq("group_id", groupId).eq("sport", "cfb").eq("week", week)
+        .maybeSingle(),
+      supabase.from("picks_feed").select("user_id, display_name, market, team, line")
+        .eq("group_id", groupId).eq("sport", "cfb").eq("week", week),
+    ]);
+    setCurrentPick((mine as CurrentPick) ?? null);
+    const taken = new Map<string, string>();
+    (groupPicks ?? []).forEach((p: any) => {
+      if (p.user_id === uid) return; // your own pick isn't "taken", it's just yours
+      taken.set(`${p.market}|${p.team}|${p.line}`, p.display_name);
+    });
+    setTakenBy(taken);
+  }
+
   useEffect(() => {
-    if (!groupId) { setCurrentPick(null); return; }
+    if (!groupId) { setCurrentPick(null); setTakenBy(new Map()); return; }
     let mounted = true;
     (async () => {
       const { data: auth } = await supabase.auth.getUser();
       const user = auth?.user;
       if (!user) return;
-      const { data } = await supabase
-        .from("picks")
-        .select("market, team, line")
-        .eq("user_id", user.id)
-        .eq("group_id", groupId)
-        .eq("sport", "cfb")
-        .eq("week", week)
-        .maybeSingle();
-      if (mounted) setCurrentPick((data as CurrentPick) ?? null);
+      if (!mounted) return;
+      await loadPickState(user.id);
     })();
     return () => { mounted = false; };
   }, [groupId, week]);
@@ -156,10 +169,19 @@ export default function CFBPicksPage() {
       .from("picks")
       .upsert(row, { onConflict: "group_id,user_id,sport,week", ignoreDuplicates: false });
 
-    if (upsertErr) { alert("Could not save pick", upsertErr.message); return; }
+    if (upsertErr) {
+      if (upsertErr.code === "23505" && upsertErr.message?.includes("picks_unique_outcome_per_group")) {
+        alert("Already taken", "Another member of your group just locked in that pick — choose a different one.");
+        await loadPickState(user.id);
+        return;
+      }
+      alert("Could not save pick", upsertErr.message);
+      return;
+    }
     setCurrentPick({ market, team, line });
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
+    await loadPickState(user.id);
   }
 
   async function handleClear() {
@@ -174,6 +196,7 @@ export default function CFBPicksPage() {
       .eq("week", week);
     if (delErr) { alert("Could not clear pick", delErr.message); return; }
     setCurrentPick(null);
+    await loadPickState(user.id);
   }
 
   return (
@@ -248,20 +271,27 @@ export default function CFBPicksPage() {
                   // card at once — the line (point) disambiguates which specific game.
                   const outcomeLine = typeof o.point === "number" ? String(o.point) : null;
                   const isPicked = currentPick?.market === tab && currentPick?.team === o.name && currentPick?.line === outcomeLine;
+                  const takenByName = isPicked ? undefined : takenBy.get(`${tab}|${o.name}|${outcomeLine}`);
                   const oLogo = getTeamLogo(o.name); // null for Over/Under — no team to show
                   return (
                     <Pressable
                       key={i}
-                      disabled={started}
+                      disabled={started || !!takenByName}
                       onPress={() => handlePick(g, o, tab)}
-                      style={[styles.outcomeBtn, isPicked && styles.outcomeBtnActive, { flexDirection: "row", alignItems: "center", gap: 8 }]}
+                      style={[
+                        styles.outcomeBtn,
+                        isPicked && styles.outcomeBtnActive,
+                        !!takenByName && styles.outcomeBtnTaken,
+                        { flexDirection: "row", alignItems: "center", gap: 8 },
+                      ]}
                     >
                       {!!oLogo && <Image source={{ uri: oLogo }} style={styles.outcomeLogo} />}
-                      <Text style={[{ fontWeight: "700" }, isPicked && { color: "white" }]}>
+                      <Text style={[{ fontWeight: "700" }, isPicked && { color: "white" }, !!takenByName && styles.outcomeTextTaken]}>
                         {isPicked ? "✓ " : ""}{o.name}
                         {typeof o.point === "number" ? ` ${o.point > 0 ? "+" : ""}${o.point}` : ""}
                         {typeof o.price === "number" ? `  (${o.price})` : ""}
                       </Text>
+                      {!!takenByName && <Text style={styles.takenLabel}>Taken by {takenByName}</Text>}
                     </Pressable>
                   );
                 })}
@@ -283,6 +313,9 @@ const styles = StyleSheet.create({
   startedBadgeText: { fontSize: 11, fontWeight: "700", color: "#64748B" },
   outcomeBtn: { backgroundColor: "#0B735F22", borderWidth: 1, borderColor: "#0B735F55", borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10 },
   outcomeBtnActive: { backgroundColor: "#0B735F", borderColor: "#0B735F" },
+  outcomeBtnTaken: { backgroundColor: "#F1F5F9", borderColor: "#E2E8F0" },
+  outcomeTextTaken: { color: "#94A3B8", textDecorationLine: "line-through" },
+  takenLabel: { marginLeft: "auto", fontSize: 11, color: "#94A3B8", fontStyle: "italic" },
   clearBtn: { paddingVertical: 4, paddingHorizontal: 8, borderWidth: 1, borderRadius: 6, borderColor: "#EF4444", backgroundColor: "#EF44440D" },
   backBtn: { paddingVertical: 4, paddingHorizontal: 8, borderWidth: 1, borderRadius: 6, borderColor: "#0B735F", backgroundColor: "#0B735F0D" },
   logo: { width: 28, height: 28, resizeMode: "contain" },
