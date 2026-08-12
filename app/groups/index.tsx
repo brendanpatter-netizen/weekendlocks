@@ -10,12 +10,12 @@ import {
   FlatList,
   ActivityIndicator,
   StyleSheet,
-  Alert,
 } from "react-native";
 import { Link, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../../lib/supabase";
 import { avatarColor, initials } from "@/lib/avatar";
+import { alert } from "@/lib/alert";
 
 type Group = {
   id: string;
@@ -46,7 +46,7 @@ export default function GroupsIndex() {
     // Ensure we’re signed in; RLS will hide everything if not
     const { data: { session }, error: authErr } = await supabase.auth.getSession();
     if (authErr) {
-      Alert.alert("Auth error", authErr.message);
+      alert("Auth error", authErr.message);
       setLoading(false);
       return;
     }
@@ -64,7 +64,7 @@ export default function GroupsIndex() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      Alert.alert("Load error", error.message);
+      alert("Load error", error.message);
       setLoading(false);
       return;
     }
@@ -115,14 +115,14 @@ export default function GroupsIndex() {
   // CREATE via RPC (also inserts owner as a member)
   const createGroup = async () => {
     const name = createName.trim();
-    if (!name) return Alert.alert("Missing name", "Give your group a name.");
+    if (!name) return alert("Missing name", "Give your group a name.");
 
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return Alert.alert("Sign in required");
+    if (!session) return alert("Sign in required");
 
     const { data: newId, error } = await supabase.rpc("create_group", { p_name: name });
     if (error || !newId) {
-      return Alert.alert("Create failed", error?.message || "No id returned");
+      return alert("Create failed", error?.message || "No id returned");
     }
 
     setCreateName("");
@@ -135,11 +135,11 @@ export default function GroupsIndex() {
     if (!code) return;
 
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return Alert.alert("Sign in required");
+    if (!session) return alert("Sign in required");
 
     const { data: gId, error } = await supabase.rpc("join_group_via_code", { p_code: code });
     if (error || !gId) {
-      return Alert.alert("Not found", "No group found for that invite code.");
+      return alert("Not found", "No group found for that invite code.");
     }
 
     setJoinCode("");

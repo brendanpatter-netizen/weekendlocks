@@ -7,9 +7,9 @@ import {
   TextInput,
   StyleSheet,
   Pressable,
-  Alert,
 } from "react-native";
 import { supabase } from "@/lib/supabase";
+import { alert } from "@/lib/alert";
 
 const colors = {
   primary: "#006241",
@@ -79,9 +79,9 @@ export default function AccountPage() {
       setUsername((data.username ?? "").toString());
     }
 
-    Alert.alert("Saved", "Profile updated.");
+    alert("Saved", "Profile updated.");
   } catch (e: any) {
-    Alert.alert("Couldn’t save", e?.message ?? "Please try again.");
+    alert("Couldn’t save", e?.message ?? "Please try again.");
   } finally {
     setSavingProfile(false);
   }
@@ -89,11 +89,11 @@ export default function AccountPage() {
 
   const savePassword = async () => {
     if (!newPassword || newPassword.length < 8) {
-      Alert.alert("Password too short", "Use at least 8 characters.");
+      alert("Password too short", "Use at least 8 characters.");
       return;
     }
     if (newPassword !== confirmPassword) {
-      Alert.alert("Passwords don’t match", "Please re-enter.");
+      alert("Passwords don’t match", "Please re-enter.");
       return;
     }
     try {
@@ -103,9 +103,9 @@ export default function AccountPage() {
 
       setNewPassword("");
       setConfirmPassword("");
-      Alert.alert("Password set", "You can now sign in with email + password.");
+      alert("Password set", "You can now sign in with email + password.");
     } catch (e: any) {
-      Alert.alert("Couldn’t update password", e?.message ?? "Please try again.");
+      alert("Couldn’t update password", e?.message ?? "Please try again.");
     } finally {
       setSavingPassword(false);
     }

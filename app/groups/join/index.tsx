@@ -1,9 +1,10 @@
 export const unstable_settings = { prerender: false };
 
 import { useEffect, useState } from "react";
-import { View, Text, ActivityIndicator, StyleSheet, Alert } from "react-native";
+import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { supabase } from "../../../lib/supabase";
+import { alert } from "@/lib/alert";
 
 export default function JoinGroupByUrl() {
   const { code } = useLocalSearchParams<{ code?: string }>();
@@ -32,7 +33,7 @@ export default function JoinGroupByUrl() {
       );
 
       if (rpcErr || !gId) {
-        Alert.alert("Not found", "No group found for that invite code.");
+        alert("Not found", "No group found for that invite code.");
         setStatus("done");
         return router.replace("/groups");
       }

@@ -2,7 +2,7 @@ export const unstable_settings = { prerender: false };
 
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View,
+  ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View,
 } from "react-native";
 import { useLocalSearchParams, router, Href } from "expo-router";
 import { getCurrentCfbWeek as getCurrentCFBWeek } from "@/lib/cfbWeeks";
@@ -10,6 +10,7 @@ import { useOdds } from "@/lib/useOdds";
 import { supabase } from "@/lib/supabase";
 import { norm, matchupsLikelyMatch } from "@/lib/teamMatch";
 import { pickLabel } from "@/lib/pickLabel";
+import { alert } from "@/lib/alert";
 import WeekPills from "@/components/WeekPills";
 import { logoUri } from "@/lib/teamLogos";
 
@@ -120,7 +121,7 @@ export default function CFBPicksPage() {
     const { data: auth } = await supabase.auth.getUser();
     const user = auth?.user;
     if (!user) { router.push("/auth/login" as Href); return; }
-    if (!groupId) { Alert.alert("No group selected", "Open this page from a group to make picks."); return; }
+    if (!groupId) { alert("No group selected", "Open this page from a group to make picks."); return; }
 
     const gameId = await resolveOrCreateGameId({
       league: "cfb", week,
@@ -129,7 +130,7 @@ export default function CFBPicksPage() {
       commenceIso: game.commence_time,
       externalId: game.id ?? null,
     });
-    if (!gameId) { Alert.alert("Could not save pick", "Could not resolve/create matchup in the DB."); return; }
+    if (!gameId) { alert("Could not save pick", "Could not resolve/create matchup in the DB."); return; }
 
     const team = outcome?.name ?? null;
     const line = typeof outcome?.point === "number" ? String(outcome.point) : null;
@@ -155,7 +156,7 @@ export default function CFBPicksPage() {
       .from("picks")
       .upsert(row, { onConflict: "group_id,user_id,sport,week", ignoreDuplicates: false });
 
-    if (upsertErr) { Alert.alert("Could not save pick", upsertErr.message); return; }
+    if (upsertErr) { alert("Could not save pick", upsertErr.message); return; }
     setCurrentPick({ market, team, line });
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
@@ -171,7 +172,7 @@ export default function CFBPicksPage() {
       .eq("group_id", groupId)
       .eq("sport", "cfb")
       .eq("week", week);
-    if (delErr) { Alert.alert("Could not clear pick", delErr.message); return; }
+    if (delErr) { alert("Could not clear pick", delErr.message); return; }
     setCurrentPick(null);
   }
 

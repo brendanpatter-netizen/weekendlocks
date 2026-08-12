@@ -2,9 +2,10 @@
 export const unstable_settings = { prerender: false };
 
 import { useEffect, useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, Alert, ActivityIndicator, Platform } from "react-native";
+import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator, Platform } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "expo-router";
+import { alert } from "@/lib/alert";
 
 const colors = { primary: "#006241", bg: "#F5F5F5", text: "#222", subtext: "#555" };
 
@@ -36,11 +37,11 @@ export default function ResetPassword() {
 
   const save = async () => {
     if (!password || password.length < 8) {
-      Alert.alert("Password too short", "Use at least 8 characters.");
+      alert("Password too short", "Use at least 8 characters.");
       return;
     }
     if (password !== confirm) {
-      Alert.alert("Passwords don’t match", "Please re-enter.");
+      alert("Passwords don’t match", "Please re-enter.");
       return;
     }
     try {
@@ -51,10 +52,10 @@ export default function ResetPassword() {
       // Optional: mark password_set for first-time users
       await supabase.auth.updateUser({ data: { password_set: true } });
 
-      Alert.alert("Password updated", "You can now sign in with your password.");
+      alert("Password updated", "You can now sign in with your password.");
       router.replace("/auth/login");
     } catch (e: any) {
-      Alert.alert("Could not update password", e?.message ?? "Try again.");
+      alert("Could not update password", e?.message ?? "Try again.");
     } finally {
       setSaving(false);
     }

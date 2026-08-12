@@ -4,10 +4,11 @@ export const unstable_settings = { prerender: false };
 import { useEffect, useRef, useState } from "react";
 import {
   View, Text, TextInput, Pressable, ActivityIndicator,
-  StyleSheet, Alert, Platform,
+  StyleSheet, Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { supabase } from "@/lib/supabase";
+import { alert } from "@/lib/alert";
 
 type Mode = "code" | "link" | "password";
 
@@ -58,14 +59,14 @@ export default function Login() {
       if (error) throw error;
       if (mode === "code") {
         setSafe(setCodeSent, true);
-        Alert.alert("Code sent", "Enter the 6-digit code from your email.");
+        alert("Code sent", "Enter the 6-digit code from your email.");
       } else {
-        Alert.alert("Magic link sent", "Check your email to finish signing in.");
+        alert("Magic link sent", "Check your email to finish signing in.");
       }
     } catch (e: any) {
       console.error(e);
       setSafe(setFatal, e?.message ?? "Couldn’t send code/link.");
-      Alert.alert("Couldn’t send", e?.message ?? "Try again.");
+      alert("Couldn’t send", e?.message ?? "Try again.");
     } finally {
       setSafe(setLoading, false);
     }
@@ -83,7 +84,7 @@ export default function Login() {
     } catch (e: any) {
       console.error(e);
       setSafe(setFatal, e?.message ?? "Couldn’t verify code.");
-      Alert.alert("Invalid code", e?.message ?? "Check the code and try again.");
+      alert("Invalid code", e?.message ?? "Check the code and try again.");
     } finally {
       setSafe(setLoading, false);
     }
@@ -101,7 +102,7 @@ export default function Login() {
     } catch (e: any) {
       console.error(e);
       setSafe(setFatal, e?.message ?? "Sign in failed.");
-      Alert.alert("Sign in failed", e?.message ?? "Check your email/password and try again.");
+      alert("Sign in failed", e?.message ?? "Check your email/password and try again.");
     } finally {
       setSafe(setLoading, false);
     }
@@ -111,7 +112,7 @@ export default function Login() {
     const addr = email.trim();
     if (!addr || !password) return;
     if (password.length < 8) {
-      Alert.alert("Password too short", "Use at least 8 characters.");
+      alert("Password too short", "Use at least 8 characters.");
       return;
     }
     setSafe(setLoading, true);
@@ -122,11 +123,11 @@ export default function Login() {
         options: { emailRedirectTo: callbackUrl },
       });
       if (error) throw error;
-      Alert.alert("Check your email", "Confirm your email, then sign in with your password.");
+      alert("Check your email", "Confirm your email, then sign in with your password.");
     } catch (e: any) {
       console.error(e);
       setSafe(setFatal, e?.message ?? "Couldn’t create account.");
-      Alert.alert("Couldn’t create account", e?.message ?? "Please try again.");
+      alert("Couldn’t create account", e?.message ?? "Please try again.");
     } finally {
       setSafe(setLoading, false);
     }
@@ -139,11 +140,11 @@ export default function Login() {
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(addr, { redirectTo: resetUrl });
       if (error) throw error;
-      Alert.alert("Password reset sent", "Check your email for the reset link.");
+      alert("Password reset sent", "Check your email for the reset link.");
     } catch (e: any) {
       console.error(e);
       setSafe(setFatal, e?.message ?? "Couldn’t send reset.");
-      Alert.alert("Couldn’t send reset", e?.message ?? "Try again.");
+      alert("Couldn’t send reset", e?.message ?? "Try again.");
     } finally {
       setSafe(setLoading, false);
     }

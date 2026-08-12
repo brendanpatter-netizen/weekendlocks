@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { View, Platform, Text, Pressable } from "react-native";
 import { Slot, usePathname, useRouter, Link } from "expo-router";
 import { supabase } from "@/lib/supabase";
+import { AlertHost } from "@/lib/alert";
 
 /** Simple error boundary so we never see a blank page */
 class ErrorBoundary extends React.Component<
@@ -171,6 +172,7 @@ export default function RootLayout() {
         )}
 
         <Slot />
+        <AlertHost />
       </View>
     </ErrorBoundary>
   );

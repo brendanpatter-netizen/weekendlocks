@@ -2,7 +2,7 @@ export const unstable_settings = { prerender: false };
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator, Alert, FlatList, Image, Pressable, ScrollView, StyleSheet, Text, View,
+  ActivityIndicator, FlatList, Image, Pressable, ScrollView, StyleSheet, Text, View,
 } from "react-native";
 import { useLocalSearchParams, router, Href } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -14,6 +14,7 @@ import { refreshScoresForSport } from "@/lib/scores";
 import { avatarColor, initials } from "@/lib/avatar";
 import { pickLabel } from "@/lib/pickLabel";
 import { logoUri } from "@/lib/teamLogos";
+import { alert } from "@/lib/alert";
 import GroupChat from "@/components/GroupChat";
 import WeekPills from "@/components/WeekPills";
 
@@ -195,7 +196,7 @@ export default function GroupDashboardPage() {
   const isOwner = !!currentUserId && !!ownerUserId && currentUserId === ownerUserId;
 
   function confirmDeleteGroup() {
-    Alert.alert(
+    alert(
       `Delete "${groupName}"?`,
       "This permanently deletes the group, its members, all picks, and the chat history. This can't be undone.",
       [
@@ -209,7 +210,7 @@ export default function GroupDashboardPage() {
     setDeleting(true);
     const { error } = await supabase.from("groups").delete().eq("id", groupId);
     setDeleting(false);
-    if (error) { Alert.alert("Could not delete group", error.message); return; }
+    if (error) { alert("Could not delete group", error.message); return; }
     router.replace("/groups" as Href);
   }
 
