@@ -260,8 +260,7 @@ export default function GroupDashboardPage() {
         <ActivityIndicator style={{ marginTop: 12 }} />
       ) : (
         <>
-        <View style={styles.topRow}>
-          <View style={[styles.card, styles.topRowCol]}>
+        <View style={styles.card}>
             <View style={styles.leaderboardHeader}>
               <Text style={styles.cardTitle}>Group leaderboard</Text>
               <Pressable onPress={handleRefreshScores} disabled={refreshingScores} style={styles.refreshBtn}>
@@ -305,7 +304,14 @@ export default function GroupDashboardPage() {
             <Text style={styles.note}>Records update when you tap "Refresh scores" above — pushes count as a win.</Text>
           </View>
 
-          <View style={[styles.card, styles.topRowCol, styles.activityCard]}>
+          <WeeklyPicksGrid
+            groupId={groupId}
+            members={members.map((m) => ({ user_id: m.user_id, display_name: m.display_name }))}
+            weekCount={WEEK_COUNT}
+            refreshKey={dataVersion}
+          />
+
+          <View style={styles.card}>
             <Text style={styles.cardTitle}>Recent activity</Text>
             {activity.length === 0 ? (
               <Text style={styles.empty}>No recent activity.</Text>
@@ -342,14 +348,6 @@ export default function GroupDashboardPage() {
               />
             )}
           </View>
-        </View>
-
-          <WeeklyPicksGrid
-            groupId={groupId}
-            members={members.map((m) => ({ user_id: m.user_id, display_name: m.display_name }))}
-            weekCount={WEEK_COUNT}
-            refreshKey={dataVersion}
-          />
 
           <GroupChat groupId={groupId} nameById={nameById} currentUserId={currentUserId} />
 
@@ -408,13 +406,6 @@ const styles = StyleSheet.create({
   pickCtaTitle: { fontSize: 17, fontWeight: "800", color: "#0F172A" },
   pickCtaSub: { fontSize: 12, color: "#64748B", fontWeight: "600" },
 
-  // No explicit alignItems — default "stretch" makes both columns match the
-  // height of the taller one (the leaderboard, which grows as members join),
-  // and the activity card's own list scrolls to fit within that height.
-  topRow: { flexDirection: "row", gap: 16, flexWrap: "wrap" },
-  topRowCol: { flex: 1, minWidth: 320 },
-  activityCard: { flexShrink: 1 },
-
   card: { backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12, gap: 4 },
   cardTitle: { fontWeight: "800" },
 
@@ -443,7 +434,7 @@ const styles = StyleSheet.create({
 
   note: { marginTop: 8, color: "#94A3B8", fontSize: 12 },
   empty: { paddingVertical: 8, color: "#64748B" },
-  activityList: { flex: 1, maxHeight: 480 },
+  activityList: { maxHeight: 380 },
 
   feedRow: { paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#E5E7EB", flexDirection: "row", gap: 10 },
   avatarSm: { width: 26, height: 26, borderRadius: 999, alignItems: "center", justifyContent: "center", marginTop: 1 },
