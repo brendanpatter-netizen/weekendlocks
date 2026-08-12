@@ -12,11 +12,12 @@ import { getCurrentWeek as getCurrentNFLWeek } from "@/lib/nflWeeks";
 import { getCurrentCfbWeek as getCurrentCFBWeek } from "@/lib/cfbWeeks";
 import { refreshScoresForSport } from "@/lib/scores";
 import { avatarColor, initials } from "@/lib/avatar";
-import { pickLabel } from "@/lib/pickLabel";
 import { logoUri } from "@/lib/teamLogos";
 import { alert } from "@/lib/alert";
+import { recordLabel, winPct, EMPTY_RECORD, type SeasonRecord } from "@/lib/records";
 import GroupChat from "@/components/GroupChat";
 import WeekPills from "@/components/WeekPills";
+import WeeklyPicksGrid from "@/components/WeeklyPicksGrid";
 
 // null for Over/Under totals picks (no single team) or unmapped names.
 function pickLogo(team: string | null | undefined, sport: "nfl" | "ncaaf"): string | null {
@@ -25,29 +26,19 @@ function pickLogo(team: string | null | undefined, sport: "nfl" | "ncaaf"): stri
   return uri === "about:blank" ? null : uri;
 }
 
-type PickInfo = { market: string | null; team: string | null; line: string | null; price: number | null };
-// A push counts as a win (house rule) — member_records already folds it in,
-// so there's no separate push count to track or display here.
-type SeasonRecord = { wins: number; losses: number };
-type MemberRow = {
-  user_id: string; display_name: string; nfl: PickInfo | null; cfb: PickInfo | null;
-  nflRecord: SeasonRecord; cfbRecord: SeasonRecord;
-};
+// The leaderboard now shows only the combined season record — per-week
+// picks moved to the WeeklyPicksGrid below it.
+type MemberRow = { user_id: string; display_name: string; overall: SeasonRecord };
 type ActivityItem = {
   id: string; user_id: string; display_name: string; sport: "nfl" | "cfb"; week: number;
   market: string | null; team: string | null; line: string | null; updated_at: string; was_replaced: boolean;
 };
 
-const EMPTY_RECORD: SeasonRecord = { wins: 0, losses: 0 };
-
-function recordLabel(r: SeasonRecord): string | null {
-  if (r.wins === 0 && r.losses === 0) return null;
-  return `${r.wins}-${r.losses}`;
-}
-function winPct(r: SeasonRecord): string | null {
+// Ranking key for the leaderboard: win% when they've got decided games,
+// otherwise sinks to the bottom (haven't proven anything yet).
+function rankValue(r: SeasonRecord): number {
   const decided = r.wins + r.losses;
-  if (decided === 0) return null;
-  return `${Math.round((100 * r.wins) / decided)}%`;
+  return decided === 0 ? -1 : r.wins / decided;
 }
 
 // NFL runs 18 weeks, CFB 15 — one shared selector covers both; CFB just has
@@ -77,6 +68,9 @@ export default function GroupDashboardPage() {
   const [refreshingScores, setRefreshingScores] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  // Bumped on every load so WeeklyPicksGrid (which fetches its own,
+  // season-wide data) knows to refetch too — including after "Refresh scores".
+  const [dataVersion, setDataVersion] = useState(0);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? null));
@@ -119,33 +113,24 @@ export default function GroupDashboardPage() {
         })
       );
 
-      const [{ data: nflRows }, { data: cfbRows }, { data: recordRows }] = await Promise.all([
-        supabase.from("picks").select("user_id, market, team, line, price")
-          .eq("group_id", groupId).eq("sport", "nfl").eq("week", week),
-        supabase.from("picks").select("user_id, market, team, line, price")
-          .eq("group_id", groupId).eq("sport", "cfb").eq("week", week),
-        supabase.from("member_records").select("user_id, sport, wins, losses")
-          .eq("group_id", groupId),
-      ]);
-      const nflByUser = new Map((nflRows ?? []).map((r: any) => [r.user_id, r as PickInfo]));
-      const cfbByUser = new Map((cfbRows ?? []).map((r: any) => [r.user_id, r as PickInfo]));
-      const nflRecordByUser = new Map<string, SeasonRecord>();
-      const cfbRecordByUser = new Map<string, SeasonRecord>();
+      const { data: recordRows } = await supabase
+        .from("member_records").select("user_id, sport, wins, losses")
+        .eq("group_id", groupId);
+      const overallByUser = new Map<string, SeasonRecord>();
       (recordRows ?? []).forEach((r: any) => {
-        const rec: SeasonRecord = { wins: r.wins, losses: r.losses };
-        (r.sport === "nfl" ? nflRecordByUser : cfbRecordByUser).set(r.user_id, rec);
+        const cur = overallByUser.get(r.user_id) ?? { ...EMPTY_RECORD };
+        cur.wins += r.wins;
+        cur.losses += r.losses;
+        overallByUser.set(r.user_id, cur);
       });
 
       const rows: MemberRow[] = rosterIds
         .map((uid) => ({
           user_id: uid,
           display_name: nameById.get(uid) ?? uid,
-          nfl: nflByUser.get(uid) ?? null,
-          cfb: cfbByUser.get(uid) ?? null,
-          nflRecord: nflRecordByUser.get(uid) ?? EMPTY_RECORD,
-          cfbRecord: cfbRecordByUser.get(uid) ?? EMPTY_RECORD,
+          overall: overallByUser.get(uid) ?? EMPTY_RECORD,
         }))
-        .sort((a, b) => a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }));
+        .sort((a, b) => rankValue(b.overall) - rankValue(a.overall) || a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }));
       if (mounted()) setMembers(rows);
 
       // Broad recent-activity feed (not limited to the selected week) — each row is
@@ -157,6 +142,7 @@ export default function GroupDashboardPage() {
         .order("updated_at", { ascending: false })
         .limit(20);
       if (mounted()) setActivity((feedRows ?? []) as ActivityItem[]);
+      if (mounted()) setDataVersion((v) => v + 1);
     } catch (e: any) {
       if (mounted()) setBanner(e?.message ?? String(e));
     } finally {
@@ -164,12 +150,14 @@ export default function GroupDashboardPage() {
     }
   }
 
+  // Nothing loaded here depends on the selected week (that only drives the
+  // hero's pick CTAs and the WeeklyPicksGrid, which shows every week at once).
   useEffect(() => {
     if (!groupId) return;
     let alive = true;
     loadDashboard(() => alive);
     return () => { alive = false; };
-  }, [groupId, week]);
+  }, [groupId]);
 
   async function handleRefreshScores() {
     setRefreshingScores(true);
@@ -286,10 +274,9 @@ export default function GroupDashboardPage() {
               </Pressable>
             </View>
             <View style={[styles.tableRow, styles.tableHeader]}>
+              <Text style={styles.thRank}>#</Text>
               <Text style={styles.thUser}>Member</Text>
-              <Text style={styles.thPick}>NFL wk {week}</Text>
-              <Text style={styles.thPick}>CFB wk {week}</Text>
-              <Text style={styles.thOverall}>Overall</Text>
+              <Text style={styles.thOverall}>Record</Text>
             </View>
             {members.length === 0 ? (
               <Text style={styles.empty}>No members yet.</Text>
@@ -298,47 +285,18 @@ export default function GroupDashboardPage() {
                 data={members}
                 keyExtractor={(m) => m.user_id}
                 scrollEnabled={false}
-                renderItem={({ item }) => {
+                renderItem={({ item, index }) => {
                   const color = avatarColor(item.user_id);
-                  const nfl = pickLabel(item.nfl);
-                  const cfb = pickLabel(item.cfb);
-                  const nflRec = recordLabel(item.nflRecord);
-                  const cfbRec = recordLabel(item.cfbRecord);
-                  const overall: SeasonRecord = {
-                    wins: item.nflRecord.wins + item.cfbRecord.wins,
-                    losses: item.nflRecord.losses + item.cfbRecord.losses,
-                  };
-                  const overallRec = recordLabel(overall);
-                  const overallPct = winPct(overall);
+                  const overallRec = recordLabel(item.overall);
+                  const overallPct = winPct(item.overall);
                   return (
                     <View style={styles.tableRow}>
+                      <Text style={styles.rankText}>{index + 1}</Text>
                       <View style={styles.userCell}>
                         <View style={[styles.avatar, { backgroundColor: color.bg }]}>
                           <Text style={[styles.avatarText, { color: color.fg }]}>{initials(item.display_name)}</Text>
                         </View>
                         <Text style={styles.userName} numberOfLines={1}>{item.display_name}</Text>
-                      </View>
-                      <View style={styles.pickCell}>
-                        {nfl ? (
-                          <View style={[styles.badge, styles.badgeNfl]}>
-                            {!!pickLogo(item.nfl?.team, "nfl") && <Image source={{ uri: pickLogo(item.nfl?.team, "nfl")! }} style={styles.badgeLogo} />}
-                            <Text style={[styles.badgeText, styles.badgeTextNfl]}>{nfl}</Text>
-                          </View>
-                        ) : (
-                          <Text style={styles.noPick}>No pick yet</Text>
-                        )}
-                        {nflRec && <Text style={styles.recordSub}>{nflRec}</Text>}
-                      </View>
-                      <View style={styles.pickCell}>
-                        {cfb ? (
-                          <View style={[styles.badge, styles.badgeCfb]}>
-                            {!!pickLogo(item.cfb?.team, "ncaaf") && <Image source={{ uri: pickLogo(item.cfb?.team, "ncaaf")! }} style={styles.badgeLogo} />}
-                            <Text style={[styles.badgeText, styles.badgeTextCfb]}>{cfb}</Text>
-                          </View>
-                        ) : (
-                          <Text style={styles.noPick}>No pick yet</Text>
-                        )}
-                        {cfbRec && <Text style={styles.recordSub}>{cfbRec}</Text>}
                       </View>
                       <View style={styles.overallCell}>
                         <Text style={styles.overallRecord}>{overallRec ?? "—"}</Text>
@@ -390,6 +348,13 @@ export default function GroupDashboardPage() {
             )}
           </View>
         </View>
+
+          <WeeklyPicksGrid
+            groupId={groupId}
+            members={members.map((m) => ({ user_id: m.user_id, display_name: m.display_name }))}
+            weekCount={WEEK_COUNT}
+            refreshKey={dataVersion}
+          />
 
           <GroupChat groupId={groupId} nameById={nameById} currentUserId={currentUserId} />
 
@@ -470,27 +435,17 @@ const styles = StyleSheet.create({
     paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#E5E7EB",
     flexDirection: "row", alignItems: "center", gap: 10,
   },
+  thRank: { width: 22, fontWeight: "800", fontSize: 12, color: "#64748B" },
   thUser: { flex: 1.6, fontWeight: "800", fontSize: 12, color: "#64748B", textTransform: "uppercase" },
-  thPick: { flex: 1, fontWeight: "800", fontSize: 12, color: "#64748B", textTransform: "uppercase" },
-  thOverall: { width: 64, fontWeight: "800", fontSize: 12, color: "#64748B", textTransform: "uppercase", textAlign: "right" },
+  thOverall: { width: 72, fontWeight: "800", fontSize: 12, color: "#64748B", textTransform: "uppercase", textAlign: "right" },
 
+  rankText: { width: 22, fontWeight: "800", fontSize: 13, color: "#94A3B8" },
   userCell: { flex: 1.6, flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0 },
   avatar: { width: 32, height: 32, borderRadius: 999, alignItems: "center", justifyContent: "center" },
   avatarText: { fontSize: 12, fontWeight: "700" },
   userName: { fontWeight: "700", flexShrink: 1 },
 
-  pickCell: { flex: 1, gap: 2 },
-  badge: { alignSelf: "flex-start", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, flexDirection: "row", alignItems: "center", gap: 5 },
-  badgeNfl: { backgroundColor: "#E1F5EE" },
-  badgeCfb: { backgroundColor: "#E6F1FB" },
-  badgeText: { fontSize: 12, fontWeight: "700" },
-  badgeLogo: { width: 14, height: 14, resizeMode: "contain" },
-  badgeTextNfl: { color: "#085041" },
-  badgeTextCfb: { color: "#0C447C" },
-  noPick: { fontSize: 13, color: "#94A3B8" },
-  recordSub: { fontSize: 11, color: "#94A3B8", marginLeft: 2 },
-
-  overallCell: { width: 64, alignItems: "flex-end" },
+  overallCell: { width: 72, alignItems: "flex-end" },
   overallRecord: { fontSize: 13, fontWeight: "800", color: "#0F172A" },
   overallPct: { fontSize: 11, color: "#64748B" },
 
