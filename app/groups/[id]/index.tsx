@@ -2,7 +2,7 @@ export const unstable_settings = { prerender: false };
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator, FlatList, Image, Pressable, ScrollView, StyleSheet, Text, View,
+  ActivityIndicator, FlatList, Image, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View,
 } from "react-native";
 import { useLocalSearchParams, router, Href } from "expo-router";
 import * as Clipboard from "expo-clipboard";
@@ -191,9 +191,26 @@ export default function GroupDashboardPage() {
     }
   }
 
+  const inviteLink = inviteCode ? `https://weekendlocks.com/groups/join?code=${inviteCode}` : null;
+
   const copyInviteCode = async () => {
-    if (!inviteCode) return;
-    await Clipboard.setStringAsync(inviteCode);
+    if (!inviteLink) return;
+    if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({ title: groupName, text: `Join ${groupName} on WeekendLocks`, url: inviteLink });
+        return;
+      } catch {
+        // user canceled or share failed — fall through to copy
+      }
+    } else if (Platform.OS !== "web") {
+      try {
+        await Share.share({ message: `Join ${groupName} on WeekendLocks: ${inviteLink}` });
+        return;
+      } catch {
+        // fall through to copy
+      }
+    }
+    await Clipboard.setStringAsync(inviteLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -286,10 +303,10 @@ export default function GroupDashboardPage() {
 
       {inviteCode && (
         <View style={styles.inviteRow}>
-          <Text style={styles.inviteLabel}>Invite code</Text>
-          <Text style={styles.inviteCode}>{inviteCode}</Text>
+          <Text style={styles.inviteLabel}>Invite link</Text>
+          <Text style={styles.inviteCode} numberOfLines={1}>{inviteCode}</Text>
           <Pressable onPress={copyInviteCode} style={styles.copyBtn}>
-            <Text style={styles.copyBtnText}>{copied ? "Copied" : "Copy"}</Text>
+            <Text style={styles.copyBtnText}>{copied ? "Copied" : "Share"}</Text>
           </Pressable>
         </View>
       )}
