@@ -106,7 +106,10 @@ export default function WeeklyPicksGrid({
 
             {weeks.map((week) => (
               <View key={week} style={[styles.row, styles.dataRow]}>
-                <View style={styles.weekCell}><Text style={styles.weekCellText}>Wk {week}</Text></View>
+                {/* Display-only: the grid's row label starts at 0, but `week`
+                    itself (used for all the data lookups below) still matches
+                    the real week number everywhere else in the app. */}
+                <View style={styles.weekCell}><Text style={styles.weekCellText}>Wk {week - 1}</Text></View>
                 {members.map((m) => {
                   const cfb = grid.get(cellKey(m.user_id, "cfb", week, 1));
                   const nfl = grid.get(cellKey(m.user_id, "nfl", week, 1));
