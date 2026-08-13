@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { View, Platform, Text, Pressable } from "react-native";
 import { Slot, usePathname, useRouter, Link } from "expo-router";
+import { useFonts, RobotoCondensed_900Black } from "@expo-google-fonts/roboto-condensed";
 import { supabase } from "@/lib/supabase";
 import { AlertHost } from "@/lib/alert";
 import { BrandLockup } from "@/components/Logo";
@@ -59,6 +60,10 @@ class ErrorBoundary extends React.Component<
 export default function RootLayout() {
   const router = useRouter();
   const pathname = usePathname();
+
+  // Loaded once, registered globally — used for big display headlines
+  // (e.g. the group name) that want something bolder than the system font.
+  useFonts({ RobotoCondensed_900Black });
 
   // Hide header on auth routes to reduce UI/routing races
   const onAuthRoute = pathname?.startsWith("/auth");

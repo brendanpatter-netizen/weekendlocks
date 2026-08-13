@@ -412,14 +412,17 @@ const styles = StyleSheet.create({
   pageOuter: { flex: 1 },
   page: { padding: 16, gap: 16 },
 
-  hero: { borderRadius: 24, padding: 20, gap: 4 },
+  hero: { borderRadius: 24, padding: 20, gap: 4, alignItems: "center" },
   heroEyebrow: {
-    alignSelf: "flex-start", backgroundColor: "rgba(255,255,255,0.18)",
+    alignSelf: "center", backgroundColor: "rgba(255,255,255,0.18)",
     borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3, marginBottom: 4,
   },
   heroEyebrowText: { fontSize: 11, fontWeight: "800", letterSpacing: 1, color: "white" },
-  heroTitle: { fontSize: 34, fontWeight: "900", color: "white", letterSpacing: -0.5 },
-  heroSubtitle: { fontSize: 13, color: "rgba(255,255,255,0.75)", marginBottom: 18 },
+  heroTitle: {
+    fontFamily: "RobotoCondensed_900Black", fontSize: 44, color: "white",
+    letterSpacing: 0.5, textAlign: "center", textTransform: "uppercase",
+  },
+  heroSubtitle: { fontSize: 13, color: "rgba(255,255,255,0.75)", marginBottom: 18, textAlign: "center" },
 
   inviteRow: {
     flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#F8FAFC",
@@ -433,7 +436,7 @@ const styles = StyleSheet.create({
   banner: { backgroundColor: "#FFF7ED", borderColor: "#FED7AA", borderWidth: 1, borderRadius: 8, padding: 10 },
   bannerText: { color: "#9A3412" },
 
-  pickCtaRow: { flexDirection: "row", gap: 14, flexWrap: "wrap" },
+  pickCtaRow: { flexDirection: "row", gap: 14, flexWrap: "wrap", alignSelf: "stretch" },
   pickCtaBtn: {
     flex: 1, minWidth: 130, alignItems: "center", gap: 6, backgroundColor: "white",
     borderRadius: 20, paddingVertical: 18, paddingHorizontal: 16,
@@ -452,7 +455,7 @@ const styles = StyleSheet.create({
 
   heroScheduleRow: {
     flexDirection: "row", alignItems: "center", marginTop: 16, paddingTop: 14,
-    borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.16)",
+    borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.16)", alignSelf: "stretch",
   },
   heroScheduleItem: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0 },
   heroScheduleDivider: { width: 1, height: 20, backgroundColor: "rgba(255,255,255,0.16)", marginHorizontal: 12 },
