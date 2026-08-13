@@ -70,6 +70,8 @@ async function resolveOrCreateGameId(opts: {
   return data as number | null;
 }
 
+type GroupPick = { user_id: string; display_name: string; market: string; team: string | null; line: string | null; slot: number };
+
 export default function CFBPicksPage() {
   const params = useLocalSearchParams<{ group?: string }>();
   const groupId = useMemo(
@@ -80,12 +82,22 @@ export default function CFBPicksPage() {
   const [tab, setTab] = useState<MarketKey>("spreads");
   // undefined = still resolving, null = resolved but no CFB week is live right now.
   const [openWeek, setOpenWeek] = useState<OpenWeek | null | undefined>(undefined);
+  // Only used to detect the CFB-before-NFL-opens gap weeks (CFB live, NFL not).
+  const [nflOpenWeek, setNflOpenWeek] = useState<OpenWeek | null | undefined>(undefined);
   useEffect(() => {
     let mounted = true;
     getOpenWeek("cfb").then((w) => { if (mounted) setOpenWeek(w); });
+    getOpenWeek("nfl").then((w) => { if (mounted) setNflOpenWeek(w); });
     return () => { mounted = false; };
   }, []);
   const week = openWeek?.week ?? 0;
+  // CFB runs ~2 weekends before the NFL season opens — during that gap,
+  // members pick two CFB locks instead of one CFB + one NFL, so the
+  // "2 picks a week" rhythm holds all season instead of dropping to 1.
+  const isGapWeek = !!openWeek && nflOpenWeek === null;
+
+  const [activeSlot, setActiveSlot] = useState<1 | 2>(1);
+  useEffect(() => { setActiveSlot(1); }, [week]);
 
   const { data: games, loading, error } = useOdds("americanfootball_ncaaf", week, {
     markets: ["spreads", "totals", "h2h"],
@@ -93,39 +105,50 @@ export default function CFBPicksPage() {
     oddsFormat: "american",
   });
 
-  const [currentPick, setCurrentPick] = useState<CurrentPick | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [myPicks, setMyPicks] = useState<Map<number, CurrentPick>>(new Map());
+  const [groupPicks, setGroupPicks] = useState<GroupPick[]>([]);
   const [saved, setSaved] = useState(false);
-  // outcome key ("market|team|line") -> the group member who already holds it.
-  const [takenBy, setTakenBy] = useState<Map<string, string>>(new Map());
 
-  // Load whatever pick already exists for this group + week (to highlight
-  // and enable "Clear my pick"), plus every other group member's current
-  // pick, so outcomes they've already locked in can be shown as taken.
+  const currentPick = myPicks.get(activeSlot) ?? null;
+  // outcome key ("market|team|line") -> who holds it. Your own OTHER slot's
+  // pick shows up here too (labeled distinctly) — you can't use the same
+  // outcome for both locks any more than two different members could.
+  const takenBy = useMemo(() => {
+    const taken = new Map<string, string>();
+    groupPicks.forEach((p) => {
+      if (p.user_id === userId && p.slot === activeSlot) return; // this is the slot you're viewing — that's "picked", not "taken"
+      const label = p.user_id === userId ? `Your Lock #${p.slot}` : p.display_name;
+      taken.set(`${p.market}|${p.team}|${p.line}`, label);
+    });
+    return taken;
+  }, [groupPicks, userId, activeSlot]);
+
+  // Load whatever picks already exist for this group + week (both slots, so
+  // the tab switch above is instant), plus every other group member's
+  // current picks, so outcomes they've already locked in can be shown as taken.
   async function loadPickState(uid: string) {
-    const [{ data: mine }, { data: groupPicks }] = await Promise.all([
-      supabase.from("picks").select("market, team, line")
-        .eq("user_id", uid).eq("group_id", groupId).eq("sport", "cfb").eq("week", week)
-        .maybeSingle(),
-      supabase.from("picks_feed").select("user_id, display_name, market, team, line")
+    const [{ data: mine }, { data: feed }] = await Promise.all([
+      supabase.from("picks").select("slot, market, team, line")
+        .eq("user_id", uid).eq("group_id", groupId).eq("sport", "cfb").eq("week", week),
+      supabase.from("picks_feed").select("user_id, display_name, market, team, line, slot")
         .eq("group_id", groupId).eq("sport", "cfb").eq("week", week),
     ]);
-    setCurrentPick((mine as CurrentPick) ?? null);
-    const taken = new Map<string, string>();
-    (groupPicks ?? []).forEach((p: any) => {
-      if (p.user_id === uid) return; // your own pick isn't "taken", it's just yours
-      taken.set(`${p.market}|${p.team}|${p.line}`, p.display_name);
-    });
-    setTakenBy(taken);
+    const bySlot = new Map<number, CurrentPick>();
+    (mine ?? []).forEach((r: any) => bySlot.set(r.slot, r));
+    setMyPicks(bySlot);
+    setGroupPicks((feed ?? []) as GroupPick[]);
   }
 
   useEffect(() => {
-    if (!groupId || !week) { setCurrentPick(null); setTakenBy(new Map()); return; }
+    if (!groupId || !week) { setMyPicks(new Map()); setGroupPicks([]); return; }
     let mounted = true;
     (async () => {
       const { data: auth } = await supabase.auth.getUser();
       const user = auth?.user;
       if (!user) return;
       if (!mounted) return;
+      setUserId(user.id);
       await loadPickState(user.id);
     })();
     return () => { mounted = false; };
@@ -160,6 +183,7 @@ export default function CFBPicksPage() {
       group_id: groupId,
       sport: "cfb" as const,
       week,
+      slot: activeSlot,
       game_id: gameId,
       market,
       team,
@@ -171,18 +195,17 @@ export default function CFBPicksPage() {
 
     const { error: upsertErr } = await supabase
       .from("picks")
-      .upsert(row, { onConflict: "group_id,user_id,sport,week", ignoreDuplicates: false });
+      .upsert(row, { onConflict: "group_id,user_id,sport,week,slot", ignoreDuplicates: false });
 
     if (upsertErr) {
       if (upsertErr.code === "23505" && upsertErr.message?.includes("picks_unique_outcome_per_group")) {
-        alert("Already taken", "Another member of your group just locked in that pick — choose a different one.");
+        alert("Already taken", "Another member of your group (or your other lock) already has that pick — choose a different one.");
         await loadPickState(user.id);
         return;
       }
       alert("Could not save pick", upsertErr.message);
       return;
     }
-    setCurrentPick({ market, team, line });
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
     await loadPickState(user.id);
@@ -197,9 +220,9 @@ export default function CFBPicksPage() {
       .eq("user_id", user.id)
       .eq("group_id", groupId)
       .eq("sport", "cfb")
-      .eq("week", week);
+      .eq("week", week)
+      .eq("slot", activeSlot);
     if (delErr) { alert("Could not clear pick", delErr.message); return; }
-    setCurrentPick(null);
     await loadPickState(user.id);
   }
 
@@ -215,10 +238,31 @@ export default function CFBPicksPage() {
         </View>
       )}
 
+      {isGapWeek && (
+        <View style={styles.gapNotice}>
+          <Text style={styles.gapNoticeText}>
+            NFL hasn't opened yet — pick two CFB locks this week instead of one CFB + one NFL.
+          </Text>
+        </View>
+      )}
+
+      {groupId && week > 0 && isGapWeek && (
+        <View style={styles.slotRow}>
+          {([1, 2] as const).map((s) => (
+            <Pressable key={s} onPress={() => setActiveSlot(s)}
+              style={[styles.slotTab, activeSlot === s && styles.slotTabActive]}>
+              <Text style={[styles.slotTabText, activeSlot === s && styles.slotTabTextActive]}>
+                Lock #{s}{myPicks.get(s) ? " ✓" : ""}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+
       {groupId && week > 0 && (
         <View style={styles.pickStatus}>
           <Text style={styles.pickStatusText}>
-            {saved ? "✓ Pick saved: " : "Your pick: "}
+            {saved ? "✓ Pick saved: " : isGapWeek ? `Lock #${activeSlot}: ` : "Your pick: "}
             {pickLabel(currentPick) ?? "none yet"}
           </Text>
           {currentPick && (
@@ -344,4 +388,11 @@ const styles = StyleSheet.create({
   },
   noLiveWeekTitle: { fontWeight: "800", fontSize: 15, color: "#0F172A" },
   noLiveWeekBody: { color: "#64748B", fontSize: 13, textAlign: "center" },
+  gapNotice: { backgroundColor: "#EFF6FF", borderColor: "#BFDBFE", borderWidth: 1, borderRadius: 8, padding: 10 },
+  gapNoticeText: { color: "#1D4ED8", fontSize: 13 },
+  slotRow: { flexDirection: "row", gap: 8 },
+  slotTab: { flex: 1, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: "#CBD5E1", backgroundColor: "#F1F5F9", alignItems: "center" },
+  slotTabActive: { backgroundColor: "#0B735F", borderColor: "#0B735F" },
+  slotTabText: { fontWeight: "800", color: "#0F172A", fontSize: 13 },
+  slotTabTextActive: { color: "white" },
 });

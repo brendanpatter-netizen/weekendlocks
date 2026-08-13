@@ -17,8 +17,8 @@ type Member = { user_id: string; display_name: string };
 const WEEK_COL_WIDTH = 56;
 const PICK_COL_WIDTH = 152;
 
-function cellKey(userId: string, sport: "nfl" | "cfb", week: number) {
-  return `${userId}|${sport}|${week}`;
+function cellKey(userId: string, sport: "nfl" | "cfb", week: number, slot: number) {
+  return `${userId}|${sport}|${week}|${slot}`;
 }
 
 export default function WeeklyPicksGrid({
@@ -34,7 +34,7 @@ export default function WeeklyPicksGrid({
     (async () => {
       setLoading(true);
       const [{ data: picks }, { data: results }] = await Promise.all([
-        supabase.from("picks").select("id, user_id, sport, week, market, team, line").eq("group_id", groupId),
+        supabase.from("picks").select("id, user_id, sport, week, slot, market, team, line").eq("group_id", groupId),
         supabase.from("pick_results").select("pick_id, result").eq("group_id", groupId),
       ]);
       if (!mounted) return;
@@ -45,7 +45,7 @@ export default function WeeklyPicksGrid({
 
       (picks ?? []).forEach((p: any) => {
         const result = resultByPickId.get(p.id) ?? null;
-        map.set(cellKey(p.user_id, p.sport, p.week), { label: pickLabel(p), result });
+        map.set(cellKey(p.user_id, p.sport, p.week, p.slot ?? 1), { label: pickLabel(p), result });
         if (result) {
           const cur = recordAcc.get(p.user_id) ?? { ...EMPTY_RECORD };
           if (result === "loss") cur.losses += 1;
@@ -108,12 +108,17 @@ export default function WeeklyPicksGrid({
               <View key={week} style={[styles.row, styles.dataRow]}>
                 <View style={styles.weekCell}><Text style={styles.weekCellText}>Wk {week}</Text></View>
                 {members.map((m) => {
-                  const cfb = grid.get(cellKey(m.user_id, "cfb", week));
-                  const nfl = grid.get(cellKey(m.user_id, "nfl", week));
+                  const cfb = grid.get(cellKey(m.user_id, "cfb", week, 1));
+                  const nfl = grid.get(cellKey(m.user_id, "nfl", week, 1));
+                  // Weeks before the NFL season opens have no NFL pick to show —
+                  // fall back to a second CFB lock in that slot instead (the
+                  // "2 picks a week" gap-week rule from the picks page).
+                  const cfbLock2 = grid.get(cellKey(m.user_id, "cfb", week, 2));
+                  const secondCell = nfl ?? cfbLock2;
                   return (
                     <View key={m.user_id} style={{ flexDirection: "row" }}>
                       <PickCell cell={cfb} />
-                      <PickCell cell={nfl} />
+                      <PickCell cell={secondCell} isSecondCfbLock={!nfl && !!cfbLock2} />
                     </View>
                   );
                 })}
@@ -142,13 +147,16 @@ export default function WeeklyPicksGrid({
   );
 }
 
-function PickCell({ cell }: { cell?: Cell }) {
+function PickCell({ cell, isSecondCfbLock }: { cell?: Cell; isSecondCfbLock?: boolean }) {
   if (!cell || !cell.label) {
     return <View style={[styles.pickCell, styles.cellEmpty]}><Text style={styles.cellEmptyText}>—</Text></View>;
   }
   const resultStyle = cell.result === "loss" ? styles.cellLoss : cell.result ? styles.cellWin : styles.cellPending;
   return (
     <View style={[styles.pickCell, resultStyle]}>
+      {isSecondCfbLock && (
+        <View style={styles.secondLockBadge}><Text style={styles.secondLockBadgeText}>2</Text></View>
+      )}
       <Text style={styles.cellText}>{cell.label}</Text>
     </View>
   );
@@ -183,8 +191,14 @@ const styles = StyleSheet.create({
   pickCell: {
     width: PICK_COL_WIDTH - 2, marginLeft: 1, marginVertical: 1, borderRadius: 6,
     paddingVertical: 7, paddingHorizontal: 8, justifyContent: "center", alignItems: "center",
+    position: "relative",
   },
   cellText: { fontSize: 11, fontWeight: "700", textAlign: "center", lineHeight: 14 },
+  secondLockBadge: {
+    position: "absolute", top: 2, right: 2, width: 13, height: 13, borderRadius: 999,
+    backgroundColor: "rgba(15,23,42,0.35)", alignItems: "center", justifyContent: "center",
+  },
+  secondLockBadgeText: { fontSize: 8, fontWeight: "800", color: "white" },
   cellWin: { backgroundColor: "#DCFCE7" },
   cellLoss: { backgroundColor: "#FEE2E2" },
   cellPending: { backgroundColor: "#F1F5F9" },

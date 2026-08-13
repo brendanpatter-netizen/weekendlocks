@@ -179,6 +179,7 @@ export default function NFLPicksPage() {
       group_id: groupId,
       sport: "nfl" as const,
       week,
+      slot: 1, // NFL only ever has one lock a week — CFB is the one with a 2nd slot, for the gap weeks before NFL opens
       game_id: gameId,
       market,
       team,
@@ -190,7 +191,7 @@ export default function NFLPicksPage() {
 
     const { error: upsertErr } = await supabase
       .from("picks")
-      .upsert(row, { onConflict: "group_id,user_id,sport,week", ignoreDuplicates: false });
+      .upsert(row, { onConflict: "group_id,user_id,sport,week,slot", ignoreDuplicates: false });
 
     if (upsertErr) {
       if (upsertErr.code === "23505" && upsertErr.message?.includes("picks_unique_outcome_per_group")) {
@@ -216,7 +217,8 @@ export default function NFLPicksPage() {
       .eq("user_id", user.id)
       .eq("group_id", groupId)
       .eq("sport", "nfl")
-      .eq("week", week);
+      .eq("week", week)
+      .eq("slot", 1);
     if (delErr) { alert("Could not clear pick", delErr.message); return; }
     setCurrentPick(null);
     await loadPickState(user.id);
