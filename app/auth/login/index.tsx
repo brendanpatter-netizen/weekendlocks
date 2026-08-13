@@ -102,7 +102,7 @@ export default function Login() {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email: addr, password });
       if (error) throw error;
-      router.replace("/picks/page");
+      router.replace("/");
     } catch (e: any) {
       console.error(e);
       setSafe(setFatal, e?.message ?? "Sign in failed.");

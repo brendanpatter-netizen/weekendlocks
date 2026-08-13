@@ -41,6 +41,11 @@ function rankValue(r: SeasonRecord): number {
   return decided === 0 ? -1 : r.wins / decided;
 }
 
+function formatWindow(w: OpenWeek): string {
+  const fmt = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return `${fmt(w.opensAt)} – ${fmt(w.closesAt)}`;
+}
+
 // NFL runs 18 weeks, CFB 15 — one shared selector covers both; CFB just has
 // no games/picks in the trailing weeks, which shows as a normal empty state.
 const WEEK_COUNT = 18;
@@ -244,6 +249,27 @@ export default function GroupDashboardPage() {
         </View>
       </View>
 
+      <View style={styles.liveWeekCard}>
+        <View style={styles.liveWeekRow}>
+          <View style={[styles.liveWeekDot, nflOpenWeek ? styles.liveDotOn : styles.liveDotOff]} />
+          <Text style={styles.liveWeekLeague}>NFL</Text>
+          <Text style={styles.liveWeekText}>
+            {nflOpenWeek
+              ? `Week ${nflOpenWeek.week} is live · ${formatWindow(nflOpenWeek)}`
+              : nflOpenWeek === null ? "No live week right now" : "Checking…"}
+          </Text>
+        </View>
+        <View style={styles.liveWeekRow}>
+          <View style={[styles.liveWeekDot, cfbOpenWeek ? styles.liveDotOn : styles.liveDotOff]} />
+          <Text style={styles.liveWeekLeague}>CFB</Text>
+          <Text style={styles.liveWeekText}>
+            {cfbOpenWeek
+              ? `Week ${cfbOpenWeek.week} is live · ${formatWindow(cfbOpenWeek)}`
+              : cfbOpenWeek === null ? "No live week right now" : "Checking…"}
+          </Text>
+        </View>
+      </View>
+
       {inviteCode && (
         <View style={styles.inviteRow}>
           <Text style={styles.inviteLabel}>Invite code</Text>
@@ -380,6 +406,17 @@ const styles = StyleSheet.create({
   heroEyebrowText: { fontSize: 11, fontWeight: "800", letterSpacing: 1, color: "white" },
   heroTitle: { fontSize: 34, fontWeight: "900", color: "white", letterSpacing: -0.5 },
   heroSubtitle: { fontSize: 13, color: "rgba(255,255,255,0.75)", marginBottom: 18 },
+
+  liveWeekCard: {
+    backgroundColor: "#F8FAFC", borderWidth: 1, borderColor: "#E2E8F0",
+    borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, gap: 6,
+  },
+  liveWeekRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  liveWeekDot: { width: 8, height: 8, borderRadius: 999 },
+  liveDotOn: { backgroundColor: "#22C55E" },
+  liveDotOff: { backgroundColor: "#CBD5E1" },
+  liveWeekLeague: { fontSize: 12, fontWeight: "800", color: "#0F172A", width: 34 },
+  liveWeekText: { fontSize: 13, color: "#475569", flex: 1 },
 
   inviteRow: {
     flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#F8FAFC",

@@ -15,7 +15,7 @@ export default function Callback() {
       if (settledRef.current) return;
       settledRef.current = true;
       if (hasSession) {
-        router.replace("/picks/page"); // or "/" if you prefer
+        router.replace("/");
       } else {
         alert("Sign-in link didn't work", "That link may have expired or already been used — try signing in again.");
         router.replace("/auth/login");
