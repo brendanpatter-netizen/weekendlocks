@@ -22,3 +22,20 @@ export async function getOpenWeek(league: "nfl" | "cfb"): Promise<OpenWeek | nul
   if (error || !data) return null;
   return { week: data.week_num, opensAt: data.opens_at, closesAt: data.closes_at };
 }
+
+// For when nothing's live right now — lets the UI say "opens Sep 8" instead
+// of just a dead-end "not live."
+export async function getNextWeek(league: "nfl" | "cfb"): Promise<OpenWeek | null> {
+  const nowIso = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("weeks")
+    .select("week_num, opens_at, closes_at")
+    .eq("league", league)
+    .gt("opens_at", nowIso)
+    .order("opens_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return { week: data.week_num, opensAt: data.opens_at, closesAt: data.closes_at };
+}

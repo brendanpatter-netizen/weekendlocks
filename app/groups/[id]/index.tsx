@@ -12,7 +12,7 @@ import { avatarColor, initials } from "@/lib/avatar";
 import { logoUri } from "@/lib/teamLogos";
 import { alert } from "@/lib/alert";
 import { recordLabel, winPct, EMPTY_RECORD, type SeasonRecord } from "@/lib/records";
-import { getOpenWeek, type OpenWeek } from "@/lib/openWeek";
+import { getOpenWeek, getNextWeek, type OpenWeek } from "@/lib/openWeek";
 import GroupChat from "@/components/GroupChat";
 import WeeklyPicksGrid from "@/components/WeeklyPicksGrid";
 
@@ -41,9 +41,11 @@ function rankValue(r: SeasonRecord): number {
   return decided === 0 ? -1 : r.wins / decided;
 }
 
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 function formatWindow(w: OpenWeek): string {
-  const fmt = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  return `${fmt(w.opensAt)} – ${fmt(w.closesAt)}`;
+  return `${formatDate(w.opensAt)} – ${formatDate(w.closesAt)}`;
 }
 
 // NFL runs 18 weeks, CFB 15 — one shared selector covers both; CFB just has
@@ -55,13 +57,22 @@ export default function GroupDashboardPage() {
   const groupId = useMemo(() => (Array.isArray(id) ? id?.[0] : id) ?? "", [id]);
 
   // NFL and CFB open/close on different real-world dates, so each gets its
-  // own live week — undefined while resolving, null if nothing's live.
+  // own live week — undefined while resolving, null if nothing's live. When
+  // nothing's live, nextWeek gives a "opens {date}" hint instead of a dead end.
   const [nflOpenWeek, setNflOpenWeek] = useState<OpenWeek | null | undefined>(undefined);
   const [cfbOpenWeek, setCfbOpenWeek] = useState<OpenWeek | null | undefined>(undefined);
+  const [nflNextWeek, setNflNextWeek] = useState<OpenWeek | null>(null);
+  const [cfbNextWeek, setCfbNextWeek] = useState<OpenWeek | null>(null);
   useEffect(() => {
     let mounted = true;
-    getOpenWeek("nfl").then((w) => { if (mounted) setNflOpenWeek(w); });
-    getOpenWeek("cfb").then((w) => { if (mounted) setCfbOpenWeek(w); });
+    (async () => {
+      const [nfl, cfb] = await Promise.all([getOpenWeek("nfl"), getOpenWeek("cfb")]);
+      if (!mounted) return;
+      setNflOpenWeek(nfl);
+      setCfbOpenWeek(cfb);
+      if (!nfl) getNextWeek("nfl").then((w) => { if (mounted) setNflNextWeek(w); });
+      if (!cfb) getNextWeek("cfb").then((w) => { if (mounted) setCfbNextWeek(w); });
+    })();
     return () => { mounted = false; };
   }, []);
 
@@ -226,9 +237,9 @@ export default function GroupDashboardPage() {
             onPress={() => router.push({ pathname: "/picks/page", params: { group: groupId } } as Href)}
           >
             <View style={[styles.pickCtaIcon, { backgroundColor: "#E1F5EE" }]}>
-              <Image source={{ uri: NFL_LEAGUE_LOGO }} style={styles.pickCtaLogo} resizeMode="contain" />
+              <Image source={{ uri: NFL_LEAGUE_LOGO }} style={[styles.pickCtaLogo, !nflOpenWeek && styles.pickCtaLogoDisabled]} resizeMode="contain" />
             </View>
-            <Text style={styles.pickCtaTitle}>NFL</Text>
+            <Text style={[styles.pickCtaTitle, !nflOpenWeek && styles.pickCtaTitleDisabled]}>NFL</Text>
             <Text style={styles.pickCtaSub}>
               {nflOpenWeek ? `Week ${nflOpenWeek.week} now live` : nflOpenWeek === null ? "Not live yet" : "Loading…"}
             </Text>
@@ -239,34 +250,37 @@ export default function GroupDashboardPage() {
             onPress={() => router.push({ pathname: "/picks/college", params: { group: groupId } } as Href)}
           >
             <View style={[styles.pickCtaIcon, { backgroundColor: "#E6F1FB" }]}>
-              <Image source={{ uri: NCAA_LEAGUE_LOGO }} style={styles.pickCtaLogo} resizeMode="contain" />
+              <Image source={{ uri: NCAA_LEAGUE_LOGO }} style={[styles.pickCtaLogo, !cfbOpenWeek && styles.pickCtaLogoDisabled]} resizeMode="contain" />
             </View>
-            <Text style={styles.pickCtaTitle}>CFB</Text>
+            <Text style={[styles.pickCtaTitle, !cfbOpenWeek && styles.pickCtaTitleDisabled]}>CFB</Text>
             <Text style={styles.pickCtaSub}>
               {cfbOpenWeek ? `Week ${cfbOpenWeek.week} now live` : cfbOpenWeek === null ? "Not live yet" : "Loading…"}
             </Text>
           </Pressable>
         </View>
-      </View>
 
-      <View style={styles.liveWeekCard}>
-        <View style={styles.liveWeekRow}>
-          <View style={[styles.liveWeekDot, nflOpenWeek ? styles.liveDotOn : styles.liveDotOff]} />
-          <Text style={styles.liveWeekLeague}>NFL</Text>
-          <Text style={styles.liveWeekText}>
-            {nflOpenWeek
-              ? `Week ${nflOpenWeek.week} is live · ${formatWindow(nflOpenWeek)}`
-              : nflOpenWeek === null ? "No live week right now" : "Checking…"}
-          </Text>
-        </View>
-        <View style={styles.liveWeekRow}>
-          <View style={[styles.liveWeekDot, cfbOpenWeek ? styles.liveDotOn : styles.liveDotOff]} />
-          <Text style={styles.liveWeekLeague}>CFB</Text>
-          <Text style={styles.liveWeekText}>
-            {cfbOpenWeek
-              ? `Week ${cfbOpenWeek.week} is live · ${formatWindow(cfbOpenWeek)}`
-              : cfbOpenWeek === null ? "No live week right now" : "Checking…"}
-          </Text>
+        <View style={styles.heroScheduleRow}>
+          <View style={styles.heroScheduleItem}>
+            <Image source={{ uri: NFL_LEAGUE_LOGO }} style={styles.heroScheduleLogo} resizeMode="contain" />
+            <Text style={styles.heroScheduleText} numberOfLines={1}>
+              {nflOpenWeek
+                ? `Wk ${nflOpenWeek.week} · ${formatWindow(nflOpenWeek)}`
+                : nflNextWeek
+                ? `Opens ${formatDate(nflNextWeek.opensAt)}`
+                : nflOpenWeek === null ? "Not live" : "Checking…"}
+            </Text>
+          </View>
+          <View style={styles.heroScheduleDivider} />
+          <View style={styles.heroScheduleItem}>
+            <Image source={{ uri: NCAA_LEAGUE_LOGO }} style={styles.heroScheduleLogo} resizeMode="contain" />
+            <Text style={styles.heroScheduleText} numberOfLines={1}>
+              {cfbOpenWeek
+                ? `Wk ${cfbOpenWeek.week} · ${formatWindow(cfbOpenWeek)}`
+                : cfbNextWeek
+                ? `Opens ${formatDate(cfbNextWeek.opensAt)}`
+                : cfbOpenWeek === null ? "Not live" : "Checking…"}
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -407,17 +421,6 @@ const styles = StyleSheet.create({
   heroTitle: { fontSize: 34, fontWeight: "900", color: "white", letterSpacing: -0.5 },
   heroSubtitle: { fontSize: 13, color: "rgba(255,255,255,0.75)", marginBottom: 18 },
 
-  liveWeekCard: {
-    backgroundColor: "#F8FAFC", borderWidth: 1, borderColor: "#E2E8F0",
-    borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, gap: 6,
-  },
-  liveWeekRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  liveWeekDot: { width: 8, height: 8, borderRadius: 999 },
-  liveDotOn: { backgroundColor: "#22C55E" },
-  liveDotOff: { backgroundColor: "#CBD5E1" },
-  liveWeekLeague: { fontSize: 12, fontWeight: "800", color: "#0F172A", width: 34 },
-  liveWeekText: { fontSize: 13, color: "#475569", flex: 1 },
-
   inviteRow: {
     flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#F8FAFC",
     borderWidth: 1, borderColor: "#E2E8F0", borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12,
@@ -437,11 +440,24 @@ const styles = StyleSheet.create({
     shadowColor: "#000", shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.18, shadowRadius: 10, elevation: 4,
   },
-  pickCtaBtnDisabled: { opacity: 0.5 },
+  // Flat + muted instead of opacity: opacity on a solid card blends it with
+  // whatever's behind (the dark hero), turning white into a muddy gray-purple.
+  pickCtaBtnDisabled: { backgroundColor: "#EBEDF2", shadowOpacity: 0, elevation: 0 },
   pickCtaIcon: { width: 48, height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center", marginBottom: 4 },
   pickCtaLogo: { width: 30, height: 30 },
+  pickCtaLogoDisabled: { opacity: 0.5 },
   pickCtaTitle: { fontSize: 17, fontWeight: "800", color: "#0F172A" },
+  pickCtaTitleDisabled: { color: "#94A3B8" },
   pickCtaSub: { fontSize: 12, color: "#64748B", fontWeight: "600" },
+
+  heroScheduleRow: {
+    flexDirection: "row", alignItems: "center", marginTop: 16, paddingTop: 14,
+    borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.16)",
+  },
+  heroScheduleItem: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0 },
+  heroScheduleDivider: { width: 1, height: 20, backgroundColor: "rgba(255,255,255,0.16)", marginHorizontal: 12 },
+  heroScheduleLogo: { width: 18, height: 18 },
+  heroScheduleText: { fontSize: 12, fontWeight: "600", color: "rgba(255,255,255,0.85)", flexShrink: 1 },
 
   card: { backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12, gap: 4 },
   cardTitle: { fontWeight: "800" },
