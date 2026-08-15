@@ -1,13 +1,18 @@
 {
   "version": 2,
   "builds": [
-    { "src": "package.json", "use": "@vercel/static-build", "config": { "distDir": "dist" } }
+    { "src": "package.json", "use": "@vercel/static-build", "config": { "distDir": "dist" } },
+    { "src": "api/*.js", "use": "@vercel/node" }
   ],
   "routes": [
     { "src": "/favicon.ico", "dest": "/favicon.ico" },
     { "src": "/assets/(.*)", "dest": "/assets/$1" },
     { "src": "/_expo/(.*)", "dest": "/_expo/$1" },
+    { "src": "/api/(.*)", "dest": "/api/$1" },
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
+  ],
+  "crons": [
+    { "path": "/api/generate-weekly-recaps", "schedule": "0 12 * * 2" }
   ]
 }

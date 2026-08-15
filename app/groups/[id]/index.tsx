@@ -15,6 +15,7 @@ import { recordLabel, winPct, EMPTY_RECORD, type SeasonRecord } from "@/lib/reco
 import { getOpenWeek, getNextWeek, type OpenWeek } from "@/lib/openWeek";
 import GroupChat from "@/components/GroupChat";
 import WeeklyPicksGrid from "@/components/WeeklyPicksGrid";
+import WeeklyRecap from "@/components/WeeklyRecap";
 
 // null for Over/Under totals picks (no single team) or unmapped names.
 function pickLogo(team: string | null | undefined, sport: "nfl" | "ncaaf"): string | null {
@@ -360,6 +361,12 @@ export default function GroupDashboardPage() {
             )}
             <Text style={styles.note}>Records update when you tap "Refresh scores" above — pushes count as a win.</Text>
           </View>
+
+          <WeeklyRecap
+            groupId={groupId}
+            members={members.map((m) => ({ user_id: m.user_id, display_name: m.display_name }))}
+            refreshKey={dataVersion}
+          />
 
           <WeeklyPicksGrid
             groupId={groupId}
