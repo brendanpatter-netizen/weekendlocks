@@ -229,7 +229,7 @@ export default function CFBPicksPage() {
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, gap: 12, paddingBottom: 24 }}>
       <Text style={{ fontWeight: "800", fontSize: 18 }}>
-        College Football{openWeek ? ` — Week ${openWeek.week} is live` : ""}
+        🔒 This Weekend's CFB Locks{openWeek ? ` — Week ${openWeek.week}` : ""}
       </Text>
 
       {!groupId && (

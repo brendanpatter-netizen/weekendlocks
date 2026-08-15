@@ -228,7 +228,7 @@ export default function NFLPicksPage() {
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, gap: 12, paddingBottom: 24 }}>
       <View style={{ flexDirection: "row", alignItems: "center" }}>
         <Text style={{ fontWeight: "800", fontSize: 18, flex: 1 }}>
-          NFL{openWeek ? ` — Week ${openWeek.week} is live` : ""}
+          🔒 This Weekend's NFL Locks{openWeek ? ` — Week ${openWeek.week}` : ""}
         </Text>
         <Pressable
           onPress={() => router.push({ pathname: "/picks/college", params: { group: groupId ?? undefined } } as Href)}

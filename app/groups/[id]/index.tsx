@@ -11,7 +11,7 @@ import { refreshScoresForSport } from "@/lib/scores";
 import { avatarColor, initials } from "@/lib/avatar";
 import { logoUri } from "@/lib/teamLogos";
 import { alert } from "@/lib/alert";
-import { recordLabel, winPct, EMPTY_RECORD, type SeasonRecord } from "@/lib/records";
+import { recordLabel, winPct, recordVibe, EMPTY_RECORD, type SeasonRecord } from "@/lib/records";
 import { getOpenWeek, getNextWeek, type OpenWeek } from "@/lib/openWeek";
 import GroupChat from "@/components/GroupChat";
 import WeeklyPicksGrid from "@/components/WeeklyPicksGrid";
@@ -320,7 +320,7 @@ export default function GroupDashboardPage() {
         <>
         <View style={styles.card}>
             <View style={styles.leaderboardHeader}>
-              <Text style={styles.cardTitle}>Group leaderboard</Text>
+              <Text style={styles.cardTitle}>🏆 The Standings</Text>
               <Pressable onPress={handleRefreshScores} disabled={refreshingScores} style={styles.refreshBtn}>
                 <Text style={styles.refreshBtnText}>{refreshingScores ? "Checking…" : "Refresh scores"}</Text>
               </Pressable>
@@ -341,6 +341,7 @@ export default function GroupDashboardPage() {
                   const color = avatarColor(item.user_id);
                   const overallRec = recordLabel(item.overall);
                   const overallPct = winPct(item.overall);
+                  const vibe = recordVibe(item.overall);
                   return (
                     <View style={styles.tableRow}>
                       <Text style={styles.rankText}>{index + 1}</Text>
@@ -349,6 +350,7 @@ export default function GroupDashboardPage() {
                           <Text style={[styles.avatarText, { color: color.fg }]}>{initials(item.display_name)}</Text>
                         </View>
                         <Text style={styles.userName} numberOfLines={1}>{item.display_name}</Text>
+                        {vibe && <Text style={styles.vibeChip}>{vibe}</Text>}
                       </View>
                       <View style={styles.overallCell}>
                         <Text style={styles.overallRecord}>{overallRec ?? "—"}</Text>
@@ -397,7 +399,7 @@ export default function GroupDashboardPage() {
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text style={styles.feedTitle}>
                           <Text style={{ fontWeight: "700" }}>{item.display_name}</Text>
-                          {" "}{item.was_replaced ? "replaced their" : "picked"} {item.team ?? "a pick"}
+                          {" "}{item.was_replaced ? "swapped in" : "locked in"} {item.team ?? "a pick"}
                           {item.line ? ` ${item.line}` : ""}
                         </Text>
                         <Text style={styles.feedSub}>
@@ -507,6 +509,7 @@ const styles = StyleSheet.create({
   avatar: { width: 32, height: 32, borderRadius: 999, alignItems: "center", justifyContent: "center" },
   avatarText: { fontSize: 12, fontWeight: "700" },
   userName: { fontWeight: "700", flexShrink: 1 },
+  vibeChip: { fontSize: 11, fontWeight: "700", color: "#64748B", marginLeft: 2 },
 
   overallCell: { width: 72, alignItems: "flex-end" },
   overallRecord: { fontSize: 13, fontWeight: "800", color: "#0F172A" },
