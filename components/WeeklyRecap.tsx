@@ -32,10 +32,10 @@ export default function WeeklyRecap({
 
       const latestWeek = data?.[0]?.week_of ?? null;
       const nameById = new Map(members.map((m) => [m.user_id, m.display_name]));
-      // Countdown order — worst record first, building up to the leader.
+      // #1 first, descending from there.
       const rows = (data ?? [])
         .filter((r: any) => r.week_of === latestWeek)
-        .sort((a: any, b: any) => (b.rank ?? 0) - (a.rank ?? 0))
+        .sort((a: any, b: any) => (a.rank ?? 0) - (b.rank ?? 0))
         .map((r: any) => ({
           user_id: r.user_id, recap_text: r.recap_text, rank: r.rank ?? null,
           display_name: nameById.get(r.user_id) ?? "Someone",
