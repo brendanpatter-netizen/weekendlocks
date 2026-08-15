@@ -66,7 +66,7 @@ export default function WeeklyPicksGrid({
   return (
     <View style={styles.card}>
       <View style={styles.header}>
-        <Text style={styles.cardTitle}>Weekly picks</Text>
+        <Text style={styles.cardTitle}>🔒 Weekend Locks</Text>
         <View style={styles.legend}>
           <View style={[styles.legendDot, styles.cellWin]} /><Text style={styles.legendText}>Win</Text>
           <View style={[styles.legendDot, styles.cellLoss]} /><Text style={styles.legendText}>Loss</Text>
