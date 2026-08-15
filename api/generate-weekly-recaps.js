@@ -123,6 +123,23 @@ function currentWeekOf() {
   return monday.toISOString().slice(0, 10);
 }
 
+// Same "decided=0 sinks to bottom" ranking rule as the group page's
+// leaderboard (rankValue in app/groups/[id]/index.tsx), so the countdown
+// order matches what members already see there.
+function rankValue(record) {
+  const decided = record.wins + record.losses;
+  return decided === 0 ? -1 : record.wins / decided;
+}
+
+// Standings rank: 1 = best record, N = worst. Ties broken by name so the
+// order is stable across runs.
+function assignRanks(members) {
+  const sorted = [...members].sort(
+    (a, b) => rankValue(b.overallRecord) - rankValue(a.overallRecord) || a.name.localeCompare(b.name)
+  );
+  sorted.forEach((m, i) => { m.rank = i + 1; });
+}
+
 function computeStreak(decidedResultsAsc) {
   if (decidedResultsAsc.length === 0) return null;
   const last = decidedResultsAsc[decidedResultsAsc.length - 1];
@@ -213,19 +230,27 @@ async function buildGroupPayload(supabase, group, closedWeeks) {
     };
   });
 
+  assignRanks(members);
+
   return { members, nameToId: new Map(members.map((m) => [m.name, m.user_id])) };
 }
 
 async function generateRecapsForGroup(anthropic, groupName, members) {
   const memberNames = members.map((m) => m.name);
-  const dataBlock = members.map((m) => ({
-    name: m.name,
-    this_week_picks: m.thisWeekPicks.length
-      ? m.thisWeekPicks.map((p) => `${p.sport.toUpperCase()} ${p.market} — ${p.team ?? "?"} ${p.line ?? ""} (${p.result})`.trim())
-      : ["no pick made this week"],
-    overall_record: `${m.overallRecord.wins}-${m.overallRecord.losses}`,
-    streak: m.streak ? `${m.streak.length}-game ${m.streak.type} streak` : "no decided streak yet",
-  }));
+  const totalMembers = members.length;
+  // Worst to best (highest rank number first) -- a power-rankings countdown
+  // builds toward the leader, so the data arrives in that order too.
+  const dataBlock = [...members]
+    .sort((a, b) => b.rank - a.rank)
+    .map((m) => ({
+      rank: `#${m.rank} of ${totalMembers}`,
+      name: m.name,
+      this_week_picks: m.thisWeekPicks.length
+        ? m.thisWeekPicks.map((p) => `${p.sport.toUpperCase()} ${p.market} — ${p.team ?? "?"} ${p.line ?? ""} (${p.result})`.trim())
+        : ["no pick made this week"],
+      overall_record: `${m.overallRecord.wins}-${m.overallRecord.losses}`,
+      streak: m.streak ? `${m.streak.length}-game ${m.streak.type} streak` : "no decided streak yet",
+    }));
 
   const tool = {
     name: "submit_recaps",
@@ -254,14 +279,22 @@ async function generateRecapsForGroup(anthropic, groupName, members) {
     max_tokens: 400 + members.length * 200,
     system:
       "You are the trash-talking commissioner bot for a friend group's football pick'em app called WeekendLocks. " +
-      "Your job every week is to roast each member based on their picks and season record. Go FULL SAVAGE — " +
-      "no-holds-barred, ruthless trash talk between friends, the kind of ribbing a real friend group would send " +
-      "in a group chat. Reference specific teams, lines, and streaks by name so it's clearly about THEIR week. " +
-      "Someone with no pick this week should get roasted for chickening out. Someone on a hot streak should get " +
-      "a backhanded compliment. Someone on a cold streak should get buried. Keep it about the picks and the " +
-      "sport — never punch at anything outside football/gambling performance (no real-world tragedy, health, " +
-      "appearance, etc). 2-4 sentences per person. Use the submit_recaps tool with one entry per member, using " +
-      "their exact name as given.",
+      "Every week you write that group's Power Rankings — a countdown roast, worst record to best, in the style " +
+      "of a sports-blog power-rankings column. Go FULL SAVAGE — no-holds-barred, ruthless trash talk between " +
+      "friends, the kind of ribbing a real friend group would send in a group chat. Member data is given to you " +
+      "already ordered worst to best; write each person's entry in that same order, referencing their rank " +
+      "('#4 of 6', dead last, clawing up the board, etc) alongside specific teams, lines, and streaks so it's " +
+      "unmistakably about THEIR week. Someone with no pick this week should get roasted hardest of all for " +
+      "chickening out. Someone near the bottom gets buried without mercy. Someone on a hot streak gets a " +
+      "backhanded compliment. The person in first place still gets clowned — power rankings never let the " +
+      "leader off easy, needle their luck or their soft schedule rather than praising them straight. " +
+      "Ground every joke in the actual pick/record/streak data given — never invent personal facts, incidents, " +
+      "or backstory about someone that isn't in that data, and never use slurs or punch at anything outside " +
+      "football/gambling performance (no real-world tragedy, health, appearance, sexuality, etc). 2-4 sentences " +
+      "per person. The app already displays each person's name, avatar, and rank badge right next to your text — " +
+      "do NOT start your entry with their name, a '#N' prefix, or their record as a label; weave the rank and " +
+      "stats into the roast itself instead. Use the submit_recaps tool with one entry per member, using their " +
+      "exact name as given.",
     tools: [tool],
     tool_choice: { type: "tool", name: "submit_recaps" },
     messages: [
@@ -310,12 +343,14 @@ async function runWeeklyRecapJob() {
     }
 
     const recaps = await generateRecapsForGroup(anthropic, group.name, payload.members);
+    const rankByName = new Map(payload.members.map((m) => [m.name, m.rank]));
     const rows = recaps
       .map((r) => ({
         group_id: group.id,
         user_id: payload.nameToId.get(r.member_name),
         week_of: weekOf,
         recap_text: r.recap_text,
+        rank: rankByName.get(r.member_name) ?? null,
       }))
       .filter((r) => r.user_id);
 
