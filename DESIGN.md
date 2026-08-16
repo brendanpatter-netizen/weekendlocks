@@ -34,6 +34,8 @@ colors:
   info-bg: "#EFF6FF"
   info-border: "#BFDBFE"
   info-text: "#1D4ED8"
+  highlighter-fill: "#FAC775"
+  highlighter-ink: "#412402"
   identity-1-bg: "#E1F5EE"
   identity-1-fg: "#085041"
   identity-2-bg: "#FAECE7"
@@ -97,7 +99,7 @@ WeekendLocks is a locker-room whiteboard, not a dashboard. This is a full replac
 
 The tone stays loud and personal — this is still the app where the group's AI-generated Power Rankings roast bot lives — but the loudness now comes from material (chalk, marker, tape, paper) instead of from a generic dark-mode sports-app template. Bold system-sans data (member names, records, pick text) sits inside the paper sheets; hand-lettered marker type is reserved for section titles and the group name, so the two voices stay distinct: the board talks in marker, the data talks in a normal confident sans.
 
-**Coverage:** Currently built out on the group dashboard, the NFL/CFB picks pages, and the groups list/join flow. Account, auth, and the home screen still run on the prior world and are next — the felt/paper/marker system is meant to extend to all of them, not stay a one-page treatment.
+**Coverage:** Fully rolled out — group dashboard, NFL/CFB picks pages, groups list/join flow, account, all three auth screens, and the home/marketing page all run on this world now. The home hero's headline is the one place PermanentMarker sizes up past the 20px section-title tier (34px, on-board chalk-white) — the product's single loudest "written on the board" moment, reserved for that one spot.
 
 **Key Characteristics:**
 - One board, not per-group hero colors: every group lands on the same felt-green board; identity now lives in the hand-lettered name and member avatar chips, not a per-group hash background.
@@ -133,6 +135,7 @@ The palette is deliberately narrow: one dark board ground, one paper fill, one m
 - **Danger** (#DC2626) with its pale-red callout (bg #FEF2F2, border #FECACA, title #991B1B, body #B91C1C): The Delete Group control — deliberately left out of the paper-and-board language entirely; it stays a plain red alert box so a destructive action never looks like part of the playful board.
 - **Warning banner** (bg #FFF7ED, border #FED7AA, text #9A3412): The "Heads up: ..." error banner — unchanged.
 - **Info banner** (bg #EFF6FF, border #BFDBFE, text #1D4ED8): The CFB picks page's gap-week notice ("pick two CFB locks this week instead of one CFB + one NFL"). Like Danger and Warning, this stays a plain alert box outside the paper/board language — it's a system message, not a board fixture.
+- **Highlighter** (fill #FAC775, ink #412402): The home page's "Free to play with your crew" pill — a solid highlighter-yellow flag, slightly rotated like a sticky note pressed onto the board. The one accent color that's neither chalk, marker, nor tape gold, reserved for this single promotional flag.
 
 ### Identity Palette (Named Rule)
 **The Same Hash, Different Canvas Rule (narrowed).** The six pastel/deep identity color pairs (`lib/avatar.ts`) still power every member avatar chip. Under The Whiteboard this rule no longer extends to group hero backgrounds — every group now shares one board color, and per-group identity moved to the hand-lettered name instead. Never assign these six colors manually or add a seventh; the hash math and every member's existing color assignment depend on the array staying fixed.
@@ -165,6 +168,7 @@ Hybrid: the board and most paper cards are flat (dashed border does the separati
 ### Shadow Vocabulary
 - **Card lift** (`shadowColor: #000, shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: {0,5}, elevation: 5`): Standings and Power Rankings.
 - **CTA lift** (`shadowColor: #000, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: {0,5}, elevation: 6`): The hero NFL/CFB pick buttons — slightly stronger than card lift, since these are the primary tap targets on the page.
+- **Auth lift** (`shadowColor: #000, shadowOpacity: 0.2, shadowRadius: 14, shadowOffset: {0,8}, elevation: 8`): The sign-in and reset-password cards — the softest but deepest-reaching shadow, since these single-card pages have nothing else competing for weight.
 
 ### Named Rules
 **The Two-Tier Lift Rule.** Not every paper sheet gets the same shadow. Recent Activity and Chat stay flat (dashed border only); only the two data surfaces the product actually differentiates on (Standings, Power Rankings) and the two hero CTAs earn shadow — shadow signals "this is worth looking at," not "this is a card."

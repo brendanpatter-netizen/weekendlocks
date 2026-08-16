@@ -11,6 +11,7 @@ import { supabase } from "@/lib/supabase";
 import { alert } from "@/lib/alert";
 import { colors as theme } from "@/lib/theme";
 import { LogoBadge } from "@/components/Logo";
+import TapeCorner from "@/components/TapeCorner";
 
 type Mode = "code" | "link" | "password";
 
@@ -18,10 +19,9 @@ type Mode = "code" | "link" | "password";
 // come from the one shared palette instead of a page-local hardcoded set.
 const colors = {
   primary: theme.brand,
-  secondary: theme.brassFill,
-  bg: theme.paper,
-  text: theme.ink,
-  subtext: theme.inkSoft,
+  bg: theme.felt,
+  text: "#0C1712",
+  subtext: "#45564C",
 };
 
 export default function Login() {
@@ -160,6 +160,7 @@ export default function Login() {
         <LogoBadge size={44} />
       </View>
       <View style={styles.card}>
+        <TapeCorner />
         <Text style={styles.title}>Sign in</Text>
         <Text style={styles.subtitle}>Enter your email and choose a sign-in method.</Text>
 
@@ -256,7 +257,7 @@ export default function Login() {
         )}
 
         {!!fatal && (
-          <Text selectable style={{ marginTop: 10, color: "#c00" }}>
+          <Text selectable style={{ marginTop: 10, color: "#DC2626" }}>
             {fatal}
           </Text>
         )}
@@ -268,34 +269,39 @@ export default function Login() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg, padding: 20, alignItems: "center", justifyContent: "center" },
   brandRow: { marginBottom: 18 },
+  // Single-instance surface — the whole page is one card, so it gets the
+  // full paper treatment (dashed border, tape corner, slight tilt).
   card: {
-    width: "100%", maxWidth: 520, backgroundColor: "#fff", borderRadius: 16, padding: 20, gap: 14,
+    position: "relative",
+    width: "100%", maxWidth: 520, backgroundColor: "#F5F3E7", borderRadius: 10, padding: 20, paddingTop: 24, gap: 14,
+    borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)", borderStyle: "dashed", transform: [{ rotate: "-0.4deg" }],
     ...Platform.select({
-      web: { boxShadow: "0 12px 28px rgba(0,0,0,0.12)" },
-      default: { shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
+      web: { boxShadow: "0 12px 28px rgba(0,0,0,0.2)" },
+      default: { shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
     }),
   },
-  title: { fontSize: 24, fontWeight: "800", color: colors.primary, textTransform: "uppercase" },
-  subtitle: { color: colors.subtext, marginBottom: 6 },
+  title: { fontFamily: "PermanentMarker_400Regular", fontSize: 24, color: "#B23A2E", textTransform: "uppercase" },
+  subtitle: { color: colors.subtext, marginBottom: 6, fontWeight: "700" },
   toggleRow: { flexDirection: "row", gap: 8 },
   toggleBtn: {
-    flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: "#ddd", alignItems: "center", backgroundColor: "#fff",
+    flex: 1, paddingVertical: 10, borderRadius: 999, borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)",
+    borderStyle: "dashed", alignItems: "center", backgroundColor: "#FDFCF8",
   },
-  toggleBtnActive: { borderColor: colors.primary, backgroundColor: colors.primary },
+  toggleBtnActive: { borderColor: colors.primary, backgroundColor: colors.primary, borderStyle: "solid" },
   toggleText: { fontWeight: "700", color: colors.text },
-  toggleTextActive: { color: "#fff" },
-  input: { borderWidth: 1, borderColor: "#ddd", borderRadius: 12, padding: 12, fontSize: 16, backgroundColor: "#fff" },
-  cta: { marginTop: 4, backgroundColor: colors.primary, paddingVertical: 12, borderRadius: 12, alignItems: "center" },
+  toggleTextActive: { color: "white" },
+  input: { borderWidth: 1, borderColor: "rgba(12,23,18,0.18)", borderRadius: 10, padding: 12, fontSize: 16, backgroundColor: "#FDFCF8", color: colors.text },
+  cta: { marginTop: 4, backgroundColor: colors.primary, paddingVertical: 12, borderRadius: 999, alignItems: "center" },
   ctaDisabled: { opacity: 0.6 },
-  ctaText: { color: "#fff", fontWeight: "800", letterSpacing: 0.2 },
+  ctaText: { color: "white", fontWeight: "800", letterSpacing: 0.2 },
   helper: { marginTop: 6, color: colors.subtext },
   codeInput: {
-    borderWidth: 1, borderColor: "#ddd", borderRadius: 12, padding: 12,
-    fontSize: 22, letterSpacing: 4, textAlign: "center", backgroundColor: "#fff",
+    borderWidth: 1, borderColor: "rgba(12,23,18,0.18)", borderRadius: 10, padding: 12,
+    fontSize: 22, letterSpacing: 4, textAlign: "center", backgroundColor: "#FDFCF8", color: colors.text,
   },
   ctaOutline: {
-    marginTop: 4, borderWidth: 2, borderColor: colors.primary, borderRadius: 12,
-    alignItems: "center", paddingVertical: 12, backgroundColor: "#fff",
+    marginTop: 4, borderWidth: 2, borderColor: colors.primary, borderRadius: 999,
+    alignItems: "center", paddingVertical: 12, backgroundColor: "#FDFCF8",
   },
   ctaOutlineDisabled: { opacity: 0.6 },
   ctaOutlineText: { color: colors.primary, fontWeight: "800", letterSpacing: 0.2 },

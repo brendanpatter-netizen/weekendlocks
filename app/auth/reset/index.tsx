@@ -7,8 +7,9 @@ import { supabase } from "@/lib/supabase";
 import { useRouter } from "expo-router";
 import { alert } from "@/lib/alert";
 import { colors as theme } from "@/lib/theme";
+import TapeCorner from "@/components/TapeCorner";
 
-const colors = { primary: theme.brand, bg: theme.paper, text: theme.ink, subtext: theme.inkSoft };
+const colors = { primary: theme.brand, bg: theme.felt, text: "#0C1712", subtext: "#45564C" };
 
 export default function ResetPassword() {
   const router = useRouter();
@@ -65,7 +66,7 @@ export default function ResetPassword() {
   if (!ready) {
     return (
       <View style={styles.screen}>
-        <ActivityIndicator />
+        <ActivityIndicator color="#F5F3E7" />
       </View>
     );
   }
@@ -73,6 +74,7 @@ export default function ResetPassword() {
   return (
     <View style={styles.screen}>
       <View style={styles.card}>
+        <TapeCorner />
         <Text style={styles.title}>Reset password</Text>
 
         <TextInput
@@ -101,14 +103,16 @@ export default function ResetPassword() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center", padding: 20 },
   card: {
-    width: "100%", maxWidth: 520, backgroundColor: "#fff", borderRadius: 16, padding: 20, gap: 12,
+    position: "relative",
+    width: "100%", maxWidth: 520, backgroundColor: "#F5F3E7", borderRadius: 10, padding: 20, paddingTop: 24, gap: 12,
+    borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)", borderStyle: "dashed", transform: [{ rotate: "0.4deg" }],
     ...Platform.select({
-      web: { boxShadow: "0 12px 28px rgba(0,0,0,0.12)" },
-      default: { shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
+      web: { boxShadow: "0 12px 28px rgba(0,0,0,0.2)" },
+      default: { shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
     }),
   },
-  title: { fontSize: 22, fontWeight: "800", color: colors.primary, textTransform: "uppercase" },
-  input: { borderWidth: 1, borderColor: "#ddd", borderRadius: 12, padding: 12, fontSize: 16, backgroundColor: "#fff" },
-  cta: { backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 12, alignItems: "center" },
-  ctaText: { color: "#fff", fontWeight: "800" },
+  title: { fontFamily: "PermanentMarker_400Regular", fontSize: 22, color: "#B23A2E", textTransform: "uppercase" },
+  input: { borderWidth: 1, borderColor: "rgba(12,23,18,0.18)", borderRadius: 10, padding: 12, fontSize: 16, backgroundColor: "#FDFCF8", color: colors.text },
+  cta: { backgroundColor: colors.primary, borderRadius: 999, paddingVertical: 12, alignItems: "center" },
+  ctaText: { color: "white", fontWeight: "800" },
 });

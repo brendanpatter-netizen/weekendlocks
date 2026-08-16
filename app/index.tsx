@@ -7,6 +7,8 @@ import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "@/lib/supabase";
 import { logoUri } from "@/lib/teamLogos";
+import { colors as theme } from "@/lib/theme";
+import TapeCorner from "@/components/TapeCorner";
 
 const HERO_TEAMS: { name: string; sport: "nfl" | "ncaaf"; rotate: number; offset: number }[] = [
   { name: "Kansas City Chiefs", sport: "nfl", rotate: -8, offset: 0 },
@@ -33,7 +35,7 @@ export default function Home() {
   const primaryCta = () => router.push(signedIn ? "/groups" : "/auth/login");
 
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.page}>
+    <ScrollView style={styles.pageOuter} contentContainerStyle={styles.page}>
       <View style={styles.hero}>
         <View style={styles.logoRow}>
           {HERO_TEAMS.map((t) => (
@@ -74,8 +76,9 @@ export default function Home() {
       </View>
 
       <View style={styles.stepsRow}>
-        {STEPS.map((s) => (
-          <View key={s.title} style={styles.stepCard}>
+        {STEPS.map((s, i) => (
+          <View key={s.title} style={[styles.stepCard, i % 2 === 0 ? styles.stepCardTiltLeft : styles.stepCardTiltRight]}>
+            <TapeCorner side={i % 2 === 0 ? "left" : "right"} />
             <View style={[styles.stepIcon, { backgroundColor: s.tint, transform: [{ rotate: `${s.rotate}deg` }] }]}>
               <Ionicons name={s.icon} size={22} color={s.iconColor} />
             </View>
@@ -86,8 +89,9 @@ export default function Home() {
       </View>
 
       <View style={styles.leaderCard}>
+        <TapeCorner />
         <View style={styles.leaderHeader}>
-          <Ionicons name="bar-chart-outline" size={16} color="#0B735F" />
+          <Ionicons name="bar-chart-outline" size={16} color={theme.brand} />
           <Text style={styles.leaderHeaderText}>This week in "The Boys"</Text>
         </View>
         <View style={[styles.leaderRow, styles.leaderRowHead]}>
@@ -138,71 +142,96 @@ export default function Home() {
 }
 
 const styles = StyleSheet.create({
-  page: { padding: 16, paddingBottom: 40, gap: 28, maxWidth: 640, width: "100%", alignSelf: "center" },
+  pageOuter: { flex: 1, backgroundColor: theme.felt },
+  page: {
+    padding: 16, paddingBottom: 40, gap: 28, maxWidth: 640, width: "100%", alignSelf: "center",
+  },
 
   hero: { alignItems: "center", paddingTop: 12, gap: 4 },
+  // The scattered, individually-rotated team badges already read as photos
+  // pinned to a corkboard — the dashed gold ring ties them to the same
+  // tape/pin material language without adding a TapeCorner to all six.
   logoRow: { flexDirection: "row", gap: 10, marginBottom: 18, flexWrap: "wrap", justifyContent: "center" },
   logoBadge: {
     width: 48, height: 48, borderRadius: 999, backgroundColor: "white",
     alignItems: "center", justifyContent: "center", padding: 6,
-    borderWidth: 1, borderColor: "#E5E7EB",
+    borderWidth: 1.5, borderColor: "rgba(180,140,20,0.35)",
   },
   logoImg: { width: "100%", height: "100%" },
 
   pill: {
     flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#FAC775",
     paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999, marginBottom: 14,
+    transform: [{ rotate: "-2deg" }],
   },
   pillText: { color: "#412402", fontSize: 13, fontWeight: "700" },
 
-  h1: { fontSize: 34, fontWeight: "800", textAlign: "center", lineHeight: 40 },
-  h1Accent: { color: "#0B735F" },
-  sub: { color: "#475569", fontSize: 16, textAlign: "center", maxWidth: 420, marginTop: 12 },
+  // The hero's own headline — hand-lettered like the group name, since this
+  // is the product's single loudest "written on the board" moment.
+  h1: {
+    fontFamily: "PermanentMarker_400Regular", fontSize: 34, textAlign: "center", lineHeight: 40,
+    color: "#F5F3E7", textTransform: "uppercase",
+  },
+  h1Accent: { color: "#B23A2E" },
+  sub: { color: "rgba(245,243,231,0.75)", fontSize: 16, textAlign: "center", maxWidth: 420, marginTop: 12, fontWeight: "600" },
 
   ctaRow: { flexDirection: "row", gap: 10, marginTop: 22 },
   ctaPrimary: {
-    flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#0B735F",
+    flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: theme.brand,
     paddingHorizontal: 22, height: 46, borderRadius: 999, justifyContent: "center",
   },
   ctaPrimaryText: { color: "white", fontWeight: "700", fontSize: 15 },
   ctaSecondary: {
     paddingHorizontal: 22, height: 46, borderRadius: 999, justifyContent: "center",
-    borderWidth: 1, borderColor: "#CBD5E1",
+    borderWidth: 1.5, borderColor: "rgba(245,243,231,0.4)", borderStyle: "dashed",
   },
-  ctaSecondaryText: { color: "#0F172A", fontWeight: "700", fontSize: 15 },
+  ctaSecondaryText: { color: "#F5F3E7", fontWeight: "700", fontSize: 15 },
 
+  // A fixed set of three — not a growing list — so each gets the full
+  // single-instance paper treatment: dashed border, alternating tilt, tape.
   stepsRow: { flexDirection: "row", gap: 12, flexWrap: "wrap" },
   stepCard: {
-    flex: 1, minWidth: 150, backgroundColor: "#F8FAFC", borderRadius: 16,
-    padding: 18, alignItems: "center", gap: 4,
+    position: "relative",
+    flex: 1, minWidth: 150, backgroundColor: "#F5F3E7", borderRadius: 10,
+    borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)", borderStyle: "dashed",
+    padding: 18, paddingTop: 22, alignItems: "center", gap: 4,
   },
+  stepCardTiltLeft: { transform: [{ rotate: "-0.6deg" }] },
+  stepCardTiltRight: { transform: [{ rotate: "0.6deg" }] },
   stepIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", marginBottom: 8 },
-  stepTitle: { fontWeight: "700", fontSize: 14 },
-  stepBody: { fontSize: 13, color: "#64748B", textAlign: "center" },
+  stepTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 15, color: "#B23A2E" },
+  stepBody: { fontSize: 13, color: "#45564C", textAlign: "center", fontWeight: "600" },
 
-  leaderCard: { backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 16, padding: 16 },
+  // A single illustrative widget, not a real live list — full paper treatment.
+  leaderCard: {
+    position: "relative",
+    backgroundColor: "#F5F3E7", borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)", borderStyle: "dashed",
+    borderRadius: 10, padding: 16, paddingTop: 20, transform: [{ rotate: "-0.4deg" }],
+  },
   leaderHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
-  leaderHeaderText: { fontSize: 12, color: "#64748B", fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.3 },
+  leaderHeaderText: { fontSize: 12, color: "#45564C", fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.3 },
 
   leaderRow: {
     flexDirection: "row", alignItems: "center", paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#E5E7EB", gap: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "rgba(12,23,18,0.15)", gap: 8,
   },
   leaderRowHead: { paddingVertical: 4 },
-  leaderCellHead: { fontSize: 11, color: "#94A3B8", fontWeight: "700", textTransform: "uppercase" },
+  leaderCellHead: { fontSize: 11, color: "#8B876F", fontWeight: "700", textTransform: "uppercase" },
 
   leaderUserCell: { flexDirection: "row", alignItems: "center", gap: 8 },
   avatar: { width: 26, height: 26, borderRadius: 999, alignItems: "center", justifyContent: "center" },
   avatarText: { fontSize: 11, fontWeight: "700" },
-  leaderName: { fontSize: 13, fontWeight: "700" },
+  leaderName: { fontSize: 13, fontWeight: "700", color: "#0C1712" },
 
   badge: { alignSelf: "flex-start", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
   badgeNfl: { backgroundColor: "#E1F5EE" },
   badgeCfb: { backgroundColor: "#E6F1FB" },
   badgeText: { fontSize: 11, fontWeight: "700" },
-  noPick: { fontSize: 12, color: "#94A3B8" },
+  noPick: { fontSize: 12, color: "#8B876F" },
 
+  // The closing headline sits directly on the board, like the hero — the
+  // same on-board voice bookending the page.
   closing: { alignItems: "center", gap: 4, paddingVertical: 8 },
-  closingTitle: { fontSize: 17, fontWeight: "700" },
-  closingSub: { fontSize: 13, color: "#64748B", marginBottom: 14 },
+  closingTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 22, color: "#F5F3E7" },
+  closingSub: { fontSize: 13, color: "rgba(245,243,231,0.75)", marginBottom: 14, fontWeight: "600" },
 });

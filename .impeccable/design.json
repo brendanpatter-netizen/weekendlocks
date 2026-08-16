@@ -12,7 +12,8 @@
       "ink": { "role": "neutral", "displayName": "Ink", "canonical": "#0C1712", "tonalRamp": ["#0C1712", "#1B2B23", "#2E4238", "#45564C", "#6E7E73", "#9CAA9F", "#CBD3CC", "#E9ECE8"] },
       "slate": { "role": "neutral", "displayName": "Slate", "canonical": "#0F172A", "tonalRamp": ["#0F172A", "#334155", "#475569", "#64748B", "#94A3B8", "#CBD5E1", "#E5E7EB", "#F8FAFC"] },
       "turf-teal": { "role": "neutral", "displayName": "Turf Teal", "canonical": "#0B735F", "tonalRamp": ["#031F19", "#063429", "#0B735F", "#0F9678", "#3FB596", "#7ACDB6", "#B7E4D6", "#E1F5EE"] },
-      "info-text": { "role": "neutral", "displayName": "Info Blue", "canonical": "#1D4ED8", "tonalRamp": ["#0B1E5C", "#132C8A", "#1D4ED8", "#3B6FE8", "#7098EF", "#A6C0F5", "#CFE0FA", "#EFF6FF"] }
+      "info-text": { "role": "neutral", "displayName": "Info Blue", "canonical": "#1D4ED8", "tonalRamp": ["#0B1E5C", "#132C8A", "#1D4ED8", "#3B6FE8", "#7098EF", "#A6C0F5", "#CFE0FA", "#EFF6FF"] },
+      "highlighter-fill": { "role": "tertiary", "displayName": "Highlighter Yellow", "canonical": "#FAC775", "tonalRamp": ["#412402", "#6B3B03", "#A35C05", "#D68A1F", "#FAC775", "#FCD695", "#FDE4B8", "#FEF2DA"] }
     },
     "typographyMeta": {
       "display": { "displayName": "Display", "purpose": "The group name, hand-lettered directly on the board — the only 40px PermanentMarker text in the product." },
@@ -23,7 +24,8 @@
     },
     "shadows": [
       { "name": "card-lift", "value": "0 5px 10px rgba(0,0,0,0.3)", "purpose": "Standings and Power Rankings — the two surfaces worth the most craft on the page." },
-      { "name": "cta-lift", "value": "0 5px 12px rgba(0,0,0,0.28)", "purpose": "The two hero NFL/CFB pick CTA buttons — the strongest shadow on the page." }
+      { "name": "cta-lift", "value": "0 5px 12px rgba(0,0,0,0.28)", "purpose": "The two hero NFL/CFB pick CTA buttons — the strongest shadow on the page." },
+      { "name": "auth-lift", "value": "0 8px 14px rgba(0,0,0,0.2)", "purpose": "Sign-in and reset-password cards — softest but deepest-reaching, since these single-card pages have nothing else competing for weight." }
     ],
     "motion": [],
     "breakpoints": []
@@ -112,7 +114,7 @@
   ],
   "narrative": {
     "northStar": "The Whiteboard",
-    "overview": "WeekendLocks is a locker-room whiteboard, not a dashboard. This replaces the product's prior visual world (Turf Teal + slate + white cards) entirely. A dark chalkboard-green board (#063D31) fills the screen and is the header itself — the group name is hand-lettered directly onto it in large chalk-white PermanentMarker type beside a drawn padlock icon. Every section below reads as a sheet of paper taped to that board: chalk-paper fill, dashed hand-drawn outline, a masking-tape corner accent, and a few degrees of rotation per card. The tone stays loud and personal, but the loudness now comes from material — chalk, marker, tape, paper — instead of a generic dark-mode sports-app template. Currently built out on the group dashboard, the NFL/CFB picks pages, and the groups list/join flow; account, auth, and home are next.",
+    "overview": "WeekendLocks is a locker-room whiteboard, not a dashboard. This replaces the product's prior visual world (Turf Teal + slate + white cards) entirely. A dark chalkboard-green board (#063D31) fills the screen and is the header itself — the group name is hand-lettered directly onto it in large chalk-white PermanentMarker type beside a drawn padlock icon. Every section below reads as a sheet of paper taped to that board: chalk-paper fill, dashed hand-drawn outline, a masking-tape corner accent, and a few degrees of rotation per card. The tone stays loud and personal, but the loudness now comes from material — chalk, marker, tape, paper — instead of a generic dark-mode sports-app template. Fully rolled out across the whole product: group dashboard, NFL/CFB picks pages, groups list/join, account, auth, and the home/marketing page.",
     "keyCharacteristics": [
       "One board for every group: per-group hash-colored hero backgrounds were removed; identity now lives in the hand-lettered name and member avatar chips only.",
       "Paper-pinned-to-board is the universal card language — dashed border, slight rotation, and a shared TapeCorner component, never hand-rolled per file.",

@@ -5,6 +5,7 @@ import { View, ActivityIndicator, Text } from "react-native";
 import { useRouter } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { alert } from "@/lib/alert";
+import { colors as theme } from "@/lib/theme";
 
 export default function Callback() {
   const router = useRouter();
@@ -43,9 +44,9 @@ export default function Callback() {
   }, [router]);
 
   return (
-    <View style={{ flex: 1, justifyContent: "center", alignItems: "center", gap: 8 }}>
-      <ActivityIndicator />
-      <Text>Finalizing sign-in…</Text>
+    <View style={{ flex: 1, justifyContent: "center", alignItems: "center", gap: 8, backgroundColor: theme.felt }}>
+      <ActivityIndicator color="#F5F3E7" />
+      <Text style={{ color: "rgba(245,243,231,0.7)", fontWeight: "700" }}>Finalizing sign-in…</Text>
     </View>
   );
 }

@@ -11,13 +11,13 @@ import {
 import { supabase } from "@/lib/supabase";
 import { alert } from "@/lib/alert";
 import { colors as theme } from "@/lib/theme";
+import TapeCorner from "@/components/TapeCorner";
 
 const colors = {
   primary: theme.brand,
-  secondary: theme.brassFill,
-  bg: theme.paper,
-  text: theme.ink,
-  subtext: theme.inkSoft,
+  bg: theme.felt,
+  text: "#0C1712",
+  subtext: "#45564C",
 };
 
 export default function AccountPage() {
@@ -123,6 +123,7 @@ export default function AccountPage() {
   return (
     <View style={styles.screen}>
       <View style={styles.card}>
+        <TapeCorner />
         <Text style={styles.title}>My Account</Text>
 
         {/* Profile */}
@@ -199,51 +200,62 @@ const styles = StyleSheet.create({
     padding: 20,
     alignItems: "center",
   },
+  // The whole page is one card — a single-instance surface, so it gets the
+  // full paper treatment (dashed border, tape corner, slight tilt).
   card: {
+    position: "relative",
     width: "100%",
     maxWidth: 720,
-    backgroundColor: "#fff",
-    borderRadius: 16,
+    backgroundColor: "#F5F3E7",
+    borderRadius: 10,
     padding: 20,
+    paddingTop: 24,
     gap: 16,
-    borderWidth: 1,
-    borderColor: "#eaeaea",
+    borderWidth: 1.5,
+    borderColor: "rgba(12,23,18,0.18)",
+    borderStyle: "dashed",
+    transform: [{ rotate: "-0.4deg" }],
   },
-  title: { fontSize: 24, color: colors.primary, textTransform: "uppercase", fontWeight: "700" },
+  title: { fontFamily: "PermanentMarker_400Regular", fontSize: 24, color: "#B23A2E", textTransform: "uppercase" },
   section: { gap: 10 },
-  sectionTitle: { fontSize: 16, color: colors.primary, textTransform: "uppercase", fontWeight: "700" },
+  sectionTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 16, color: "#B23A2E", textTransform: "uppercase" },
   row: {
-    backgroundColor: "#FAFAFA",
-    borderRadius: 12,
+    backgroundColor: "#FDFCF8",
+    borderRadius: 10,
     padding: 14,
     borderWidth: 1,
-    borderColor: "#EEE",
+    borderColor: "rgba(12,23,18,0.12)",
     gap: 8,
   },
   label: { fontSize: 12, color: colors.subtext, textTransform: "uppercase", letterSpacing: 0.5 },
   value: { fontSize: 16, color: colors.text },
   input: {
     borderWidth: 1,
-    borderColor: "#DDD",
+    borderColor: "rgba(12,23,18,0.18)",
     borderRadius: 10,
     padding: 10,
     backgroundColor: "#fff",
     fontSize: 16,
+    color: colors.text,
   },
   primaryBtn: {
     alignSelf: "flex-start",
     backgroundColor: colors.primary,
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 10,
+    borderRadius: 999,
   },
-  primaryBtnText: { color: "#fff", fontWeight: "800" },
+  primaryBtnText: { color: "white", fontWeight: "800" },
+  // Ghost/secondary, matching the documented button pattern — not a filled
+  // gold button, which isn't a component this design system defines.
   signOutBtn: {
     alignSelf: "flex-start",
-    backgroundColor: colors.secondary,
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: colors.primary,
     paddingVertical: 12,
     paddingHorizontal: 20,
-    borderRadius: 12,
+    borderRadius: 999,
   },
   signOutText: { color: colors.primary, fontSize: 16, fontWeight: "800" },
 });
