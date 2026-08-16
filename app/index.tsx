@@ -10,13 +10,13 @@ import { logoUri } from "@/lib/teamLogos";
 import { colors as theme } from "@/lib/theme";
 import TapeCorner from "@/components/TapeCorner";
 
-const HERO_TEAMS: { name: string; sport: "nfl" | "ncaaf"; rotate: number; offset: number }[] = [
-  { name: "Kansas City Chiefs", sport: "nfl", rotate: -8, offset: 0 },
-  { name: "Philadelphia Eagles", sport: "nfl", rotate: 6, offset: 10 },
-  { name: "Dallas Cowboys", sport: "nfl", rotate: -4, offset: 0 },
-  { name: "Buffalo Bills", sport: "nfl", rotate: 10, offset: 12 },
-  { name: "Georgia Bulldogs", sport: "ncaaf", rotate: -10, offset: 0 },
-  { name: "Ohio State Buckeyes", sport: "ncaaf", rotate: 5, offset: 8 },
+const HERO_TEAMS: { name: string; sport: "nfl" | "ncaaf"; rotate: number }[] = [
+  { name: "Kansas City Chiefs", sport: "nfl", rotate: -8 },
+  { name: "Philadelphia Eagles", sport: "nfl", rotate: 6 },
+  { name: "Dallas Cowboys", sport: "nfl", rotate: -4 },
+  { name: "Buffalo Bills", sport: "nfl", rotate: 10 },
+  { name: "Georgia Bulldogs", sport: "ncaaf", rotate: -10 },
+  { name: "Ohio State Buckeyes", sport: "ncaaf", rotate: 5 },
 ];
 
 const STEPS = [
@@ -41,7 +41,7 @@ export default function Home() {
           {HERO_TEAMS.map((t) => (
             <View
               key={t.name}
-              style={[styles.logoBadge, { transform: [{ rotate: `${t.rotate}deg` }], marginTop: t.offset }]}
+              style={[styles.logoBadge, { transform: [{ rotate: `${t.rotate}deg` }] }]}
             >
               <Image source={{ uri: logoUri(t.name, t.sport) }} style={styles.logoImg} resizeMode="contain" />
             </View>
@@ -77,7 +77,7 @@ export default function Home() {
 
       <View style={styles.stepsRow}>
         {STEPS.map((s, i) => (
-          <View key={s.title} style={[styles.stepCard, i % 2 === 0 ? styles.stepCardTiltLeft : styles.stepCardTiltRight]}>
+          <View key={s.title} style={styles.stepCard}>
             <TapeCorner side={i % 2 === 0 ? "left" : "right"} />
             <View style={[styles.stepIcon, { backgroundColor: s.tint, transform: [{ rotate: `${s.rotate}deg` }] }]}>
               <Ionicons name={s.icon} size={22} color={s.iconColor} />
@@ -162,7 +162,6 @@ const styles = StyleSheet.create({
   pill: {
     flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#FAC775",
     paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999, marginBottom: 14,
-    transform: [{ rotate: "-2deg" }],
   },
   pillText: { color: "#412402", fontSize: 13, fontWeight: "700" },
 
@@ -187,8 +186,8 @@ const styles = StyleSheet.create({
   },
   ctaSecondaryText: { color: "#F5F3E7", fontWeight: "700", fontSize: 15 },
 
-  // A fixed set of three — not a growing list — so each gets the full
-  // single-instance paper treatment: dashed border, alternating tilt, tape.
+  // A fixed set of three — not a growing list — so each gets the paper
+  // treatment: dashed border and tape, square rather than tilted.
   stepsRow: { flexDirection: "row", gap: 12, flexWrap: "wrap" },
   stepCard: {
     position: "relative",
@@ -196,17 +195,16 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)", borderStyle: "dashed",
     padding: 18, paddingTop: 22, alignItems: "center", gap: 4,
   },
-  stepCardTiltLeft: { transform: [{ rotate: "-0.6deg" }] },
-  stepCardTiltRight: { transform: [{ rotate: "0.6deg" }] },
   stepIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", marginBottom: 8 },
   stepTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 15, color: "#B23A2E" },
   stepBody: { fontSize: 13, color: "#45564C", textAlign: "center", fontWeight: "600" },
 
-  // A single illustrative widget, not a real live list — full paper treatment.
+  // A single illustrative widget, not a real live list — paper treatment,
+  // square rather than tilted so it doesn't read as a crooked box.
   leaderCard: {
     position: "relative",
     backgroundColor: "#F5F3E7", borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)", borderStyle: "dashed",
-    borderRadius: 10, padding: 16, paddingTop: 20, transform: [{ rotate: "-0.4deg" }],
+    borderRadius: 10, padding: 16, paddingTop: 20,
   },
   leaderHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
   leaderHeaderText: { fontSize: 12, color: "#45564C", fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.3 },

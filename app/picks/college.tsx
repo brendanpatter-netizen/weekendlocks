@@ -404,14 +404,14 @@ const styles = StyleSheet.create({
   pickStatus: {
     flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#F5F3E7",
     borderWidth: 1.5, borderColor: "#B4901F", borderStyle: "dashed", borderRadius: 10,
-    paddingVertical: 10, paddingHorizontal: 12, transform: [{ rotate: "-0.4deg" }],
+    paddingVertical: 10, paddingHorizontal: 12,
   },
   pickStatusText: { flex: 1, fontWeight: "700", color: "#0C1712" },
 
   noLiveWeek: {
     position: "relative", alignItems: "center", gap: 4, backgroundColor: "#F5F3E7",
     borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)", borderStyle: "dashed", borderRadius: 10,
-    padding: 24, marginTop: 8, transform: [{ rotate: "0.6deg" }],
+    padding: 24, marginTop: 8,
   },
   noLiveWeekTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 18, color: "#B23A2E" },
   noLiveWeekBody: { color: "#45564C", fontSize: 13, textAlign: "center", fontWeight: "700" },

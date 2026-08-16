@@ -8,6 +8,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { avatarColor, initials } from "@/lib/avatar";
 import { colors as theme } from "@/lib/theme";
+import FlameIcon from "@/components/FlameIcon";
 import TapeCorner from "@/components/TapeCorner";
 
 type Recap = { user_id: string; display_name: string; recap_text: string; rank: number | null };
@@ -58,7 +59,10 @@ export default function WeeklyRecap({
     <View style={styles.card}>
       <TapeCorner />
       <View style={styles.header}>
-        <Text style={styles.cardTitle}>🔥 Power Rankings</Text>
+        <View style={styles.cardTitleRow}>
+          <FlameIcon size={18} color="#B23A2E" />
+          <Text style={styles.cardTitle}>Power Rankings</Text>
+        </View>
         {weekOfLabel && <Text style={styles.weekLabel}>Week of {weekOfLabel}</Text>}
       </View>
       {loading ? (
@@ -97,12 +101,14 @@ const styles = StyleSheet.create({
   // product's actual differentiator, worth reading as a peak in the scroll)
   // rather than staying flat like the rest of the page — plus the same
   // paper-pinned-to-board language every card on the page now carries.
+  // Square, not tilted — the tape corner alone carries the pinned feel.
   card: {
     backgroundColor: "#F5F3E7", borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)", borderStyle: "dashed",
-    borderRadius: 10, padding: 12, paddingTop: 16, gap: 4, transform: [{ rotate: "0.7deg" }],
+    borderRadius: 10, padding: 12, paddingTop: 16, gap: 4,
     shadowColor: "#000", shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
   },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   cardTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 20, color: "#B23A2E" },
   weekLabel: { fontSize: 11, color: "#45564C", fontWeight: "700" },
   empty: { color: "#45564C", paddingVertical: 8 },

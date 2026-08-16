@@ -274,7 +274,7 @@ const styles = StyleSheet.create({
   card: {
     position: "relative",
     width: "100%", maxWidth: 520, backgroundColor: "#F5F3E7", borderRadius: 10, padding: 20, paddingTop: 24, gap: 14,
-    borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)", borderStyle: "dashed", transform: [{ rotate: "-0.4deg" }],
+    borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)", borderStyle: "dashed",
     ...Platform.select({
       web: { boxShadow: "0 12px 28px rgba(0,0,0,0.2)" },
       default: { shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 8 },

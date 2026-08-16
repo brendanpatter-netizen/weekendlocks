@@ -170,7 +170,7 @@ export default function GroupsIndex() {
             <Text style={styles.muted}>Create a group or join one with a code.</Text>
 
             <View style={styles.actionsRow}>
-              <View style={[styles.card, styles.cardTiltLeft]}>
+              <View style={styles.card}>
                 <TapeCorner />
                 <View style={styles.cardHeader}>
                   <View style={[styles.cardIcon, { backgroundColor: "#E1F5EE" }]}>
@@ -190,7 +190,7 @@ export default function GroupsIndex() {
                 </Pressable>
               </View>
 
-              <View style={[styles.card, styles.cardTiltRight]}>
+              <View style={styles.card}>
                 <TapeCorner side="right" />
                 <View style={styles.cardHeader}>
                   <View style={[styles.cardIcon, { backgroundColor: "#E6F1FB" }]}>
@@ -259,8 +259,8 @@ const styles = StyleSheet.create({
   muted: { color: "rgba(245,243,231,0.7)", fontWeight: "700" },
 
   actionsRow: { flexDirection: "row", gap: 14, marginTop: 16, flexWrap: "wrap" },
-  // Single-instance cards (not a repeated list) — full paper treatment,
-  // alternating tilt + tape side, same as the group dashboard's card pairs.
+  // Single-instance cards (not a repeated list) — dashed border + tape,
+  // square rather than tilted so a full-width card never reads as crooked.
   card: {
     position: "relative",
     flex: 1,
@@ -274,8 +274,6 @@ const styles = StyleSheet.create({
     borderStyle: "dashed",
     gap: 10,
   },
-  cardTiltLeft: { transform: [{ rotate: "-0.5deg" }] },
-  cardTiltRight: { transform: [{ rotate: "0.5deg" }] },
   cardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
   cardIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
 

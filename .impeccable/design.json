@@ -43,9 +43,9 @@
       "name": "Paper Card",
       "kind": "card",
       "refersTo": "card",
-      "description": "The standard chalk-paper sheet used for every section — dashed border, slight rotation, tape-corner accent, PermanentMarker title in marker-red.",
+      "description": "The standard chalk-paper sheet used for every section — dashed border, tape-corner accent, PermanentMarker title in marker-red. Square, not tilted (see The Accent-Only Tilt Rule): only the tape carries rotation.",
       "html": "<div class=\"ds-card\"><div class=\"ds-tape\"></div><div class=\"ds-card-title\">The Standings</div></div>",
-      "css": ".ds-card { position: relative; background: #F5F3E7; border: 1.5px dashed rgba(12,23,18,0.18); border-radius: 10px; padding: 12px; padding-top: 16px; transform: rotate(-0.6deg); } .ds-tape { position: absolute; top: -8px; left: 16px; width: 46px; height: 18px; background: rgba(244,196,48,0.55); border: 1px solid rgba(180,140,20,0.35); transform: rotate(-3deg); } .ds-card-title { font-family: 'Permanent Marker', cursive; font-size: 20px; color: #B23A2E; }"
+      "css": ".ds-card { position: relative; background: #F5F3E7; border: 1.5px dashed rgba(12,23,18,0.18); border-radius: 10px; padding: 12px; padding-top: 16px; } .ds-tape { position: absolute; top: -8px; left: 16px; width: 46px; height: 18px; background: rgba(244,196,48,0.55); border: 1px solid rgba(180,140,20,0.35); transform: rotate(-3deg); } .ds-card-title { font-family: 'Permanent Marker', cursive; font-size: 20px; color: #B23A2E; }"
     },
     {
       "name": "Rank Circle (First Place)",
@@ -67,8 +67,24 @@
       "name": "Lock Icon",
       "kind": "custom",
       "refersTo": "lock-icon",
-      "description": "Authored SVG padlock replacing the prior 🔒 emoji — thick rounded marker-style stroke, unfilled. Appears beside the board eyebrow and the Weekly Locks section title.",
+      "description": "Authored SVG padlock replacing the prior emoji — thick rounded marker-style stroke, unfilled. Appears beside the board eyebrow and the Weekly Locks section title.",
       "html": "<svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\"><path d=\"M7.5 10V7.5a4.5 4.5 0 0 1 9 0V10\" stroke=\"#B23A2E\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><rect x=\"4.5\" y=\"10\" width=\"15\" height=\"10.5\" rx=\"2.5\" stroke=\"#B23A2E\" stroke-width=\"2.4\" stroke-linejoin=\"round\"/><path d=\"M12 14.5v3\" stroke=\"#B23A2E\" stroke-width=\"2.4\" stroke-linecap=\"round\"/></svg>",
+      "css": ""
+    },
+    {
+      "name": "Trophy Icon",
+      "kind": "custom",
+      "refersTo": "trophy-icon",
+      "description": "Authored SVG trophy replacing the prior emoji — same stroke grammar as Lock Icon. Appears beside the Standings section title.",
+      "html": "<svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\"><path d=\"M7 4h10v4a5 5 0 0 1-5 5 5 5 0 0 1-5-5V4Z\" stroke=\"#B23A2E\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M7 5H4.5A1.5 1.5 0 0 0 3 6.5 2.5 2.5 0 0 0 5.5 9H7\" stroke=\"#B23A2E\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M17 5h2.5A1.5 1.5 0 0 1 21 6.5 2.5 2.5 0 0 1 18.5 9H17\" stroke=\"#B23A2E\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M12 13v3\" stroke=\"#B23A2E\" stroke-width=\"2.4\" stroke-linecap=\"round\"/><path d=\"M9 20h6\" stroke=\"#B23A2E\" stroke-width=\"2.4\" stroke-linecap=\"round\"/></svg>",
+      "css": ""
+    },
+    {
+      "name": "Flame Icon",
+      "kind": "custom",
+      "refersTo": "flame-icon",
+      "description": "Authored SVG flame replacing the prior emoji — same stroke grammar as Lock Icon. Appears beside the Power Rankings section title.",
+      "html": "<svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\"><path d=\"M12 3c-1.5 3-4.5 5-4.5 9a4.5 4.5 0 0 0 9 0c0-1.2-.4-2.1-1-3 0 1.5-1 2.5-2 2.5a1.8 1.8 0 0 1-1.8-1.8c0-2 1.8-3 .3-6.7Z\" stroke=\"#B23A2E\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>",
       "css": ""
     },
     {
@@ -99,7 +115,7 @@
       "name": "Game Card",
       "kind": "card",
       "refersTo": "game-card",
-      "description": "A single matchup row on the NFL/CFB picks pages — chalk-paper fill and dashed border for board continuity, but deliberately flat and square (no rotation or tape) since these repeat densely in a scrolling list. See The List Restraint Rule.",
+      "description": "A single matchup row on the NFL/CFB picks pages — chalk-paper fill and dashed border for board continuity, no tape corner since these repeat densely in a scrolling list. See The List Restraint Rule.",
       "html": "<div class=\"ds-game-card\">Chiefs @ Ravens</div>",
       "css": ".ds-game-card { background: #F5F3E7; border: 1.5px dashed rgba(12,23,18,0.18); border-radius: 12px; padding: 12px; }"
     },
@@ -107,40 +123,43 @@
       "name": "Pinned Status Strip",
       "kind": "custom",
       "refersTo": "pinned-strip",
-      "description": "The one highlighted paper strip per page — the group dashboard's invite row and the picks pages' pick-status bar share this exact recipe: chalk paper, dashed gold border, slight tilt.",
+      "description": "The one highlighted paper strip per page — the group dashboard's invite row and the picks pages' pick-status bar share this exact recipe: chalk paper, dashed gold border, square.",
       "html": "<div class=\"ds-strip\">Your pick: Chiefs -3.5</div>",
-      "css": ".ds-strip { background: #F5F3E7; border: 1.5px dashed #B4901F; border-radius: 10px; padding: 10px 12px; transform: rotate(-0.4deg); }"
+      "css": ".ds-strip { background: #F5F3E7; border: 1.5px dashed #B4901F; border-radius: 10px; padding: 10px 12px; }"
     }
   ],
   "narrative": {
     "northStar": "The Whiteboard",
-    "overview": "WeekendLocks is a locker-room whiteboard, not a dashboard. This replaces the product's prior visual world (Turf Teal + slate + white cards) entirely. A dark chalkboard-green board (#063D31) fills the screen and is the header itself — the group name is hand-lettered directly onto it in large chalk-white PermanentMarker type beside a drawn padlock icon. Every section below reads as a sheet of paper taped to that board: chalk-paper fill, dashed hand-drawn outline, a masking-tape corner accent, and a few degrees of rotation per card. The tone stays loud and personal, but the loudness now comes from material — chalk, marker, tape, paper — instead of a generic dark-mode sports-app template. Fully rolled out across the whole product: group dashboard, NFL/CFB picks pages, groups list/join, account, auth, and the home/marketing page.",
+    "overview": "WeekendLocks is a locker-room whiteboard, not a dashboard. This replaces the product's prior visual world (Turf Teal + slate + white cards) entirely. A dark chalkboard-green board (#063D31) fills the screen and is the header itself — the group name is hand-lettered directly onto it in large chalk-white PermanentMarker type beside a drawn padlock icon. Every section below reads as a sheet of paper taped to that board: chalk-paper fill, dashed hand-drawn outline, and a masking-tape corner accent. Cards stay square — tilt lives only in small accents (tape, the rank-1 circle, scattered logo badges), not the card body. The tone stays loud and personal, but the loudness now comes from material — chalk, marker, tape, paper — instead of a generic dark-mode sports-app template. Fully rolled out across the whole product: group dashboard, NFL/CFB picks pages, groups list/join, account, auth, and the home/marketing page.",
     "keyCharacteristics": [
       "One board for every group: per-group hash-colored hero backgrounds were removed; identity now lives in the hand-lettered name and member avatar chips only.",
-      "Paper-pinned-to-board is the universal card language — dashed border, slight rotation, and a shared TapeCorner component, never hand-rolled per file.",
+      "Paper-pinned-to-board is the universal card language — dashed border and a shared TapeCorner component, never hand-rolled per file. Cards are square; see The Accent-Only Tilt Rule.",
       "PermanentMarker is reserved for exactly two roles: the group name and section titles — never buttons, data, or body text.",
-      "The lock symbol is now a drawn SVG (LockIcon), replacing the 🔒 emoji, per the product's standing requirement to keep a lock symbol somewhere concrete.",
+      "No emoji anywhere in the product — every former emoji (lock, trophy, flame) is now an authored SVG icon sharing one stroke grammar.",
       "The #1 spot in Power Rankings is circled in marker (transparent, red ring, tilted) instead of a filled badge.",
       "Only Standings and Power Rankings carry real shadow lift; Recent Activity and Chat stay flat."
     ],
     "rules": [
       { "name": "The Same Hash, Different Canvas Rule (narrowed)", "body": "The six identity color pairs still power member avatars, but no longer extend to group hero backgrounds — every group now shares one board. Never hand-pick an identity color or add a seventh.", "section": "colors" },
       { "name": "The Two-Voice Rule", "body": "PermanentMarker is reserved for exactly two roles — the group name and section titles. It never appears on a button, a data value, or body copy.", "section": "typography" },
-      { "name": "The Dashed-and-Tilted Rule", "body": "Every paper card uses a dashed border and a small fixed rotation instead of a solid hairline and square alignment, so the board reads as hand-assembled.", "section": "shapes" },
-      { "name": "The List Restraint Rule", "body": "Rotation and the TapeCorner accent are for single-instance surfaces only, never for items inside a repeated list. The picks pages' game cards keep chalk-paper fill and dashed border but stay flat and square, like the Weekly Locks grid's cells.", "section": "shapes" },
+      { "name": "The Dashed Border Rule", "body": "Every paper card uses a dashed border instead of a solid hairline, so the board reads as hand-assembled.", "section": "shapes" },
+      { "name": "The Accent-Only Tilt Rule", "body": "Cards are always square — no card carries a rotation transform. An earlier pass tilted whole cards; user feedback confirmed it read as broken alignment, not charm. Tilt now lives only in corner-scale accents: TapeCorner, the rank-1 circle, scattered logo/icon chips.", "section": "shapes" },
+      { "name": "The List Restraint Rule", "body": "The TapeCorner accent is for single-instance surfaces only, never for items inside a repeated list. The picks pages' game cards and the groups list's rows keep chalk-paper fill and dashed border but carry no tape.", "section": "shapes" },
       { "name": "The Two-Tier Lift Rule", "body": "Not every paper sheet gets the same shadow. Only Standings, Power Rankings, and the two hero CTAs earn real shadow lift; everything else stays flat.", "section": "elevation" }
     ],
     "dos": [
       "Do route every card through the shared card/cardElevated style plus a TapeCorner — never hand-roll a dashed border or tape rectangle inline.",
       "Do keep PermanentMarker confined to the group name and section titles.",
-      "Do keep the LockIcon as the product's lock symbol going forward rather than reintroducing the emoji.",
+      "Do draw a new authored SVG icon matching LockIcon/TrophyIcon/FlameIcon's stroke grammar for any new section — never use an emoji.",
       "Do give a card real shadow only when it's a genuinely high-value surface."
     ],
     "donts": [
       "Don't reintroduce per-group hash-colored hero backgrounds.",
       "Don't use opacity to indicate a disabled state on a chalk-paper surface — it blends into the board behind it.",
       "Don't add a seventh member-identity color or reorder the existing six.",
-      "Don't apply the paper-card language to the Danger Zone — it stays a plain red alert box."
+      "Don't apply the paper-card language to the Danger Zone — it stays a plain red alert box.",
+      "Don't rotate a whole card — tilt only belongs on corner-scale accents.",
+      "Don't use an emoji character anywhere in this product."
     ]
   }
 }

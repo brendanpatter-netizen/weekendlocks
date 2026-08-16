@@ -214,7 +214,6 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: "rgba(12,23,18,0.18)",
     borderStyle: "dashed",
-    transform: [{ rotate: "-0.4deg" }],
   },
   title: { fontFamily: "PermanentMarker_400Regular", fontSize: 24, color: "#B23A2E", textTransform: "uppercase" },
   section: { gap: 10 },

@@ -13,6 +13,7 @@ colors:
   paper-shadow-line: "rgba(12,23,18,0.18)"
   ink: "#0C1712"
   ink-soft: "#45564C"
+  ink-body: "#2A362F"
   paper-disabled: "#D8D4C4"
   turf-teal: "#0B735F"
   slate-ink: "#0F172A"
@@ -95,7 +96,7 @@ components:
 
 **Creative North Star: "The Whiteboard"**
 
-WeekendLocks is a locker-room whiteboard, not a dashboard. This is a full replacement of the product's prior visual world (a plain Turf Teal + slate + white-card system, preserved only as evidence, not as a system to extend). The board itself — a dark chalkboard-green ground (`#063D31`) — fills the screen and is the header; there is no separate hero card. The group's name is hand-lettered directly onto the board in large chalk-white marker type, next to a drawn padlock icon. Every section below it reads as a sheet of paper taped up on that board: chalk-paper fill, a dashed hand-drawn outline instead of a hairline, a masking-tape accent pinned to one corner, and a few degrees of rotation so nothing sits perfectly square — like something a crew member actually stuck up there between games, not a component library default.
+WeekendLocks is a locker-room whiteboard, not a dashboard. This is a full replacement of the product's prior visual world (a plain Turf Teal + slate + white-card system, preserved only as evidence, not as a system to extend). The board itself — a dark chalkboard-green ground (`#063D31`) — fills the screen and is the header; there is no separate hero card. The group's name is hand-lettered directly onto the board in large chalk-white marker type, next to a drawn padlock icon. Every section below it reads as a sheet of paper taped up on that board: chalk-paper fill, a dashed hand-drawn outline instead of a hairline, and a masking-tape accent pinned to one corner. Cards themselves stay square — an earlier pass tilted them a degree or two, but that read as broken alignment rather than charm; the hand-made feel now lives entirely in small accents (the tape, the rank-1 circle, a scattered team badge) instead of the card body itself.
 
 The tone stays loud and personal — this is still the app where the group's AI-generated Power Rankings roast bot lives — but the loudness now comes from material (chalk, marker, tape, paper) instead of from a generic dark-mode sports-app template. Bold system-sans data (member names, records, pick text) sits inside the paper sheets; hand-lettered marker type is reserved for section titles and the group name, so the two voices stay distinct: the board talks in marker, the data talks in a normal confident sans.
 
@@ -103,9 +104,9 @@ The tone stays loud and personal — this is still the app where the group's AI-
 
 **Key Characteristics:**
 - One board, not per-group hero colors: every group lands on the same felt-green board; identity now lives in the hand-lettered name and member avatar chips, not a per-group hash background.
-- Paper-pinned-to-board is the universal card language: dashed border, slight rotation (`-0.6deg` to `0.7deg` per card), and a `TapeCorner` accent — applied consistently by reusing one component, never hand-rolled per file.
+- Paper-pinned-to-board is the universal card language: dashed border and a `TapeCorner` accent — applied consistently by reusing one component, never hand-rolled per file. Cards themselves are square; see The Accent-Only Tilt Rule.
 - PermanentMarker is reserved for exactly two roles: the group name (40px) and section titles (20px, marker-red). It never appears on data, buttons, or body text.
-- The lock symbol is drawn, not emoji: `LockIcon` is an authored SVG padlock (thick rounded marker-style stroke), replacing the 🔒 glyph used in the prior world, per the product's standing requirement that a lock symbol stay somewhere concrete.
+- No emoji anywhere in the product, ever — every glyph that used to be an emoji (🔒, 🏆, 🔥) is now an authored SVG icon (`LockIcon`, `TrophyIcon`, `FlameIcon`) drawn as a thick rounded marker-style stroke, matching hand and weight. Emoji reads as generic AI-tool output; a drawn icon reads as this product's own.
 - The #1 spot in Power Rankings is circled in marker (transparent fill, 2px marker-red ring, `-4deg` tilt) instead of a filled badge — "the coach circled your name on the board," the product's actual differentiator getting the loudest treatment on the page.
 - Standings and Power Rankings carry real shadow lift (`shadowOpacity: 0.3`); Recent Activity and Chat stay flatter — not every sheet on the board is pinned with the same weight.
 
@@ -115,7 +116,7 @@ The palette is deliberately narrow: one dark board ground, one paper fill, one m
 
 ### Primary
 - **Board Felt** (#063D31): The page background on every group screen — the chalkboard itself. Also the header nav bar fill (`app/_layout.tsx`).
-- **Marker Red** (#B23A2E): Section titles ("🏆 The Standings", "Weekend Locks", "🔥 Power Rankings"), the LockIcon's ink color, and the #1 rank circle in Power Rankings. The one accent ink color that reads as "hand-marked."
+- **Marker Red** (#B23A2E): Section titles ("The Standings", "Weekend Locks", "Power Rankings"), every drawn section icon (`LockIcon`, `TrophyIcon`, `FlameIcon`), and the #1 rank circle in Power Rankings. The one accent ink color that reads as "hand-marked."
 
 ### Secondary
 - **Chalk White** (#F5F3E7): Two roles — (1) the paper-sheet fill for every card, and (2) the hand-lettered ink color for text written directly on the board (hero eyebrow, group name, subtitle). Same hex, two functions, deliberately: it's the one color that reads as "chalk" whether it's the marker stroke or the sheet itself. Softened to 70% opacity for the hero subtitle and 20-40% for dashed trim on the board.
@@ -125,6 +126,7 @@ The palette is deliberately narrow: one dark board ground, one paper fill, one m
 ### Neutral
 - **Ink** (#0C1712): Primary text on chalk-paper surfaces (pick CTA titles, invite code).
 - **Ink Soft** (#45564C): Secondary text on paper (subtitles, invite label).
+- **Ink Body** (#2A362F): Long-form paragraph text on paper — the Power Rankings roast copy specifically, a shade lighter than Ink so a full paragraph doesn't read as heavy as a name or label.
 - **Paper Disabled** (#D8D4C4): Flat muted fill for a disabled paper-surface control (an unopened week's pick CTA) — never opacity, which would muddy chalk-paper into the board color behind it.
 - **Turf Teal** (#0B735F): Survives from the prior world as the one non-board/paper accent — still used for the Share/Refresh pill buttons' border and fill, and copy-link button. Deliberately not replaced with marker-red, so primary actions stay visually distinct from section chrome.
 - **Slate Ink** (#0F172A) / **Slate Soft** (#64748B) / **Slate Faint** (#94A3B8) / **Slate Body** (#334155): Carried over from the prior neutral scale for dense data (leaderboard numbers, activity feed timestamps, table headers) inside paper cards — these surfaces stay closer to a normal data-table voice than the board's hand-marked one.
@@ -175,9 +177,11 @@ Hybrid: the board and most paper cards are flat (dashed border does the separati
 
 ## Shapes
 
-**The Dashed-and-Tilted Rule.** Every paper card uses a dashed 1.5px border (`rgba(12,23,18,0.18)`, 10px radius) instead of the prior world's solid hairline, plus a small fixed rotation per card (between `-0.6deg` and `0.7deg`) so the board reads as hand-assembled rather than grid-aligned. Interactive pills (Share, Refresh, invite copy) stay fully round (999px) — the one shape carried over unchanged from the prior world. The hero CTA buttons use a softer 16px radius, between "pill" and "card," to read as bigger, weightier tap targets.
+**The Dashed Border Rule.** Every paper card uses a dashed 1.5px border (`rgba(12,23,18,0.18)`, 10px radius) instead of the prior world's solid hairline, so the board reads as hand-assembled rather than grid-aligned. Interactive pills (Share, Refresh, invite copy) stay fully round (999px) — the one shape carried over unchanged from the prior world. The hero CTA buttons use a softer 16px radius, between "pill" and "card," to read as bigger, weightier tap targets.
 
-**The List Restraint Rule.** Rotation and the `TapeCorner` accent are for single-instance surfaces (a section card, an empty-state card, a status strip) — never for items inside a repeated list. The NFL/CFB picks pages' game cards keep the chalk-paper fill and dashed border for board continuity but stay flat and square, exactly like the Weekly Locks grid's internal cells: a scrolling list of tilted, tape-pinned cards would fight scanability on a page that exists to make picks fast.
+**The Accent-Only Tilt Rule.** Cards themselves are always square — no card, at any size, on any page, carries a rotation transform. An early pass of this world tilted whole cards a degree or two for a "pinned in a hurry" feel; user testing showed it reads as broken alignment, not charm, especially on full-width cards where the tilt is most visible. The hand-made feel now lives entirely in small, corner-scale accents instead: the `TapeCorner` component (`-3deg`/`3deg`), the Power Rankings #1 circle (`-4deg`), and the home page's individually-rotated team-logo badges and step-icon chips. Tilt at sticker scale reads as personality; tilt at card scale reads as a bug.
+
+**The List Restraint Rule.** The `TapeCorner` accent itself is for single-instance surfaces (a section card, an empty-state card, a status strip) — never for items inside a repeated list. The NFL/CFB picks pages' game cards and the groups list's roster rows keep the chalk-paper fill and dashed border for board continuity but carry no tape, exactly like the Weekly Locks grid's internal cells.
 
 ## Components
 
@@ -187,10 +191,13 @@ Hybrid: the board and most paper cards are flat (dashed border does the separati
 - **Hero CTA:** Chalk-paper fill, dashed border, 16px radius, strong shadow. Disabled state swaps to flat `#D8D4C4` fill, never opacity.
 
 ### Cards / Containers
-- **Corner style:** 10px radius, dashed 1.5px border, slight rotation per instance.
+- **Corner style:** 10px radius, dashed 1.5px border, always square (see The Accent-Only Tilt Rule).
 - **Background:** Chalk white (`#F5F3E7`).
-- **Pin accent:** A `TapeCorner` (translucent gold rectangle, `-3deg`/`3deg`, `side="left"` default) on every card — always the shared component, never a one-off inline style.
+- **Pin accent:** A `TapeCorner` (translucent gold rectangle, `-3deg`/`3deg`, `side="left"` default) on single-instance cards — always the shared component, never a one-off inline style, and never on repeated-list items (see The List Restraint Rule).
 - **Internal padding:** 12px, `paddingTop: 16` to clear the tape accent, `gap: 4` between header and body.
+
+### Section Icons
+Every section that once carried an emoji now carries a matching authored SVG instead: `LockIcon` (padlock, Weekly Locks / board eyebrow), `TrophyIcon` (Standings), `FlameIcon` (Power Rankings). All three share one visual grammar — unfilled shapes, `strokeWidth` ~2.2–2.4, rounded caps/joins, sized 13–22px, colored to match their context (chalk-white on the board, marker-red on paper). A new section icon should extend this set rather than reach for an emoji or a filled icon-font glyph.
 
 ### Weekly Locks Grid (signature component)
 Unchanged in function and data density from the prior world — still the season-long spreadsheet tracker. Restyled to the paper-card language (dashed border, tape corner, PermanentMarker title with the drawn `LockIcon` beside it in marker-red) but the internal grid cells (win/loss/pending colors, legend) intentionally kept in their original slate/semantic colors — the grid should stay legible as a spreadsheet even as the shell around it got louder.
@@ -206,7 +213,7 @@ Unchanged: minimal top bar (Groups / Account / Sign in-out) on the board-felt ba
 ### Do:
 - **Do** route every card through the shared `card`/`cardElevated` style plus a `<TapeCorner />` — never hand-roll a dashed border or tape rectangle inline.
 - **Do** keep PermanentMarker confined to the group name and section titles (see The Two-Voice Rule).
-- **Do** keep the LockIcon as the product's lock symbol going forward rather than reintroducing the 🔒 emoji — it was replaced deliberately, not incidentally.
+- **Do** draw a new authored SVG icon (matching `LockIcon`/`TrophyIcon`/`FlameIcon`'s stroke grammar) for any new section that would otherwise reach for an emoji — never use an emoji character anywhere in this product.
 - **Do** give a card real shadow only when it's a genuinely high-value surface (see The Two-Tier Lift Rule) — not every paper sheet needs to look pinned with equal weight.
 
 ### Don't:
@@ -214,3 +221,5 @@ Unchanged: minimal top bar (Groups / Account / Sign in-out) on the board-felt ba
 - **Don't** use opacity to indicate a disabled state on a chalk-paper surface — it blends into the board behind it (the same bug class fixed once already in the prior world, now re-confirmed under the new palette).
 - **Don't** add a seventh member-identity color or reorder the existing six — the hash math and every member's current color depend on the fixed array.
 - **Don't** apply the paper-card language to the Danger Zone — it stays a plain red alert box, deliberately outside the board's playful material system.
+- **Don't** rotate a whole card. Confirmed by direct user feedback: card-scale tilt reads as broken alignment, not hand-made charm. Tilt only ever belongs on corner-scale accents (see The Accent-Only Tilt Rule).
+- **Don't** use an emoji character anywhere in this product, including in code comments' example strings — it's the single fastest tell of generic AI-tool output, and this product draws its own icons instead.

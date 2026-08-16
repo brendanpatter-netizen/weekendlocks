@@ -43,6 +43,7 @@ import GroupChat from "@/components/GroupChat";
 import WeeklyPicksGrid from "@/components/WeeklyPicksGrid";
 import WeeklyRecap from "@/components/WeeklyRecap";
 import LockIcon from "@/components/LockIcon";
+import TrophyIcon from "@/components/TrophyIcon";
 import TapeCorner from "@/components/TapeCorner";
 
 // null for Over/Under totals picks (no single team) or unmapped names.
@@ -361,7 +362,10 @@ export default function GroupDashboardPage() {
         <View style={[styles.card, styles.cardElevated]}>
             <TapeCorner />
             <View style={styles.leaderboardHeader}>
-              <Text style={styles.cardTitle}>🏆 The Standings</Text>
+              <View style={styles.cardTitleRow}>
+                <TrophyIcon size={18} color="#B23A2E" />
+                <Text style={styles.cardTitle}>The Standings</Text>
+              </View>
               <Pressable
                 onPress={handleRefreshScores}
                 disabled={refreshingScores}
@@ -424,7 +428,7 @@ export default function GroupDashboardPage() {
             refreshKey={dataVersion}
           />
 
-          <View style={[styles.card, { transform: [{ rotate: "0.5deg" }] }]}>
+          <View style={styles.card}>
             <TapeCorner side="right" />
             <Text style={styles.cardTitle}>Recent activity</Text>
             {activity.length === 0 ? (
@@ -511,7 +515,7 @@ const styles = StyleSheet.create({
   inviteRow: {
     flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#F5F3E7",
     borderWidth: 1.5, borderColor: "#B4901F", borderStyle: "dashed", borderRadius: 10,
-    paddingVertical: 10, paddingHorizontal: 12, transform: [{ rotate: "-0.4deg" }],
+    paddingVertical: 10, paddingHorizontal: 12,
   },
   inviteLabel: { fontSize: 12, color: "#45564C", fontWeight: "700" },
   inviteCode: { fontSize: 14, fontWeight: "800", color: "#0C1712", letterSpacing: 1 },
@@ -549,16 +553,19 @@ const styles = StyleSheet.create({
   heroScheduleText: { fontSize: 12, fontWeight: "600", color: "rgba(245,243,231,0.85)", flexShrink: 1 },
 
   // Chalk-paper sheets pinned to the board — dashed hand-drawn outline
-  // instead of a hairline, a slight tilt like something taped up in a hurry.
+  // instead of a hairline. Square, not tilted: a full-width card reading as
+  // crooked looks broken rather than charming: the tape corner alone carries
+  // the pinned-paper feel.
   card: {
     backgroundColor: "#F5F3E7", borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)", borderStyle: "dashed",
-    borderRadius: 10, padding: 12, paddingTop: 16, gap: 4, transform: [{ rotate: "-0.6deg" }],
+    borderRadius: 10, padding: 12, paddingTop: 16, gap: 4,
   },
   // Standings + Power Rankings are the two surfaces DESIGN.md calls out for
   // more depth — everything else on the page (Recent Activity, chat) stays flat.
   cardElevated: {
     shadowColor: "#000", shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
   },
+  cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   cardTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 20, color: "#B23A2E" },
 
   leaderboardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
