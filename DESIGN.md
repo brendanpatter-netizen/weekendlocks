@@ -16,6 +16,7 @@ colors:
   divider: "#CBD5E1"
   surface: "#FFFFFF"
   surface-sunken: "#F8FAFC"
+  paper: "#F2F5EF"
   win: "#DCFCE7"
   loss: "#FEE2E2"
   pending: "#F1F5F9"
@@ -114,6 +115,7 @@ The palette is dominated by one working accent (Turf Teal) against a Tailwind-Sl
 - **Ink Soft** (#64748B) / **Ink Faint** (#94A3B8): Secondary and tertiary text (labels, timestamps, muted stats) — `slate-500` / `slate-400`.
 - **Hairline** (#E5E7EB) and **Divider** (#CBD5E1): Card borders and row dividers — `slate-200` / `slate-300`.
 - **Surface** (#FFFFFF) and **Surface Sunken** (#F8FAFC): Card fill and subtle recessed backgrounds (sub-headers, chat bubbles).
+- **Paper** (#F2F5EF): The page background on the group dashboard — a warm off-white pulled from `lib/theme.ts`, replacing plain white so every white card gets real separation instead of blending into the page. This was the single highest-leverage, most-felt change in this pass.
 
 ### Semantic
 - **Win** (#DCFCE7) / **Loss** (#FEE2E2) / **Pending** (#F1F5F9): The three states every pick cell across the Weekly Locks grid and activity feed can be in — deliberately pale so the bold text inside stays the loudest thing on the cell.

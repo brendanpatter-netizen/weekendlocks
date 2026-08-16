@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
     shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 3,
   },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  cardTitle: { fontWeight: "800" },
+  cardTitle: { fontWeight: "900", fontSize: 17, letterSpacing: 0.2, color: theme.ink },
   weekLabel: { fontSize: 11, color: "#64748B", fontWeight: "700" }, // was #94A3B8 (2.56:1) — failed WCAG AA on real text
   empty: { color: "#64748B", paddingVertical: 8 },
   row: {

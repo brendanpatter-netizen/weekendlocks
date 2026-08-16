@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase";
 import { avatarColor } from "@/lib/avatar";
 import { pickLabel } from "@/lib/pickLabel";
 import { recordLabel, winPct, EMPTY_RECORD, type SeasonRecord } from "@/lib/records";
+import { colors as theme } from "@/lib/theme";
 
 type Result = "win" | "loss" | "push" | null;
 type Cell = { label: string | null; result: Result };
@@ -167,7 +168,7 @@ function PickCell({ cell, isSecondCfbLock }: { cell?: Cell; isSecondCfbLock?: bo
 
 const styles = StyleSheet.create({
   card: { backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12, gap: 4 },
-  cardTitle: { fontWeight: "800" },
+  cardTitle: { fontWeight: "900", fontSize: 17, letterSpacing: 0.2, color: theme.ink },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 },
   legend: { flexDirection: "row", alignItems: "center", gap: 5 },
   legendDot: { width: 9, height: 9, borderRadius: 999 },

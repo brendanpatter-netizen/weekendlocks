@@ -457,7 +457,10 @@ export default function GroupDashboardPage() {
 }
 
 const styles = StyleSheet.create({
-  pageOuter: { flex: 1 },
+  // theme.paper (warm off-white) instead of plain white — gives every card
+  // real lift/separation instead of white-on-white. This was sitting
+  // unused in lib/theme.ts; the group page previously ignored it entirely.
+  pageOuter: { flex: 1, backgroundColor: theme.paper },
   page: { padding: 16, gap: 16 },
 
   hero: { borderRadius: 24, padding: 20, gap: 4, alignItems: "center" },
@@ -516,7 +519,7 @@ const styles = StyleSheet.create({
   cardElevated: {
     shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 3,
   },
-  cardTitle: { fontWeight: "800" },
+  cardTitle: { fontWeight: "900", fontSize: 17, letterSpacing: 0.2, color: theme.ink },
 
   leaderboardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
   refreshBtn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1, borderColor: theme.brand },
