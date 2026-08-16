@@ -2,21 +2,24 @@
 name: WeekendLocks
 description: A friend-group NFL/CFB pick'em app with a savage AI-generated weekly roast
 colors:
+  board-felt: "#063D31"
+  chalk-white: "#F5F3E7"
+  chalk-white-soft: "rgba(245,243,231,0.7)"
+  chalk-white-faint: "rgba(245,243,231,0.2)"
+  marker-red: "#B23A2E"
+  tape-gold: "rgba(244,196,48,0.55)"
+  tape-gold-border: "rgba(180,140,20,0.35)"
+  dashed-gold: "#B4901F"
+  paper-shadow-line: "rgba(12,23,18,0.18)"
+  ink: "#0C1712"
+  ink-soft: "#45564C"
+  paper-disabled: "#D8D4C4"
   turf-teal: "#0B735F"
-  turf-teal-deep: "#085041"
-  felt-green: "#063D31"
-  felt-green-raised: "#0A4C3D"
-  brass-gold: "#B3781F"
-  brass-fill: "#F2C266"
-  brass-ink: "#4A3106"
-  ink: "#0F172A"
-  ink-soft: "#64748B"
-  ink-faint: "#94A3B8"
+  slate-ink: "#0F172A"
+  slate-soft: "#64748B"
+  slate-faint: "#94A3B8"
+  slate-body: "#334155"
   hairline: "#E5E7EB"
-  divider: "#CBD5E1"
-  surface: "#FFFFFF"
-  surface-sunken: "#F8FAFC"
-  paper: "#F2F5EF"
   win: "#DCFCE7"
   loss: "#FEE2E2"
   pending: "#F1F5F9"
@@ -28,7 +31,6 @@ colors:
   warning-bg: "#FFF7ED"
   warning-border: "#FED7AA"
   warning-text: "#9A3412"
-  disabled-fill: "#EBEDF2"
   identity-1-bg: "#E1F5EE"
   identity-1-fg: "#085041"
   identity-2-bg: "#FAECE7"
@@ -43,17 +45,15 @@ colors:
   identity-6-fg: "#633806"
 typography:
   display:
-    fontFamily: "RobotoCondensed_900Black"
-    fontSize: "44px"
-    fontWeight: 900
+    fontFamily: "PermanentMarker_400Regular"
+    fontSize: "40px"
     letterSpacing: "0.5px"
   title:
-    fontFamily: "System"
-    fontSize: "18px"
-    fontWeight: 800
+    fontFamily: "PermanentMarker_400Regular"
+    fontSize: "20px"
   label:
     fontFamily: "System"
-    fontSize: "12px"
+    fontSize: "11-13px"
     fontWeight: 800
     letterSpacing: "0.3px"
   body:
@@ -62,9 +62,8 @@ typography:
     fontWeight: 700
 rounded:
   pill: "999px"
-  card: "12px"
-  button: "8px"
-  hero: "24px"
+  card: "10px"
+  cta: "16px"
 spacing:
   xs: "4px"
   sm: "8px"
@@ -73,11 +72,11 @@ spacing:
 components:
   button-primary:
     backgroundColor: "{colors.turf-teal}"
-    textColor: "{colors.surface}"
+    textColor: "#FFFFFF"
     rounded: "{rounded.pill}"
-    padding: "6px 12px"
+    padding: "10px 14px"
   card:
-    backgroundColor: "{colors.surface}"
+    backgroundColor: "{colors.chalk-white}"
     rounded: "{rounded.card}"
     padding: "12px"
 ---
@@ -86,120 +85,116 @@ components:
 
 ## Overview
 
-**Creative North Star: "The Locker Room"**
+**Creative North Star: "The Whiteboard"**
 
-WeekendLocks is a bulletin board, not a dashboard. Every screen leans on heavy type (700/800 weight is the floor, not the ceiling — nothing in the product renders at regular weight), pill-shaped chips and buttons, and a deterministic per-person/per-group color-identity system so the same name always wears the same color. The tone is loud and personal by design: this is the app where the group's AI-generated Power Rankings roast bot lives, and the visual language should read as confident and a little brash, never as a sober fintech dashboard.
+WeekendLocks is a locker-room whiteboard, not a dashboard. This is a full replacement of the product's prior visual world (a plain Turf Teal + slate + white-card system, preserved only as evidence, not as a system to extend). The board itself — a dark chalkboard-green ground (`#063D31`) — fills the screen and is the header; there is no separate hero card. The group's name is hand-lettered directly onto the board in large chalk-white marker type, next to a drawn padlock icon. Every section below it reads as a sheet of paper taped up on that board: chalk-paper fill, a dashed hand-drawn outline instead of a hairline, a masking-tape accent pinned to one corner, and a few degrees of rotation so nothing sits perfectly square — like something a crew member actually stuck up there between games, not a component library default.
 
-Two color systems currently coexist. The product surfaces members use every week — group dashboard, picks, chat, weekly recap — run on a plain **Turf Teal + slate neutrals + white card** system. A richer, warmer palette already exists in `lib/theme.ts` (Felt Green + Brass Gold) but is currently confined to the auth/account shell. That felt-and-brass system is a real, on-brand asset that isn't reaching the pages people actually open every week — a natural candidate to pull forward into the main product during upcoming bolder/delight work, not a competing system to remove.
+The tone stays loud and personal — this is still the app where the group's AI-generated Power Rankings roast bot lives — but the loudness now comes from material (chalk, marker, tape, paper) instead of from a generic dark-mode sports-app template. Bold system-sans data (member names, records, pick text) sits inside the paper sheets; hand-lettered marker type is reserved for section titles and the group name, so the two voices stay distinct: the board talks in marker, the data talks in a normal confident sans.
 
 **Key Characteristics:**
-- Bold by default: no regular-weight text anywhere in the product.
-- Pill everything interactive (999px radius); cards and panels use a consistent 12px radius.
-- A single deterministic hash-color system powers both member avatars and each group's own hero background — six identity pairs, same math, two uses.
-- Emoji-forward section headers (🏆 🔥 🔒) reinforce the "Locks" brand and the group's competitive, trash-talk personality.
-- Currently flat-by-default with borders instead of shadows, but the confirmed direction is to open elevation up — more shadow/depth on card surfaces (Standings, Power Rankings) is invited going forward, not just reserved for the two hero CTA buttons.
+- One board, not per-group hero colors: every group lands on the same felt-green board; identity now lives in the hand-lettered name and member avatar chips, not a per-group hash background.
+- Paper-pinned-to-board is the universal card language: dashed border, slight rotation (`-0.6deg` to `0.7deg` per card), and a `TapeCorner` accent — applied consistently by reusing one component, never hand-rolled per file.
+- PermanentMarker is reserved for exactly two roles: the group name (40px) and section titles (20px, marker-red). It never appears on data, buttons, or body text.
+- The lock symbol is drawn, not emoji: `LockIcon` is an authored SVG padlock (thick rounded marker-style stroke), replacing the 🔒 glyph used in the prior world, per the product's standing requirement that a lock symbol stay somewhere concrete.
+- The #1 spot in Power Rankings is circled in marker (transparent fill, 2px marker-red ring, `-4deg` tilt) instead of a filled badge — "the coach circled your name on the board," the product's actual differentiator getting the loudest treatment on the page.
+- Standings and Power Rankings carry real shadow lift (`shadowOpacity: 0.3`); Recent Activity and Chat stay flatter — not every sheet on the board is pinned with the same weight.
 
 ## Colors
 
-The palette is dominated by one working accent (Turf Teal) against a Tailwind-Slate neutral scale, with a richer felt/brass system waiting in the wings.
+The palette is deliberately narrow: one dark board ground, one paper fill, one marker-red ink, one gold accent for tape and dashed trim. Semantic colors (win/loss/pending, danger, warning) and the six-color member-identity system carry over unchanged from the prior world.
 
 ### Primary
-- **Turf Teal** (#0B735F): The one true primary — every button, link, active tab, and accent across the product imports or should import this from `lib/theme.ts` (`colors.brand`). Deeper variant **Turf Teal Deep** (#085041) is used for hover/active states and as one of the six identity foreground colors.
+- **Board Felt** (#063D31): The page background on every group screen — the chalkboard itself. Also the header nav bar fill (`app/_layout.tsx`).
+- **Marker Red** (#B23A2E): Section titles ("🏆 The Standings", "Weekend Locks", "🔥 Power Rankings"), the LockIcon's ink color, and the #1 rank circle in Power Rankings. The one accent ink color that reads as "hand-marked."
 
-### Secondary (available, underused)
-- **Felt Green** (#063D31) / **Felt Green Raised** (#0A4C3D): Dark grounds for hero bands and nav, currently only rendered on auth screens. A strong candidate for the group hero band or other high-drama surfaces in the main product.
-- **Brass Gold** (#B3781F, text-safe) / **Brass Fill** (#F2C266, fill) / **Brass Ink** (#4A3106, text-on-brass): A gold accent pair defined in `lib/theme.ts` but not yet used anywhere in the group/picks/recap surfaces. This is the most natural lever for "fantasy football trophy" energy — think rank-1 badges, a champion crown, a gold-trimmed hero — without inventing a new color.
+### Secondary
+- **Chalk White** (#F5F3E7): Two roles — (1) the paper-sheet fill for every card, and (2) the hand-lettered ink color for text written directly on the board (hero eyebrow, group name, subtitle). Same hex, two functions, deliberately: it's the one color that reads as "chalk" whether it's the marker stroke or the sheet itself. Softened to 70% opacity for the hero subtitle and 20-40% for dashed trim on the board.
+- **Dashed Gold** (#B4901F): The invite-link row's dashed border — a warmer, more saturated gold than tape, used once as a callout trim.
+- **Tape Gold** (rgba(244,196,48,0.55), border rgba(180,140,20,0.35)): The `TapeCorner` accent pinning every card to the board. Always this exact translucent value — it should read as semi-transparent masking tape, not an opaque gold chip.
 
 ### Neutral
-- **Ink** (#0F172A): Primary text and card titles — this is Tailwind's `slate-900`, used as-is rather than a custom-named ramp.
-- **Ink Soft** (#64748B) / **Ink Faint** (#94A3B8): Secondary and tertiary text (labels, timestamps, muted stats) — `slate-500` / `slate-400`.
-- **Hairline** (#E5E7EB) and **Divider** (#CBD5E1): Card borders and row dividers — `slate-200` / `slate-300`.
-- **Surface** (#FFFFFF) and **Surface Sunken** (#F8FAFC): Card fill and subtle recessed backgrounds (sub-headers, chat bubbles).
-- **Paper** (#F2F5EF): The page background on the group dashboard — a warm off-white pulled from `lib/theme.ts`, replacing plain white so every white card gets real separation instead of blending into the page. This was the single highest-leverage, most-felt change in this pass.
+- **Ink** (#0C1712): Primary text on chalk-paper surfaces (pick CTA titles, invite code).
+- **Ink Soft** (#45564C): Secondary text on paper (subtitles, invite label).
+- **Paper Disabled** (#D8D4C4): Flat muted fill for a disabled paper-surface control (an unopened week's pick CTA) — never opacity, which would muddy chalk-paper into the board color behind it.
+- **Turf Teal** (#0B735F): Survives from the prior world as the one non-board/paper accent — still used for the Share/Refresh pill buttons' border and fill, and copy-link button. Deliberately not replaced with marker-red, so primary actions stay visually distinct from section chrome.
+- **Slate Ink** (#0F172A) / **Slate Soft** (#64748B) / **Slate Faint** (#94A3B8) / **Slate Body** (#334155): Carried over from the prior neutral scale for dense data (leaderboard numbers, activity feed timestamps, table headers) inside paper cards — these surfaces stay closer to a normal data-table voice than the board's hand-marked one.
+- **Hairline** (#E5E7EB): Row dividers inside paper cards (leaderboard rows, activity feed rows).
 
 ### Semantic
-- **Win** (#DCFCE7) / **Loss** (#FEE2E2) / **Pending** (#F1F5F9): The three states every pick cell across the Weekly Locks grid and activity feed can be in — deliberately pale so the bold text inside stays the loudest thing on the cell.
-- **Danger** (#DC2626): The Delete Group button itself.
-- **Danger zone card**: pale red background (#FEF2F2), red border (#FECACA), a dark red title (#991B1B) and body (#B91C1C) — the destructive-action callout box on the group page, one step down in intensity from the button itself.
-- **Warning banner**: pale orange background (#FFF7ED), orange border (#FED7AA), dark orange text (#9A3412) — the "Heads up: ..." error/warning banner shown for non-destructive problems (failed score refresh, etc).
-- **Disabled fill** (#EBEDF2): Flat neutral fill for a disabled solid-colored control (the hero pick buttons before a week opens). Deliberately not opacity — see Do's and Don'ts.
+- **Win** (#DCFCE7) / **Loss** (#FEE2E2) / **Pending** (#F1F5F9): Unchanged from the prior world — the three pick-cell states in the Weekly Locks grid.
+- **Danger** (#DC2626) with its pale-red callout (bg #FEF2F2, border #FECACA, title #991B1B, body #B91C1C): The Delete Group control — deliberately left out of the paper-and-board language entirely; it stays a plain red alert box so a destructive action never looks like part of the playful board.
+- **Warning banner** (bg #FFF7ED, border #FED7AA, text #9A3412): The "Heads up: ..." error banner — unchanged.
 
 ### Identity Palette (Named Rule)
-**The Same Hash, Different Canvas Rule.** Six pastel-background/deep-foreground color pairs are assigned by hashing a user's or group's ID (`lib/avatar.ts`). The exact same math produces a member's avatar color chip AND a group's own hero background color (via `avatarColor(groupId).fg`). Never assign these colors manually or add a seventh — the rotation and the "same person/group always looks the same" guarantee depend on the fixed 6-color array and the hash function staying put.
+**The Same Hash, Different Canvas Rule (narrowed).** The six pastel/deep identity color pairs (`lib/avatar.ts`) still power every member avatar chip. Under The Whiteboard this rule no longer extends to group hero backgrounds — every group now shares one board color, and per-group identity moved to the hand-lettered name instead. Never assign these six colors manually or add a seventh; the hash math and every member's existing color assignment depend on the array staying fixed.
 
 ## Typography
 
-**Display Font:** RobotoCondensed_900Black (with system sans-serif fallback)
-**Body/UI Font:** System default (San Francisco on iOS, Roboto on Android, system-ui on web) — no custom body font is loaded.
+**Display/Title Font:** PermanentMarker_400Regular (loaded as a local asset, `assets/fonts/PermanentMarker-Regular.ttf`), with no fallback substitute in the same role — if it fails to load, headings fall back silently to the system font rather than a second marker-style face.
+**Body/UI Font:** System default — unchanged from the prior world.
 
-**Character:** A single condensed, ultra-black display face reserved for one moment (the group name on its hero) against an otherwise all-system-font UI that gets its entire hierarchy from weight (700/800) and size, not font pairing. This is deliberate restraint, not an oversight — introducing a second custom font elsewhere would dilute the one place a display face currently commands real attention.
+**Character:** Two voices, kept strictly apart. PermanentMarker is the board's own hand: it appears only on the group name and section titles, uppercase-adjacent and slightly irregular by nature of the face itself. Everything else — data, buttons, labels, chat — stays in the system sans at 700/800 weight, so the product never tips into "everything is hand-lettered" novelty; the marker voice stays rare and therefore legible as a signature.
 
 ### Hierarchy
-- **Display** (900, 44px, uppercase, centered): Group name on its hero banner — the only place RobotoCondensed_900Black appears.
-- **Title** (800, 17–18px): Card and section titles ("🏆 The Standings", "🔥 Power Rankings", "🔒 Weekend Locks").
-- **Label** (700–800, 11–13px, often uppercase with letter-spacing): Column headers, eyebrows, badges, timestamps.
-- **Body** (700, 13px): Default UI text — member names, pick descriptions, chat messages. Note there is effectively no "body" weight below 700 anywhere in the product.
+- **Display** (PermanentMarker, 40px, uppercase, centered, line-height 46): The group name, lettered directly on the board. The only 40px text in the product.
+- **Title** (PermanentMarker, 20px, marker-red): Section headers on every paper card ("The Standings", "Power Rankings", "Weekend Locks", "Recent activity").
+- **Label** (800, 11–13px, often uppercase with letter-spacing): Eyebrow ("THE BOARD"), table headers, timestamps, legend text.
+- **Body** (700, 13px): Member names, pick descriptions, chat messages, CTA subtext — the system-sans data voice.
 
 ### Named Rules
-**The No-Regular-Weight Rule.** Nothing in the product renders below font-weight 700. If a new component needs a lighter touch, reach for a lighter *color* (Ink Soft/Faint), not a lighter weight — dropping to 400/500 will read as a foreign, off-brand typographic voice.
+**The Two-Voice Rule.** PermanentMarker is reserved for exactly two roles — the group name and section titles. It never appears on a button, a data value, or body copy; introducing it elsewhere dilutes the one signal that something is "written on the board" versus "printed on paper."
 
 ## Layout
 
-Single-column, card-stacked layout throughout (`gap: 16` between cards on the group page). No sidebar, no multi-column desktop layout — the product is built mobile-first via Expo Router web export and simply centers/stacks on wider viewports rather than adopting a distinct desktop grid. Horizontal scrolling is used deliberately inside two data-dense components (the Weekly Locks grid, the group leaderboard on narrow screens) rather than wrapping or truncating columns.
+Single-column, card-stacked layout, unchanged in structure from the prior world (`gap: 16` between cards). The board (`pageOuter`) is the scroll container's background; the hero no longer renders as a bounded card, so it reads as the top of the board itself rather than the first tile in the stack. Horizontal scrolling remains deliberate inside the Weekly Locks grid.
 
 ## Elevation & Depth
 
-Currently almost entirely flat: surfaces are distinguished by a 1px hairline border (#E5E7EB) and white/sunken fill, not shadow. The one exception is the hero's two big NFL/CFB pick CTA buttons, which carry a soft shadow (`shadowOpacity: 0.18, shadowRadius: 10, elevation: 4`) specifically to read as the most tappable things on the page, plus a matching auth-card shadow on sign-in/reset.
-
-Per confirmed direction, this is intentionally being opened up going forward — more shadow/lift is invited on card surfaces like Standings and Power Rankings to give the product more dimensional, trophy-case weight, rather than staying confined to just the two hero buttons.
+Hybrid: the board and most paper cards are flat (dashed border does the separation work, not shadow), but Standings and Power Rankings — the two surfaces DESIGN.md calls out as worth the most craft — carry real shadow lift so they read as the pinned, worth-looking-at sheets on the board. The two hero pick CTAs (NFL/CFB) carry the strongest shadow of anything on the page, reinforcing them as the most tappable targets.
 
 ### Shadow Vocabulary
-- **CTA lift** (`shadowColor: #000, shadowOpacity: 0.18, shadowRadius: 10, shadowOffset: {0,4}, elevation: 4`): The hero's primary tap targets and other newly-elevated primary surfaces.
-- **Auth lift** (`shadowColor: #000, shadowOpacity: 0.12, shadowRadius: 14, shadowOffset: {0,8}, elevation: 8`): Sign-in/reset cards — a softer, deeper variant.
+- **Card lift** (`shadowColor: #000, shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: {0,5}, elevation: 5`): Standings and Power Rankings.
+- **CTA lift** (`shadowColor: #000, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: {0,5}, elevation: 6`): The hero NFL/CFB pick buttons — slightly stronger than card lift, since these are the primary tap targets on the page.
+
+### Named Rules
+**The Two-Tier Lift Rule.** Not every paper sheet gets the same shadow. Recent Activity and Chat stay flat (dashed border only); only the two data surfaces the product actually differentiates on (Standings, Power Rankings) and the two hero CTAs earn shadow — shadow signals "this is worth looking at," not "this is a card."
 
 ## Shapes
 
-**The Pill-or-Twelve Rule.** Interactive chips, badges, and buttons are pill-shaped (999px radius) with no in-between; structural containers (cards, panels) use a flat 12px radius. A handful of smaller controls (tabs, small buttons) use 8px. Nothing in the product uses a small "slightly rounded" radius like 4–6px for a primary surface — the two governing radii are "fully round" and "12."
+**The Dashed-and-Tilted Rule.** Every paper card uses a dashed 1.5px border (`rgba(12,23,18,0.18)`, 10px radius) instead of the prior world's solid hairline, plus a small fixed rotation per card (between `-0.6deg` and `0.7deg`) so the board reads as hand-assembled rather than grid-aligned. Interactive pills (Share, Refresh, invite copy) stay fully round (999px) — the one shape carried over unchanged from the prior world. The hero CTA buttons use a softer 16px radius, between "pill" and "card," to read as bigger, weightier tap targets.
 
 ## Components
 
 ### Buttons
-- **Shape:** Pill (999px) for all standalone action buttons (Refresh scores, Share invite, copy).
-- **Primary:** Turf Teal fill, white text, 700 weight, compact padding (6–10px vertical, 12–16px horizontal).
-- **Secondary/Ghost:** White or transparent fill with a Turf Teal border and Turf Teal text — used for lower-emphasis actions (Back to group, secondary tabs).
-- **Hero CTA (signature):** Larger white rounded-20 card buttons (the NFL/CFB pick entry points) with icon, title, and status subtext stacked — the one button style that gets a shadow. Disabled state swaps to flat `#EBEDF2` fill rather than dimming opacity (opacity-based disabling was tried and rejected — it muddied against the dark hero).
-
-### Chips / Badges
-- **Rank badge (Power Rankings):** Small dark-ink pill (`#0F172A` fill, white text) showing "#N" next to a member's name in the countdown.
-- **Vibe chip (Standings):** Plain muted-slate text, no background — "🔥 Heater" / "🥶 Ice cold", shown only once a member has 3+ decided games.
-- **Second-lock badge (Weekly Locks grid):** Tiny dark circular overlay badge ("2") on a pick cell during CFB gap weeks, marking a second lock in the NFL column.
-- **Started badge (picks page):** Small pill marking a game that's already kicked off and can no longer be picked.
+- **Shape:** Pill (999px) for standalone actions (Refresh scores, Share invite).
+- **Primary:** Turf Teal fill or border, white or teal text — unchanged from the prior world; deliberately not re-skinned in marker-red, so actions stay visually distinct from board chrome.
+- **Hero CTA:** Chalk-paper fill, dashed border, 16px radius, strong shadow. Disabled state swaps to flat `#D8D4C4` fill, never opacity.
 
 ### Cards / Containers
-- **Corner Style:** 12px radius, consistently.
-- **Background:** White (`#FFFFFF`), 1px `#E5E7EB` border, no shadow.
-- **Internal Padding:** 12px, `gap: 4` between header and body.
-- **Header pattern:** Title (800 weight) left, an optional pill action button (Refresh, Share) right, on one row.
+- **Corner style:** 10px radius, dashed 1.5px border, slight rotation per instance.
+- **Background:** Chalk white (`#F5F3E7`).
+- **Pin accent:** A `TapeCorner` (translucent gold rectangle, `-3deg`/`3deg`, `side="left"` default) on every card — always the shared component, never a one-off inline style.
+- **Internal padding:** 12px, `paddingTop: 16` to clear the tape accent, `gap: 4` between header and body.
 
 ### Weekly Locks Grid (signature component)
-A season-long spreadsheet-style tracker: one row per week, one NCAA/NFL sub-column pair per member, each cell colored by result (Win/Loss/Pending) with the pick text inside. This is the app's most data-dense surface and intentionally keeps the spreadsheet metaphor the group used before the app existed — it should stay legible and grid-like even as other surfaces get bolder.
+Unchanged in function and data density from the prior world — still the season-long spreadsheet tracker. Restyled to the paper-card language (dashed border, tape corner, PermanentMarker title with the drawn `LockIcon` beside it in marker-red) but the internal grid cells (win/loss/pending colors, legend) intentionally kept in their original slate/semantic colors — the grid should stay legible as a spreadsheet even as the shell around it got louder.
 
 ### Power Rankings (signature component)
-A countdown list, #1 first, one AI-generated roast paragraph per member with a rank badge and avatar. This is the product's actual differentiator — the visual treatment here should carry the most personality of any surface in the app.
+Countdown list, #1 first. The rank-1 badge is the one place this pass changed a functional treatment, not just a shell: a filled dark pill became a transparent marker-red circle outline at a slight tilt — the board's own "circled in marker" gesture, applied to the product's actual differentiator.
 
 ### Navigation
-Minimal top bar (Groups / Account / Sign in-out), no persistent bottom tab bar observed. Screen-level navigation is mostly link-driven (group cards → group dashboard → picks pages) rather than a tab paradigm.
+Unchanged: minimal top bar (Groups / Account / Sign in-out) on the board-felt background.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** import brand color from `lib/theme.ts` (`colors.brand` = Turf Teal) rather than hardcoding `#0B735F` — the file exists specifically to prevent color drift, but most product screens still hardcode the hex directly instead of importing it.
-- **Do** keep every avatar/identity color assignment flowing through `lib/avatar.ts`'s hash function — never hand-pick an identity color.
-- **Do** keep text at 700 weight or heavier everywhere; use color (Ink Soft/Faint), not weight, to de-emphasize.
-- **Do** treat the Power Rankings and Weekly Locks grid as the two surfaces most worth investing extra craft in — they're what members actually open the app to see.
+- **Do** route every card through the shared `card`/`cardElevated` style plus a `<TapeCorner />` — never hand-roll a dashed border or tape rectangle inline.
+- **Do** keep PermanentMarker confined to the group name and section titles (see The Two-Voice Rule).
+- **Do** keep the LockIcon as the product's lock symbol going forward rather than reintroducing the 🔒 emoji — it was replaced deliberately, not incidentally.
+- **Do** give a card real shadow only when it's a genuinely high-value surface (see The Two-Tier Lift Rule) — not every paper sheet needs to look pinned with equal weight.
 
 ### Don't:
-- **Don't** introduce a second display font. RobotoCondensed_900Black's whole value is its rarity — it's currently used in exactly one place.
-- **Don't** use opacity to indicate a disabled state on a solid-colored surface — it blends into whatever's behind it (this was a real bug, fixed by swapping to a flat muted fill instead).
-- **Don't** add a seventh identity color or reorder the existing six — the hash math and every existing user/group's color assignment depends on the array staying fixed.
-- **Don't** let the felt/brass palette and the teal/slate palette drift further apart without a decision — right now they're two different systems in the same codebase, not one system with room to grow.
+- **Don't** reintroduce per-group hash-colored hero backgrounds — every group now shares one board; identity lives in the name and avatars only.
+- **Don't** use opacity to indicate a disabled state on a chalk-paper surface — it blends into the board behind it (the same bug class fixed once already in the prior world, now re-confirmed under the new palette).
+- **Don't** add a seventh member-identity color or reorder the existing six — the hash math and every member's current color depend on the fixed array.
+- **Don't** apply the paper-card language to the Danger Zone — it stays a plain red alert box, deliberately outside the board's playful material system.

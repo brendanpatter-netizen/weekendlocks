@@ -9,7 +9,8 @@ import { supabase } from "@/lib/supabase";
 import { avatarColor } from "@/lib/avatar";
 import { pickLabel } from "@/lib/pickLabel";
 import { recordLabel, winPct, EMPTY_RECORD, type SeasonRecord } from "@/lib/records";
-import { colors as theme } from "@/lib/theme";
+import LockIcon from "@/components/LockIcon";
+import TapeCorner from "@/components/TapeCorner";
 
 type Result = "win" | "loss" | "push" | null;
 type Cell = { label: string | null; result: Result };
@@ -66,8 +67,12 @@ export default function WeeklyPicksGrid({
 
   return (
     <View style={styles.card}>
+      <TapeCorner side="right" />
       <View style={styles.header}>
-        <Text style={styles.cardTitle}>🔒 Weekend Locks</Text>
+        <View style={styles.titleRow}>
+          <LockIcon size={17} color="#B23A2E" />
+          <Text style={styles.cardTitle}>Weekend Locks</Text>
+        </View>
         <View style={styles.legend}>
           <View style={[styles.legendDot, styles.cellWin]} /><Text style={styles.legendText}>Win</Text>
           <View style={[styles.legendDot, styles.cellLoss]} /><Text style={styles.legendText}>Loss</Text>
@@ -167,8 +172,12 @@ function PickCell({ cell, isSecondCfbLock }: { cell?: Cell; isSecondCfbLock?: bo
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12, gap: 4 },
-  cardTitle: { fontWeight: "900", fontSize: 17, letterSpacing: 0.2, color: theme.ink },
+  card: {
+    backgroundColor: "#F5F3E7", borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)", borderStyle: "dashed",
+    borderRadius: 10, padding: 12, paddingTop: 16, gap: 4, transform: [{ rotate: "-0.3deg" }],
+  },
+  cardTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 20, color: "#B23A2E" },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 },
   legend: { flexDirection: "row", alignItems: "center", gap: 5 },
   legendDot: { width: 9, height: 9, borderRadius: 999 },

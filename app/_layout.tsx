@@ -63,7 +63,15 @@ export default function RootLayout() {
 
   // Loaded once, registered globally — used for big display headlines
   // (e.g. the group name) that want something bolder than the system font.
-  useFonts({ RobotoCondensed_900Black });
+  // PermanentMarker is "The Whiteboard" world's display voice (group page
+  // section headers) — a real sourced face, not the platform sans. Loaded
+  // as a local asset (not the @expo-google-fonts npm package) because that
+  // package's .ttf require() failed to resolve in Metro on this machine
+  // even after a full cache clear, for reasons unrelated to this file.
+  useFonts({
+    RobotoCondensed_900Black,
+    PermanentMarker_400Regular: require("../assets/fonts/PermanentMarker-Regular.ttf"),
+  });
 
   // Hide header on auth routes to reduce UI/routing races
   const onAuthRoute = pathname?.startsWith("/auth");

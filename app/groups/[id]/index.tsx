@@ -1,5 +1,30 @@
 export const unstable_settings = { prerender: false };
 
+/**
+ * DIRECTION CONTRACT — "The Whiteboard" (new-work, direction seed 65ae88a4, assigned index 5)
+ * THESIS: This is a locker-room whiteboard, not a dashboard — it refuses the
+ *   generic dark-mode sports-app template every category default reaches for.
+ * OWN-WORLD: Chalkboard-green board ground; chalk-white/marker-red/marker-blue/
+ *   tape-yellow as the only ink colors; sections render as taped-up paper
+ *   sheets (dashed outline, tape-corner accent, slight pinned rotation);
+ *   PermanentMarker for section headers, bold system sans for data.
+ * STORY: A friend opens their group and lands on the board the crew actually
+ *   uses — picks, standings, and the weekly roast, hand-marked, not corporate.
+ * FIRST VIEWPORT: Dark green board fills the screen; the group name is
+ *   hand-lettered directly on the board in large chalk-white marker type,
+ *   with a drawn padlock icon beside it — no card, no chrome, the board itself
+ *   is the header.
+ * FORM: Locker-room whiteboard, grounded candidate #5 of 7, ranked list:
+ *   1 Trading Card Pack, 2 Stadium Scoreboard, 3 Vault/Padlock, 4 Broadcast
+ *   Ticker, 5 Locker Room Whiteboard (assigned), 6 Letterman/Trophy Case,
+ *   7 Game Ticket Stub. Raised with decal-style numerals (from a racing-
+ *   livery challenger) and a strict fixed-palette discipline (from a
+ *   teletext-broadcast challenger).
+ * FINISH: unreviewed and undocumented is unfinished; this build ends with
+ *   the finish review, the verdict, DESIGN.md, and every shipping raster
+ *   carrying its provenance.
+ */
+
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator, FlatList, Image, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View,
@@ -17,6 +42,8 @@ import { colors as theme } from "@/lib/theme";
 import GroupChat from "@/components/GroupChat";
 import WeeklyPicksGrid from "@/components/WeeklyPicksGrid";
 import WeeklyRecap from "@/components/WeeklyRecap";
+import LockIcon from "@/components/LockIcon";
+import TapeCorner from "@/components/TapeCorner";
 
 // null for Over/Under totals picks (no single team) or unmapped names.
 function pickLogo(team: string | null | undefined, sport: "nfl" | "ncaaf"): string | null {
@@ -238,16 +265,19 @@ export default function GroupDashboardPage() {
     router.replace("/groups" as Href);
   }
 
-  const groupColor = avatarColor(groupId);
-
   return (
     <ScrollView style={styles.pageOuter} contentContainerStyle={styles.page}>
-      <View style={[styles.hero, { backgroundColor: groupColor.fg }]}>
+      {/* The board itself is the header now — no separate hero card. Group
+          identity previously lived in a per-group hash-colored hero block;
+          under The Whiteboard, the board is one board for everyone, and
+          identity moves to the hand-lettered name + member avatar chips. */}
+      <View style={styles.hero}>
         <View style={styles.heroEyebrow}>
-          <Text style={styles.heroEyebrowText}>GROUP</Text>
+          <LockIcon size={13} color="#F5F3E7" />
+          <Text style={styles.heroEyebrowText}>THE BOARD</Text>
         </View>
         <Text style={styles.heroTitle}>{groupName}</Text>
-        <Text style={styles.heroSubtitle}>{members.length} member{members.length === 1 ? "" : "s"}</Text>
+        <Text style={styles.heroSubtitle}>{members.length} member{members.length === 1 ? "" : "s"} on the crew</Text>
 
         <View style={styles.pickCtaRow}>
           <Pressable
@@ -329,6 +359,7 @@ export default function GroupDashboardPage() {
       ) : (
         <>
         <View style={[styles.card, styles.cardElevated]}>
+            <TapeCorner />
             <View style={styles.leaderboardHeader}>
               <Text style={styles.cardTitle}>🏆 The Standings</Text>
               <Pressable
@@ -393,7 +424,8 @@ export default function GroupDashboardPage() {
             refreshKey={dataVersion}
           />
 
-          <View style={styles.card}>
+          <View style={[styles.card, { transform: [{ rotate: "0.5deg" }] }]}>
+            <TapeCorner side="right" />
             <Text style={styles.cardTitle}>Recent activity</Text>
             {activity.length === 0 ? (
               <Text style={styles.empty}>No recent activity.</Text>
@@ -457,30 +489,32 @@ export default function GroupDashboardPage() {
 }
 
 const styles = StyleSheet.create({
-  // theme.paper (warm off-white) instead of plain white — gives every card
-  // real lift/separation instead of white-on-white. This was sitting
-  // unused in lib/theme.ts; the group page previously ignored it entirely.
-  pageOuter: { flex: 1, backgroundColor: theme.paper },
+  // The board itself: chalkboard-green ground, everything else pins to it.
+  pageOuter: { flex: 1, backgroundColor: theme.felt },
   page: { padding: 16, gap: 16 },
 
-  hero: { borderRadius: 24, padding: 20, gap: 4, alignItems: "center" },
+  // No card/background here anymore — the name is lettered directly on the
+  // board, so the hero IS the board's opening line, not a chip on top of it.
+  hero: { paddingTop: 8, paddingBottom: 4, gap: 6, alignItems: "center" },
   heroEyebrow: {
-    alignSelf: "center", backgroundColor: "rgba(255,255,255,0.18)",
-    borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3, marginBottom: 4,
+    flexDirection: "row", alignItems: "center", gap: 6,
+    alignSelf: "center", borderWidth: 1.5, borderColor: "rgba(245,243,231,0.4)", borderStyle: "dashed",
+    borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4, marginBottom: 4,
   },
-  heroEyebrowText: { fontSize: 11, fontWeight: "800", letterSpacing: 1, color: "white" },
+  heroEyebrowText: { fontSize: 11, fontWeight: "800", letterSpacing: 1.5, color: "#F5F3E7" },
   heroTitle: {
-    fontFamily: "RobotoCondensed_900Black", fontSize: 44, color: "white",
-    letterSpacing: 0.5, textAlign: "center", textTransform: "uppercase",
+    fontFamily: "PermanentMarker_400Regular", fontSize: 40, color: "#F5F3E7",
+    letterSpacing: 0.5, textAlign: "center", textTransform: "uppercase", lineHeight: 46,
   },
-  heroSubtitle: { fontSize: 13, color: "rgba(255,255,255,0.75)", marginBottom: 18, textAlign: "center" },
+  heroSubtitle: { fontSize: 13, color: "rgba(245,243,231,0.7)", marginBottom: 18, textAlign: "center", fontWeight: "700" },
 
   inviteRow: {
-    flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#F8FAFC",
-    borderWidth: 1, borderColor: "#E2E8F0", borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12,
+    flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#F5F3E7",
+    borderWidth: 1.5, borderColor: "#B4901F", borderStyle: "dashed", borderRadius: 10,
+    paddingVertical: 10, paddingHorizontal: 12, transform: [{ rotate: "-0.4deg" }],
   },
-  inviteLabel: { fontSize: 12, color: "#64748B", fontWeight: "700" },
-  inviteCode: { fontSize: 14, fontWeight: "800", color: "#0F172A", letterSpacing: 1 },
+  inviteLabel: { fontSize: 12, color: "#45564C", fontWeight: "700" },
+  inviteCode: { fontSize: 14, fontWeight: "800", color: "#0C1712", letterSpacing: 1 },
   copyBtn: { marginLeft: "auto", paddingVertical: 10, paddingHorizontal: 14, borderRadius: 999, backgroundColor: theme.brand },
   copyBtnText: { color: "white", fontWeight: "700", fontSize: 12 },
 
@@ -489,37 +523,43 @@ const styles = StyleSheet.create({
 
   pickCtaRow: { flexDirection: "row", gap: 14, flexWrap: "wrap", alignSelf: "stretch" },
   pickCtaBtn: {
-    flex: 1, minWidth: 130, alignItems: "center", gap: 6, backgroundColor: "white",
-    borderRadius: 20, paddingVertical: 18, paddingHorizontal: 16,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18, shadowRadius: 10, elevation: 4,
+    flex: 1, minWidth: 130, alignItems: "center", gap: 6, backgroundColor: "#F5F3E7",
+    borderRadius: 16, paddingVertical: 18, paddingHorizontal: 16,
+    borderWidth: 1.5, borderColor: "rgba(12,23,18,0.15)", borderStyle: "dashed",
+    shadowColor: "#000", shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.28, shadowRadius: 12, elevation: 6,
   },
   // Flat + muted instead of opacity: opacity on a solid card blends it with
-  // whatever's behind (the dark hero), turning white into a muddy gray-purple.
-  pickCtaBtnDisabled: { backgroundColor: "#EBEDF2", shadowOpacity: 0, elevation: 0 },
+  // whatever's behind (the board), turning chalk-paper into a muddy gray-green.
+  pickCtaBtnDisabled: { backgroundColor: "#D8D4C4", shadowOpacity: 0, elevation: 0 },
   pickCtaIcon: { width: 48, height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center", marginBottom: 4 },
   pickCtaLogo: { width: 30, height: 30 },
   pickCtaLogoDisabled: { opacity: 0.5 },
-  pickCtaTitle: { fontSize: 17, fontWeight: "800", color: "#0F172A" },
+  pickCtaTitle: { fontSize: 17, fontWeight: "800", color: "#0C1712" },
   pickCtaTitleDisabled: { color: "#94A3B8" },
-  pickCtaSub: { fontSize: 12, color: "#64748B", fontWeight: "600" },
+  pickCtaSub: { fontSize: 12, color: "#45564C", fontWeight: "600" },
 
   heroScheduleRow: {
     flexDirection: "row", alignItems: "center", marginTop: 16, paddingTop: 14,
-    borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.16)", alignSelf: "stretch",
+    borderTopWidth: 1, borderTopColor: "rgba(245,243,231,0.2)", alignSelf: "stretch",
   },
   heroScheduleItem: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0 },
-  heroScheduleDivider: { width: 1, height: 20, backgroundColor: "rgba(255,255,255,0.16)", marginHorizontal: 12 },
+  heroScheduleDivider: { width: 1, height: 20, backgroundColor: "rgba(245,243,231,0.2)", marginHorizontal: 12 },
   heroScheduleLogo: { width: 18, height: 18 },
-  heroScheduleText: { fontSize: 12, fontWeight: "600", color: "rgba(255,255,255,0.85)", flexShrink: 1 },
+  heroScheduleText: { fontSize: 12, fontWeight: "600", color: "rgba(245,243,231,0.85)", flexShrink: 1 },
 
-  card: { backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12, gap: 4 },
+  // Chalk-paper sheets pinned to the board — dashed hand-drawn outline
+  // instead of a hairline, a slight tilt like something taped up in a hurry.
+  card: {
+    backgroundColor: "#F5F3E7", borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)", borderStyle: "dashed",
+    borderRadius: 10, padding: 12, paddingTop: 16, gap: 4, transform: [{ rotate: "-0.6deg" }],
+  },
   // Standings + Power Rankings are the two surfaces DESIGN.md calls out for
   // more depth — everything else on the page (Recent Activity, chat) stays flat.
   cardElevated: {
-    shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 3,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
   },
-  cardTitle: { fontWeight: "900", fontSize: 17, letterSpacing: 0.2, color: theme.ink },
+  cardTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 20, color: "#B23A2E" },
 
   leaderboardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
   refreshBtn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1, borderColor: theme.brand },

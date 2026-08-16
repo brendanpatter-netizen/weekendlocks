@@ -8,6 +8,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { avatarColor, initials } from "@/lib/avatar";
 import { colors as theme } from "@/lib/theme";
+import TapeCorner from "@/components/TapeCorner";
 
 type Recap = { user_id: string; display_name: string; recap_text: string; rank: number | null };
 type Member = { user_id: string; display_name: string };
@@ -55,6 +56,7 @@ export default function WeeklyRecap({
 
   return (
     <View style={styles.card}>
+      <TapeCorner />
       <View style={styles.header}>
         <Text style={styles.cardTitle}>🔥 Power Rankings</Text>
         {weekOfLabel && <Text style={styles.weekLabel}>Week of {weekOfLabel}</Text>}
@@ -93,30 +95,36 @@ export default function WeeklyRecap({
 const styles = StyleSheet.create({
   // Per DESIGN.md's elevation direction, this card earns a soft shadow (the
   // product's actual differentiator, worth reading as a peak in the scroll)
-  // rather than staying flat like the rest of the page.
+  // rather than staying flat like the rest of the page — plus the same
+  // paper-pinned-to-board language every card on the page now carries.
   card: {
-    backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12, gap: 4,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 3,
+    backgroundColor: "#F5F3E7", borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)", borderStyle: "dashed",
+    borderRadius: 10, padding: 12, paddingTop: 16, gap: 4, transform: [{ rotate: "0.7deg" }],
+    shadowColor: "#000", shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
   },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  cardTitle: { fontWeight: "900", fontSize: 17, letterSpacing: 0.2, color: theme.ink },
-  weekLabel: { fontSize: 11, color: "#64748B", fontWeight: "700" }, // was #94A3B8 (2.56:1) — failed WCAG AA on real text
-  empty: { color: "#64748B", paddingVertical: 8 },
+  cardTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 20, color: "#B23A2E" },
+  weekLabel: { fontSize: 11, color: "#45564C", fontWeight: "700" },
+  empty: { color: "#45564C", paddingVertical: 8 },
   row: {
     flexDirection: "row", gap: 10, paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#E5E7EB",
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "rgba(12,23,18,0.15)",
   },
   rowFirst: { borderTopWidth: 0, paddingTop: 8 },
   avatar: { width: 32, height: 32, borderRadius: 999, alignItems: "center", justifyContent: "center" },
   avatarText: { fontSize: 12, fontWeight: "700" },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 },
   rankBadge: {
-    fontSize: 11, fontWeight: "800", color: "white", backgroundColor: "#0F172A",
+    fontSize: 11, fontWeight: "800", color: "white", backgroundColor: "#0C1712",
     borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1,
   },
-  // #1 gets the trophy treatment — the one gold moment on the page, earned
-  // by being the product's actual differentiator and the leader's spot.
-  rankBadgeFirst: { backgroundColor: theme.brassFill, color: theme.brassInk },
-  name: { fontWeight: "800", fontSize: 13, color: "#0F172A" },
-  recapText: { fontSize: 13, color: "#334155", lineHeight: 19 },
+  // #1 gets circled in marker instead of a filled badge — the "coach
+  // circled your name on the board" moment, the product's actual
+  // differentiator getting the loudest treatment on the page.
+  rankBadgeFirst: {
+    backgroundColor: "transparent", color: "#B23A2E", borderWidth: 2, borderColor: "#B23A2E",
+    borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, transform: [{ rotate: "-4deg" }],
+  },
+  name: { fontWeight: "800", fontSize: 13, color: "#0C1712" },
+  recapText: { fontSize: 13, color: "#2A362F", lineHeight: 19 },
 });

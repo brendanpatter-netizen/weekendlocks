@@ -4,20 +4,24 @@
   "title": "Design System: WeekendLocks",
   "extensions": {
     "colorMeta": {
-      "turf-teal": { "role": "primary", "displayName": "Turf Teal", "canonical": "#0B735F", "tonalRamp": ["#031F19", "#063429", "#0B735F", "#0F9678", "#3FB596", "#7ACDB6", "#B7E4D6", "#E1F5EE"] },
-      "felt-green": { "role": "secondary", "displayName": "Felt Green", "canonical": "#063D31", "tonalRamp": ["#01120E", "#03251E", "#063D31", "#0A4C3D", "#2E7A65", "#66A896", "#A6CFC2", "#DDEEE8"] },
-      "brass-gold": { "role": "tertiary", "displayName": "Brass Gold", "canonical": "#B3781F", "tonalRamp": ["#2E1D06", "#4A3106", "#7A5410", "#B3781F", "#D89A3A", "#F2C266", "#F7D896", "#FCEFD3"] },
-      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "#0F172A", "tonalRamp": ["#0F172A", "#334155", "#475569", "#64748B", "#94A3B8", "#CBD5E1", "#E5E7EB", "#F8FAFC"] }
+      "board-felt": { "role": "primary", "displayName": "Board Felt", "canonical": "#063D31", "tonalRamp": ["#01120E", "#03251E", "#063D31", "#0A4C3D", "#2E7A65", "#66A896", "#A6CFC2", "#DDEEE8"] },
+      "marker-red": { "role": "primary", "displayName": "Marker Red", "canonical": "#B23A2E", "tonalRamp": ["#2A0D08", "#4D160F", "#7A2118", "#B23A2E", "#D46456", "#E89A90", "#F3C7C0", "#FBE8E5"] },
+      "chalk-white": { "role": "secondary", "displayName": "Chalk White", "canonical": "#F5F3E7", "tonalRamp": ["#3A382E", "#5C594A", "#8B876F", "#B8B39A", "#D6D2BE", "#F5F3E7", "#F9F8F0", "#FDFCF8"] },
+      "dashed-gold": { "role": "tertiary", "displayName": "Dashed Gold", "canonical": "#B4901F", "tonalRamp": ["#2E2306", "#4A3A0A", "#7A5E10", "#B4901F", "#D8B84A", "#EDD37F", "#F5E4AE", "#FBF2D9"] },
+      "tape-gold": { "role": "tertiary", "displayName": "Tape Gold", "canonical": "rgba(244,196,48,0.55)", "tonalRamp": ["#4A3A0A", "#7A5E10", "#B4901F", "#D8B84A", "#F4C430", "#F7D264", "#FAE196", "#FCEFC7"] },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "#0C1712", "tonalRamp": ["#0C1712", "#1B2B23", "#2E4238", "#45564C", "#6E7E73", "#9CAA9F", "#CBD3CC", "#E9ECE8"] },
+      "slate": { "role": "neutral", "displayName": "Slate", "canonical": "#0F172A", "tonalRamp": ["#0F172A", "#334155", "#475569", "#64748B", "#94A3B8", "#CBD5E1", "#E5E7EB", "#F8FAFC"] },
+      "turf-teal": { "role": "neutral", "displayName": "Turf Teal", "canonical": "#0B735F", "tonalRamp": ["#031F19", "#063429", "#0B735F", "#0F9678", "#3FB596", "#7ACDB6", "#B7E4D6", "#E1F5EE"] }
     },
     "typographyMeta": {
-      "display": { "displayName": "Display", "purpose": "The group hero title only — one use in the whole product." },
-      "title": { "displayName": "Title", "purpose": "Card and section headers." },
-      "label": { "displayName": "Label", "purpose": "Eyebrows, column headers, badges, timestamps." },
-      "body": { "displayName": "Body", "purpose": "Default UI text — names, picks, chat." }
+      "display": { "displayName": "Display", "purpose": "The group name, hand-lettered directly on the board — the only 40px PermanentMarker text in the product." },
+      "title": { "displayName": "Title", "purpose": "Section headers on every paper card, always PermanentMarker in marker-red." },
+      "label": { "displayName": "Label", "purpose": "Eyebrows, column headers, badges, timestamps — system sans, never marker." },
+      "body": { "displayName": "Body", "purpose": "Default UI text — names, picks, chat, CTA subtext." }
     },
     "shadows": [
-      { "name": "cta-lift", "value": "0 4px 10px rgba(0,0,0,0.18)", "purpose": "The hero's primary CTA buttons and other newly-elevated primary surfaces." },
-      { "name": "auth-lift", "value": "0 8px 14px rgba(0,0,0,0.12)", "purpose": "Sign-in / reset password cards." }
+      { "name": "card-lift", "value": "0 5px 10px rgba(0,0,0,0.3)", "purpose": "Standings and Power Rankings — the two surfaces worth the most craft on the page." },
+      { "name": "cta-lift", "value": "0 5px 12px rgba(0,0,0,0.28)", "purpose": "The two hero NFL/CFB pick CTA buttons — the strongest shadow on the page." }
     ],
     "motion": [],
     "breakpoints": []
@@ -27,47 +31,47 @@
       "name": "Primary Button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "Pill-shaped primary action (Refresh scores, Share invite).",
+      "description": "Pill-shaped primary action (Refresh scores, Share invite) — Turf Teal survives from the prior world unchanged, deliberately not re-skinned in marker-red.",
       "html": "<button class=\"ds-btn-primary\">Refresh scores</button>",
-      "css": ".ds-btn-primary { background: #0B735F; color: #FFFFFF; padding: 6px 14px; border-radius: 999px; font-weight: 700; font-size: 12px; border: none; transition: background 0.15s; } .ds-btn-primary:hover { background: #085041; } .ds-btn-primary:focus-visible { outline: 2px solid #085041; outline-offset: 2px; }"
+      "css": ".ds-btn-primary { background: #0B735F; color: #FFFFFF; padding: 10px 14px; border-radius: 999px; font-weight: 700; font-size: 12px; border: none; transition: background 0.15s; } .ds-btn-primary:hover { background: #085041; } .ds-btn-primary:focus-visible { outline: 2px solid #085041; outline-offset: 2px; }"
     },
     {
-      "name": "Secondary Button",
-      "kind": "button",
-      "refersTo": "button-secondary",
-      "description": "Ghost/outline pill for lower-emphasis actions (Back to group).",
-      "html": "<button class=\"ds-btn-secondary\">Back to group</button>",
-      "css": ".ds-btn-secondary { background: transparent; color: #0B735F; border: 1px solid #0B735F; padding: 6px 14px; border-radius: 999px; font-weight: 700; font-size: 13px; transition: background 0.15s; } .ds-btn-secondary:hover { background: rgba(11,115,95,0.08); } .ds-btn-secondary:focus-visible { outline: 2px solid #085041; outline-offset: 2px; }"
-    },
-    {
-      "name": "Card",
+      "name": "Paper Card",
       "kind": "card",
       "refersTo": "card",
-      "description": "The standard flat white panel used for every section (Standings, Power Rankings, Weekly Locks, Recent Activity, Chat).",
-      "html": "<div class=\"ds-card\"><div class=\"ds-card-title\">🏆 The Standings</div></div>",
-      "css": ".ds-card { background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 12px; padding: 12px; } .ds-card-title { font-weight: 800; font-size: 15px; color: #0F172A; }"
+      "description": "The standard chalk-paper sheet used for every section — dashed border, slight rotation, tape-corner accent, PermanentMarker title in marker-red.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-tape\"></div><div class=\"ds-card-title\">The Standings</div></div>",
+      "css": ".ds-card { position: relative; background: #F5F3E7; border: 1.5px dashed rgba(12,23,18,0.18); border-radius: 10px; padding: 12px; padding-top: 16px; transform: rotate(-0.6deg); } .ds-tape { position: absolute; top: -8px; left: 16px; width: 46px; height: 18px; background: rgba(244,196,48,0.55); border: 1px solid rgba(180,140,20,0.35); transform: rotate(-3deg); } .ds-card-title { font-family: 'Permanent Marker', cursive; font-size: 20px; color: #B23A2E; }"
     },
     {
-      "name": "Rank Badge",
+      "name": "Rank Circle (First Place)",
+      "kind": "chip",
+      "refersTo": "rank-badge-first",
+      "description": "The #1 spot in Power Rankings — a marker-red circle outline, transparent fill, slight tilt. Replaced a filled dark pill from the prior world; the product's 'coach circled your name on the board' signature moment.",
+      "html": "<span class=\"ds-rank-first\">#1</span>",
+      "css": ".ds-rank-first { display: inline-block; background: transparent; color: #B23A2E; border: 2px solid #B23A2E; border-radius: 999px; font-size: 11px; font-weight: 800; padding: 2px 8px; transform: rotate(-4deg); }"
+    },
+    {
+      "name": "Rank Badge (Other)",
       "kind": "chip",
       "refersTo": "rank-badge",
-      "description": "Dark pill showing a member's Power Rankings position (#N).",
-      "html": "<span class=\"ds-rank-badge\">#1</span>",
-      "css": ".ds-rank-badge { background: #0F172A; color: #FFFFFF; font-size: 11px; font-weight: 800; border-radius: 999px; padding: 1px 6px; }"
+      "description": "Any rank below #1 in Power Rankings — a plain dark filled pill, unchanged from the prior world.",
+      "html": "<span class=\"ds-rank-badge\">#2</span>",
+      "css": ".ds-rank-badge { background: #0C1712; color: #FFFFFF; font-size: 11px; font-weight: 800; border-radius: 999px; padding: 1px 6px; }"
     },
     {
-      "name": "Vibe Chip",
-      "kind": "chip",
-      "refersTo": "vibe-chip",
-      "description": "Text-only flavor tag next to a standings row once a member has 3+ decided games.",
-      "html": "<span class=\"ds-vibe-chip\">🔥 Heater</span>",
-      "css": ".ds-vibe-chip { color: #64748B; font-size: 11px; font-weight: 700; }"
+      "name": "Lock Icon",
+      "kind": "custom",
+      "refersTo": "lock-icon",
+      "description": "Authored SVG padlock replacing the prior 🔒 emoji — thick rounded marker-style stroke, unfilled. Appears beside the board eyebrow and the Weekly Locks section title.",
+      "html": "<svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\"><path d=\"M7.5 10V7.5a4.5 4.5 0 0 1 9 0V10\" stroke=\"#B23A2E\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><rect x=\"4.5\" y=\"10\" width=\"15\" height=\"10.5\" rx=\"2.5\" stroke=\"#B23A2E\" stroke-width=\"2.4\" stroke-linejoin=\"round\"/><path d=\"M12 14.5v3\" stroke=\"#B23A2E\" stroke-width=\"2.4\" stroke-linecap=\"round\"/></svg>",
+      "css": ""
     },
     {
       "name": "Pick Cell — Win",
       "kind": "custom",
       "refersTo": "cell-win",
-      "description": "A decided-win cell in the Weekly Locks grid.",
+      "description": "A decided-win cell in the Weekly Locks grid — internal grid colors kept from the prior world so the spreadsheet stays legible.",
       "html": "<div class=\"ds-cell ds-cell-win\">Chiefs -3.5</div>",
       "css": ".ds-cell { border-radius: 6px; padding: 7px 8px; font-size: 11px; font-weight: 700; text-align: center; line-height: 14px; } .ds-cell-win { background: #DCFCE7; }"
     },
@@ -83,37 +87,39 @@
       "name": "Hero CTA",
       "kind": "button",
       "refersTo": "hero-cta",
-      "description": "The two big NFL/CFB pick entry-point buttons on the group hero — the one button style that gets a shadow.",
+      "description": "The two big NFL/CFB pick entry-point buttons — now chalk-paper with a dashed border and the strongest shadow on the page, instead of a plain white card.",
       "html": "<button class=\"ds-hero-cta\"><span class=\"ds-hero-cta-title\">NFL</span><span class=\"ds-hero-cta-sub\">Week 3 now live</span></button>",
-      "css": ".ds-hero-cta { background: #FFFFFF; border-radius: 20px; padding: 18px 16px; box-shadow: 0 4px 10px rgba(0,0,0,0.18); border: none; display: flex; flex-direction: column; align-items: center; gap: 6px; } .ds-hero-cta:hover { transform: translateY(-1px); } .ds-hero-cta-title { font-weight: 800; font-size: 17px; color: #0F172A; } .ds-hero-cta-sub { font-weight: 600; font-size: 12px; color: #64748B; }"
+      "css": ".ds-hero-cta { background: #F5F3E7; border: 1.5px dashed rgba(12,23,18,0.15); border-radius: 16px; padding: 18px 16px; box-shadow: 0 5px 12px rgba(0,0,0,0.28); display: flex; flex-direction: column; align-items: center; gap: 6px; } .ds-hero-cta:hover { transform: translateY(-1px); } .ds-hero-cta-title { font-weight: 800; font-size: 17px; color: #0C1712; } .ds-hero-cta-sub { font-weight: 600; font-size: 12px; color: #45564C; }"
     }
   ],
   "narrative": {
-    "northStar": "The Locker Room",
-    "overview": "WeekendLocks is a bulletin board, not a dashboard. Every screen leans on heavy type (700/800 weight is the floor, not the ceiling), pill-shaped chips and buttons, and a deterministic per-person/per-group color-identity system so the same name always wears the same color. Two color systems currently coexist: the product surfaces members use every week run on a plain Turf Teal + slate neutrals + white card system, while a richer Felt Green + Brass Gold palette already exists in lib/theme.ts but is confined to the auth/account shell — a natural candidate to pull forward into the main product.",
+    "northStar": "The Whiteboard",
+    "overview": "WeekendLocks is a locker-room whiteboard, not a dashboard. This replaces the product's prior visual world (Turf Teal + slate + white cards) entirely. A dark chalkboard-green board (#063D31) fills the screen and is the header itself — the group name is hand-lettered directly onto it in large chalk-white PermanentMarker type beside a drawn padlock icon. Every section below reads as a sheet of paper taped to that board: chalk-paper fill, dashed hand-drawn outline, a masking-tape corner accent, and a few degrees of rotation per card. The tone stays loud and personal, but the loudness now comes from material — chalk, marker, tape, paper — instead of a generic dark-mode sports-app template.",
     "keyCharacteristics": [
-      "Bold by default: no regular-weight text anywhere in the product.",
-      "Pill everything interactive (999px radius); cards use a consistent 12px radius.",
-      "One deterministic hash-color system powers both member avatars and each group's hero background.",
-      "Emoji-forward section headers reinforce the 'Locks' brand and competitive personality.",
-      "Currently flat with borders instead of shadows, but opening up elevation is the confirmed direction."
+      "One board for every group: per-group hash-colored hero backgrounds were removed; identity now lives in the hand-lettered name and member avatar chips only.",
+      "Paper-pinned-to-board is the universal card language — dashed border, slight rotation, and a shared TapeCorner component, never hand-rolled per file.",
+      "PermanentMarker is reserved for exactly two roles: the group name and section titles — never buttons, data, or body text.",
+      "The lock symbol is now a drawn SVG (LockIcon), replacing the 🔒 emoji, per the product's standing requirement to keep a lock symbol somewhere concrete.",
+      "The #1 spot in Power Rankings is circled in marker (transparent, red ring, tilted) instead of a filled badge.",
+      "Only Standings and Power Rankings carry real shadow lift; Recent Activity and Chat stay flat."
     ],
     "rules": [
-      { "name": "The Same Hash, Different Canvas Rule", "body": "Six pastel-background/deep-foreground color pairs are assigned by hashing a user's or group's ID. The same math produces a member's avatar chip and a group's hero background. Never hand-pick an identity color or add a seventh.", "section": "colors" },
-      { "name": "The No-Regular-Weight Rule", "body": "Nothing in the product renders below font-weight 700. To de-emphasize, use a lighter color, not a lighter weight.", "section": "typography" },
-      { "name": "The Pill-or-Twelve Rule", "body": "Interactive chips/badges/buttons are pill-shaped (999px); structural containers use 12px. Nothing uses a small 4-6px radius for a primary surface.", "section": "elevation" }
+      { "name": "The Same Hash, Different Canvas Rule (narrowed)", "body": "The six identity color pairs still power member avatars, but no longer extend to group hero backgrounds — every group now shares one board. Never hand-pick an identity color or add a seventh.", "section": "colors" },
+      { "name": "The Two-Voice Rule", "body": "PermanentMarker is reserved for exactly two roles — the group name and section titles. It never appears on a button, a data value, or body copy.", "section": "typography" },
+      { "name": "The Dashed-and-Tilted Rule", "body": "Every paper card uses a dashed border and a small fixed rotation instead of a solid hairline and square alignment, so the board reads as hand-assembled.", "section": "shapes" },
+      { "name": "The Two-Tier Lift Rule", "body": "Not every paper sheet gets the same shadow. Only Standings, Power Rankings, and the two hero CTAs earn real shadow lift; everything else stays flat.", "section": "elevation" }
     ],
     "dos": [
-      "Do import brand color from lib/theme.ts (colors.brand) rather than hardcoding #0B735F.",
-      "Do keep every avatar/identity color flowing through lib/avatar.ts's hash function.",
-      "Do keep text at 700 weight or heavier everywhere; use color to de-emphasize.",
-      "Do treat Power Rankings and the Weekly Locks grid as the two surfaces worth the most craft."
+      "Do route every card through the shared card/cardElevated style plus a TapeCorner — never hand-roll a dashed border or tape rectangle inline.",
+      "Do keep PermanentMarker confined to the group name and section titles.",
+      "Do keep the LockIcon as the product's lock symbol going forward rather than reintroducing the emoji.",
+      "Do give a card real shadow only when it's a genuinely high-value surface."
     ],
     "donts": [
-      "Don't introduce a second display font.",
-      "Don't use opacity to indicate a disabled state on a solid surface.",
-      "Don't add a seventh identity color or reorder the existing six.",
-      "Don't let the felt/brass palette and the teal/slate palette drift further apart without a decision."
+      "Don't reintroduce per-group hash-colored hero backgrounds.",
+      "Don't use opacity to indicate a disabled state on a chalk-paper surface — it blends into the board behind it.",
+      "Don't add a seventh member-identity color or reorder the existing six.",
+      "Don't apply the paper-card language to the Danger Zone — it stays a plain red alert box."
     ]
   }
 }
