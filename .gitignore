@@ -3,6 +3,11 @@
 # dependencies
 node_modules/
 
+# Impeccable design skill — reinstallable via `npx impeccable install`,
+# not project source. DESIGN.md / PRODUCT.md / .impeccable/design.json
+# (the actual generated design-system artifacts) are tracked normally.
+.claude/
+
 # Expo
 .expo/
 dist/

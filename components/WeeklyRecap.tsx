@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { avatarColor, initials } from "@/lib/avatar";
+import { colors as theme } from "@/lib/theme";
 
 type Recap = { user_id: string; display_name: string; recap_text: string; rank: number | null };
 type Member = { user_id: string; display_name: string };
@@ -74,7 +75,9 @@ export default function WeeklyRecap({
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <View style={styles.nameRow}>
-                  {r.rank != null && <Text style={styles.rankBadge}>#{r.rank}</Text>}
+                  {r.rank != null && (
+                    <Text style={[styles.rankBadge, r.rank === 1 && styles.rankBadgeFirst]}>#{r.rank}</Text>
+                  )}
                   <Text style={styles.name}>{r.display_name}</Text>
                 </View>
                 <Text style={styles.recapText}>{r.recap_text}</Text>
@@ -88,10 +91,16 @@ export default function WeeklyRecap({
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12, gap: 4 },
+  // Per DESIGN.md's elevation direction, this card earns a soft shadow (the
+  // product's actual differentiator, worth reading as a peak in the scroll)
+  // rather than staying flat like the rest of the page.
+  card: {
+    backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12, gap: 4,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 3,
+  },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   cardTitle: { fontWeight: "800" },
-  weekLabel: { fontSize: 11, color: "#94A3B8", fontWeight: "700" },
+  weekLabel: { fontSize: 11, color: "#64748B", fontWeight: "700" }, // was #94A3B8 (2.56:1) — failed WCAG AA on real text
   empty: { color: "#64748B", paddingVertical: 8 },
   row: {
     flexDirection: "row", gap: 10, paddingVertical: 10,
@@ -105,6 +114,9 @@ const styles = StyleSheet.create({
     fontSize: 11, fontWeight: "800", color: "white", backgroundColor: "#0F172A",
     borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1,
   },
+  // #1 gets the trophy treatment — the one gold moment on the page, earned
+  // by being the product's actual differentiator and the leader's spot.
+  rankBadgeFirst: { backgroundColor: theme.brassFill, color: theme.brassInk },
   name: { fontWeight: "800", fontSize: 13, color: "#0F172A" },
   recapText: { fontSize: 13, color: "#334155", lineHeight: 19 },
 });

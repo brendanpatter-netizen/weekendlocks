@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
   memberHeadText: { fontWeight: "800", fontSize: 13 },
 
   subHeadCell: { width: PICK_COL_WIDTH, alignItems: "center", paddingVertical: 4, backgroundColor: "#F8FAFC" },
-  subHeadText: { fontSize: 10, fontWeight: "700", color: "#94A3B8", textTransform: "uppercase", letterSpacing: 0.4 },
+  subHeadText: { fontSize: 10, fontWeight: "700", color: "#64748B", textTransform: "uppercase", letterSpacing: 0.4 }, // was #94A3B8 (2.56:1) — failed WCAG AA
 
   pickCell: {
     width: PICK_COL_WIDTH - 2, marginLeft: 1, marginVertical: 1, borderRadius: 6,

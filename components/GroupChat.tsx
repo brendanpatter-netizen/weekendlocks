@@ -4,6 +4,7 @@ import { View, Text, TextInput, Pressable, FlatList, StyleSheet } from "react-na
 import { supabase } from "@/lib/supabase";
 import { avatarColor, initials } from "@/lib/avatar";
 import { alert } from "@/lib/alert";
+import { colors as theme } from "@/lib/theme";
 
 type ChatMessage = { id: string; user_id: string; body: string; created_at: string };
 
@@ -144,17 +145,17 @@ const styles = StyleSheet.create({
   avatarText: { fontSize: 11, fontWeight: "700" },
 
   bubble: { maxWidth: "75%", backgroundColor: "#F1F5F9", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 },
-  bubbleMine: { backgroundColor: "#0B735F22" },
-  msgName: { fontSize: 12, fontWeight: "700", color: "#0B735F", marginBottom: 2 },
+  bubbleMine: { backgroundColor: `${theme.brand}22` },
+  msgName: { fontSize: 12, fontWeight: "700", color: theme.brand, marginBottom: 2 },
   msgBody: { fontSize: 15, color: "#0F172A" },
-  msgTime: { fontSize: 11, color: "#94A3B8", marginTop: 3, textAlign: "right" },
+  msgTime: { fontSize: 11, color: "#64748B", marginTop: 3, textAlign: "right" }, // was #94A3B8 (2.56:1) — failed WCAG AA
 
   inputRow: { flexDirection: "row", gap: 8, marginTop: 4 },
   input: {
     flex: 1, borderWidth: 1, borderColor: "#E2E8F0", borderRadius: 999,
     paddingHorizontal: 14, paddingVertical: 8, fontSize: 15,
   },
-  sendBtn: { backgroundColor: "#0B735F", paddingHorizontal: 16, borderRadius: 999, justifyContent: "center" },
+  sendBtn: { backgroundColor: theme.brand, paddingHorizontal: 16, borderRadius: 999, justifyContent: "center" },
   sendBtnDisabled: { opacity: 0.5 },
   sendBtnText: { color: "white", fontWeight: "700", fontSize: 13 },
 });

@@ -13,6 +13,7 @@ import { logoUri } from "@/lib/teamLogos";
 import { alert } from "@/lib/alert";
 import { recordLabel, winPct, recordVibe, EMPTY_RECORD, type SeasonRecord } from "@/lib/records";
 import { getOpenWeek, getNextWeek, type OpenWeek } from "@/lib/openWeek";
+import { colors as theme } from "@/lib/theme";
 import GroupChat from "@/components/GroupChat";
 import WeeklyPicksGrid from "@/components/WeeklyPicksGrid";
 import WeeklyRecap from "@/components/WeeklyRecap";
@@ -253,6 +254,8 @@ export default function GroupDashboardPage() {
             style={[styles.pickCtaBtn, !nflOpenWeek && styles.pickCtaBtnDisabled]}
             disabled={!nflOpenWeek}
             onPress={() => router.push({ pathname: "/picks/page", params: { group: groupId } } as Href)}
+            accessibilityRole="button"
+            accessibilityLabel={nflOpenWeek ? `Make NFL picks, week ${nflOpenWeek.week} is live` : "NFL picks, not live yet"}
           >
             <View style={[styles.pickCtaIcon, { backgroundColor: "#E1F5EE" }]}>
               <Image source={{ uri: NFL_LEAGUE_LOGO }} style={[styles.pickCtaLogo, !nflOpenWeek && styles.pickCtaLogoDisabled]} resizeMode="contain" />
@@ -266,6 +269,8 @@ export default function GroupDashboardPage() {
             style={[styles.pickCtaBtn, !cfbOpenWeek && styles.pickCtaBtnDisabled]}
             disabled={!cfbOpenWeek}
             onPress={() => router.push({ pathname: "/picks/college", params: { group: groupId } } as Href)}
+            accessibilityRole="button"
+            accessibilityLabel={cfbOpenWeek ? `Make CFB picks, week ${cfbOpenWeek.week} is live` : "CFB picks, not live yet"}
           >
             <View style={[styles.pickCtaIcon, { backgroundColor: "#E6F1FB" }]}>
               <Image source={{ uri: NCAA_LEAGUE_LOGO }} style={[styles.pickCtaLogo, !cfbOpenWeek && styles.pickCtaLogoDisabled]} resizeMode="contain" />
@@ -306,7 +311,12 @@ export default function GroupDashboardPage() {
         <View style={styles.inviteRow}>
           <Text style={styles.inviteLabel}>Invite link</Text>
           <Text style={styles.inviteCode} numberOfLines={1}>{inviteCode}</Text>
-          <Pressable onPress={copyInviteCode} style={styles.copyBtn}>
+          <Pressable
+            onPress={copyInviteCode}
+            style={styles.copyBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Share group invite link"
+          >
             <Text style={styles.copyBtnText}>{copied ? "Copied" : "Share"}</Text>
           </Pressable>
         </View>
@@ -318,10 +328,16 @@ export default function GroupDashboardPage() {
         <ActivityIndicator style={{ marginTop: 12 }} />
       ) : (
         <>
-        <View style={styles.card}>
+        <View style={[styles.card, styles.cardElevated]}>
             <View style={styles.leaderboardHeader}>
               <Text style={styles.cardTitle}>🏆 The Standings</Text>
-              <Pressable onPress={handleRefreshScores} disabled={refreshingScores} style={styles.refreshBtn}>
+              <Pressable
+                onPress={handleRefreshScores}
+                disabled={refreshingScores}
+                style={styles.refreshBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Refresh scores"
+              >
                 <Text style={styles.refreshBtnText}>{refreshingScores ? "Checking…" : "Refresh scores"}</Text>
               </Pressable>
             </View>
@@ -423,7 +439,13 @@ export default function GroupDashboardPage() {
                 <Text style={styles.dangerTitle}>Danger zone</Text>
                 <Text style={styles.dangerBody}>Deleting this group removes it for every member, permanently.</Text>
               </View>
-              <Pressable onPress={confirmDeleteGroup} disabled={deleting} style={styles.deleteBtn}>
+              <Pressable
+                onPress={confirmDeleteGroup}
+                disabled={deleting}
+                style={styles.deleteBtn}
+                accessibilityRole="button"
+                accessibilityLabel={`Delete group "${groupName}", permanently`}
+              >
                 <Text style={styles.deleteBtnText}>{deleting ? "Deleting…" : "Delete group"}</Text>
               </Pressable>
             </View>
@@ -456,7 +478,7 @@ const styles = StyleSheet.create({
   },
   inviteLabel: { fontSize: 12, color: "#64748B", fontWeight: "700" },
   inviteCode: { fontSize: 14, fontWeight: "800", color: "#0F172A", letterSpacing: 1 },
-  copyBtn: { marginLeft: "auto", paddingVertical: 6, paddingHorizontal: 12, borderRadius: 999, backgroundColor: "#0B735F" },
+  copyBtn: { marginLeft: "auto", paddingVertical: 10, paddingHorizontal: 14, borderRadius: 999, backgroundColor: theme.brand },
   copyBtnText: { color: "white", fontWeight: "700", fontSize: 12 },
 
   banner: { backgroundColor: "#FFF7ED", borderColor: "#FED7AA", borderWidth: 1, borderRadius: 8, padding: 10 },
@@ -489,11 +511,16 @@ const styles = StyleSheet.create({
   heroScheduleText: { fontSize: 12, fontWeight: "600", color: "rgba(255,255,255,0.85)", flexShrink: 1 },
 
   card: { backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12, gap: 4 },
+  // Standings + Power Rankings are the two surfaces DESIGN.md calls out for
+  // more depth — everything else on the page (Recent Activity, chat) stays flat.
+  cardElevated: {
+    shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 3,
+  },
   cardTitle: { fontWeight: "800" },
 
   leaderboardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
-  refreshBtn: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: "#0B735F" },
-  refreshBtnText: { color: "#0B735F", fontWeight: "700", fontSize: 12 },
+  refreshBtn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1, borderColor: theme.brand },
+  refreshBtnText: { color: theme.brand, fontWeight: "700", fontSize: 12 },
 
   tableHeader: { paddingVertical: 6 },
   tableRow: {
@@ -504,7 +531,7 @@ const styles = StyleSheet.create({
   thUser: { flex: 1.6, fontWeight: "800", fontSize: 12, color: "#64748B", textTransform: "uppercase" },
   thOverall: { width: 72, fontWeight: "800", fontSize: 12, color: "#64748B", textTransform: "uppercase", textAlign: "right" },
 
-  rankText: { width: 22, fontWeight: "800", fontSize: 13, color: "#94A3B8" },
+  rankText: { width: 22, fontWeight: "800", fontSize: 13, color: "#64748B" }, // was #94A3B8 (2.56:1) — failed WCAG AA
   userCell: { flex: 1.6, flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0 },
   avatar: { width: 32, height: 32, borderRadius: 999, alignItems: "center", justifyContent: "center" },
   avatarText: { fontSize: 12, fontWeight: "700" },
@@ -515,7 +542,7 @@ const styles = StyleSheet.create({
   overallRecord: { fontSize: 13, fontWeight: "800", color: "#0F172A" },
   overallPct: { fontSize: 11, color: "#64748B" },
 
-  note: { marginTop: 8, color: "#94A3B8", fontSize: 12 },
+  note: { marginTop: 8, color: "#64748B", fontSize: 12 }, // was #94A3B8 (2.56:1) — failed WCAG AA
   empty: { paddingVertical: 8, color: "#64748B" },
   activityList: { maxHeight: 380 },
 
@@ -525,7 +552,7 @@ const styles = StyleSheet.create({
   feedLogo: { width: 18, height: 18, resizeMode: "contain", marginTop: 2 },
   feedTitle: { fontSize: 13, color: "#0F172A" },
   feedSub: { color: "#334155", fontSize: 12, marginTop: 2 },
-  feedTime: { color: "#94A3B8", fontSize: 11, marginTop: 2 },
+  feedTime: { color: "#64748B", fontSize: 11, marginTop: 2 }, // was #94A3B8 (2.56:1) — failed WCAG AA
 
   dangerZone: {
     flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#FEF2F2",

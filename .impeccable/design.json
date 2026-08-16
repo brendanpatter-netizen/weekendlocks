@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-16T00:00:00Z",
+  "title": "Design System: WeekendLocks",
+  "extensions": {
+    "colorMeta": {
+      "turf-teal": { "role": "primary", "displayName": "Turf Teal", "canonical": "#0B735F", "tonalRamp": ["#031F19", "#063429", "#0B735F", "#0F9678", "#3FB596", "#7ACDB6", "#B7E4D6", "#E1F5EE"] },
+      "felt-green": { "role": "secondary", "displayName": "Felt Green", "canonical": "#063D31", "tonalRamp": ["#01120E", "#03251E", "#063D31", "#0A4C3D", "#2E7A65", "#66A896", "#A6CFC2", "#DDEEE8"] },
+      "brass-gold": { "role": "tertiary", "displayName": "Brass Gold", "canonical": "#B3781F", "tonalRamp": ["#2E1D06", "#4A3106", "#7A5410", "#B3781F", "#D89A3A", "#F2C266", "#F7D896", "#FCEFD3"] },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "#0F172A", "tonalRamp": ["#0F172A", "#334155", "#475569", "#64748B", "#94A3B8", "#CBD5E1", "#E5E7EB", "#F8FAFC"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "The group hero title only — one use in the whole product." },
+      "title": { "displayName": "Title", "purpose": "Card and section headers." },
+      "label": { "displayName": "Label", "purpose": "Eyebrows, column headers, badges, timestamps." },
+      "body": { "displayName": "Body", "purpose": "Default UI text — names, picks, chat." }
+    },
+    "shadows": [
+      { "name": "cta-lift", "value": "0 4px 10px rgba(0,0,0,0.18)", "purpose": "The hero's primary CTA buttons and other newly-elevated primary surfaces." },
+      { "name": "auth-lift", "value": "0 8px 14px rgba(0,0,0,0.12)", "purpose": "Sign-in / reset password cards." }
+    ],
+    "motion": [],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Pill-shaped primary action (Refresh scores, Share invite).",
+      "html": "<button class=\"ds-btn-primary\">Refresh scores</button>",
+      "css": ".ds-btn-primary { background: #0B735F; color: #FFFFFF; padding: 6px 14px; border-radius: 999px; font-weight: 700; font-size: 12px; border: none; transition: background 0.15s; } .ds-btn-primary:hover { background: #085041; } .ds-btn-primary:focus-visible { outline: 2px solid #085041; outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Ghost/outline pill for lower-emphasis actions (Back to group).",
+      "html": "<button class=\"ds-btn-secondary\">Back to group</button>",
+      "css": ".ds-btn-secondary { background: transparent; color: #0B735F; border: 1px solid #0B735F; padding: 6px 14px; border-radius: 999px; font-weight: 700; font-size: 13px; transition: background 0.15s; } .ds-btn-secondary:hover { background: rgba(11,115,95,0.08); } .ds-btn-secondary:focus-visible { outline: 2px solid #085041; outline-offset: 2px; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The standard flat white panel used for every section (Standings, Power Rankings, Weekly Locks, Recent Activity, Chat).",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-title\">🏆 The Standings</div></div>",
+      "css": ".ds-card { background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 12px; padding: 12px; } .ds-card-title { font-weight: 800; font-size: 15px; color: #0F172A; }"
+    },
+    {
+      "name": "Rank Badge",
+      "kind": "chip",
+      "refersTo": "rank-badge",
+      "description": "Dark pill showing a member's Power Rankings position (#N).",
+      "html": "<span class=\"ds-rank-badge\">#1</span>",
+      "css": ".ds-rank-badge { background: #0F172A; color: #FFFFFF; font-size: 11px; font-weight: 800; border-radius: 999px; padding: 1px 6px; }"
+    },
+    {
+      "name": "Vibe Chip",
+      "kind": "chip",
+      "refersTo": "vibe-chip",
+      "description": "Text-only flavor tag next to a standings row once a member has 3+ decided games.",
+      "html": "<span class=\"ds-vibe-chip\">🔥 Heater</span>",
+      "css": ".ds-vibe-chip { color: #64748B; font-size: 11px; font-weight: 700; }"
+    },
+    {
+      "name": "Pick Cell — Win",
+      "kind": "custom",
+      "refersTo": "cell-win",
+      "description": "A decided-win cell in the Weekly Locks grid.",
+      "html": "<div class=\"ds-cell ds-cell-win\">Chiefs -3.5</div>",
+      "css": ".ds-cell { border-radius: 6px; padding: 7px 8px; font-size: 11px; font-weight: 700; text-align: center; line-height: 14px; } .ds-cell-win { background: #DCFCE7; }"
+    },
+    {
+      "name": "Pick Cell — Loss",
+      "kind": "custom",
+      "refersTo": "cell-loss",
+      "description": "A decided-loss cell in the Weekly Locks grid.",
+      "html": "<div class=\"ds-cell ds-cell-loss\">Ravens -7.5</div>",
+      "css": ".ds-cell { border-radius: 6px; padding: 7px 8px; font-size: 11px; font-weight: 700; text-align: center; line-height: 14px; } .ds-cell-loss { background: #FEE2E2; }"
+    },
+    {
+      "name": "Hero CTA",
+      "kind": "button",
+      "refersTo": "hero-cta",
+      "description": "The two big NFL/CFB pick entry-point buttons on the group hero — the one button style that gets a shadow.",
+      "html": "<button class=\"ds-hero-cta\"><span class=\"ds-hero-cta-title\">NFL</span><span class=\"ds-hero-cta-sub\">Week 3 now live</span></button>",
+      "css": ".ds-hero-cta { background: #FFFFFF; border-radius: 20px; padding: 18px 16px; box-shadow: 0 4px 10px rgba(0,0,0,0.18); border: none; display: flex; flex-direction: column; align-items: center; gap: 6px; } .ds-hero-cta:hover { transform: translateY(-1px); } .ds-hero-cta-title { font-weight: 800; font-size: 17px; color: #0F172A; } .ds-hero-cta-sub { font-weight: 600; font-size: 12px; color: #64748B; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Locker Room",
+    "overview": "WeekendLocks is a bulletin board, not a dashboard. Every screen leans on heavy type (700/800 weight is the floor, not the ceiling), pill-shaped chips and buttons, and a deterministic per-person/per-group color-identity system so the same name always wears the same color. Two color systems currently coexist: the product surfaces members use every week run on a plain Turf Teal + slate neutrals + white card system, while a richer Felt Green + Brass Gold palette already exists in lib/theme.ts but is confined to the auth/account shell — a natural candidate to pull forward into the main product.",
+    "keyCharacteristics": [
+      "Bold by default: no regular-weight text anywhere in the product.",
+      "Pill everything interactive (999px radius); cards use a consistent 12px radius.",
+      "One deterministic hash-color system powers both member avatars and each group's hero background.",
+      "Emoji-forward section headers reinforce the 'Locks' brand and competitive personality.",
+      "Currently flat with borders instead of shadows, but opening up elevation is the confirmed direction."
+    ],
+    "rules": [
+      { "name": "The Same Hash, Different Canvas Rule", "body": "Six pastel-background/deep-foreground color pairs are assigned by hashing a user's or group's ID. The same math produces a member's avatar chip and a group's hero background. Never hand-pick an identity color or add a seventh.", "section": "colors" },
+      { "name": "The No-Regular-Weight Rule", "body": "Nothing in the product renders below font-weight 700. To de-emphasize, use a lighter color, not a lighter weight.", "section": "typography" },
+      { "name": "The Pill-or-Twelve Rule", "body": "Interactive chips/badges/buttons are pill-shaped (999px); structural containers use 12px. Nothing uses a small 4-6px radius for a primary surface.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do import brand color from lib/theme.ts (colors.brand) rather than hardcoding #0B735F.",
+      "Do keep every avatar/identity color flowing through lib/avatar.ts's hash function.",
+      "Do keep text at 700 weight or heavier everywhere; use color to de-emphasize.",
+      "Do treat Power Rankings and the Weekly Locks grid as the two surfaces worth the most craft."
+    ],
+    "donts": [
+      "Don't introduce a second display font.",
+      "Don't use opacity to indicate a disabled state on a solid surface.",
+      "Don't add a seventh identity color or reorder the existing six.",
+      "Don't let the felt/brass palette and the teal/slate palette drift further apart without a decision."
+    ]
+  }
+}
