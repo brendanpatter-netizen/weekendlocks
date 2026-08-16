@@ -31,6 +31,9 @@ colors:
   warning-bg: "#FFF7ED"
   warning-border: "#FED7AA"
   warning-text: "#9A3412"
+  info-bg: "#EFF6FF"
+  info-border: "#BFDBFE"
+  info-text: "#1D4ED8"
   identity-1-bg: "#E1F5EE"
   identity-1-fg: "#085041"
   identity-2-bg: "#FAECE7"
@@ -48,6 +51,9 @@ typography:
     fontFamily: "PermanentMarker_400Regular"
     fontSize: "40px"
     letterSpacing: "0.5px"
+  page-title:
+    fontFamily: "PermanentMarker_400Regular"
+    fontSize: "26px"
   title:
     fontFamily: "PermanentMarker_400Regular"
     fontSize: "20px"
@@ -91,6 +97,8 @@ WeekendLocks is a locker-room whiteboard, not a dashboard. This is a full replac
 
 The tone stays loud and personal — this is still the app where the group's AI-generated Power Rankings roast bot lives — but the loudness now comes from material (chalk, marker, tape, paper) instead of from a generic dark-mode sports-app template. Bold system-sans data (member names, records, pick text) sits inside the paper sheets; hand-lettered marker type is reserved for section titles and the group name, so the two voices stay distinct: the board talks in marker, the data talks in a normal confident sans.
 
+**Coverage:** Currently built out on the group dashboard and the NFL/CFB picks pages. Groups list, join flow, account, auth, and the home screen still run on the prior world and are the next surfaces in line — the felt/paper/marker system is meant to extend to all of them, not stay a one-page treatment.
+
 **Key Characteristics:**
 - One board, not per-group hero colors: every group lands on the same felt-green board; identity now lives in the hand-lettered name and member avatar chips, not a per-group hash background.
 - Paper-pinned-to-board is the universal card language: dashed border, slight rotation (`-0.6deg` to `0.7deg` per card), and a `TapeCorner` accent — applied consistently by reusing one component, never hand-rolled per file.
@@ -124,6 +132,7 @@ The palette is deliberately narrow: one dark board ground, one paper fill, one m
 - **Win** (#DCFCE7) / **Loss** (#FEE2E2) / **Pending** (#F1F5F9): Unchanged from the prior world — the three pick-cell states in the Weekly Locks grid.
 - **Danger** (#DC2626) with its pale-red callout (bg #FEF2F2, border #FECACA, title #991B1B, body #B91C1C): The Delete Group control — deliberately left out of the paper-and-board language entirely; it stays a plain red alert box so a destructive action never looks like part of the playful board.
 - **Warning banner** (bg #FFF7ED, border #FED7AA, text #9A3412): The "Heads up: ..." error banner — unchanged.
+- **Info banner** (bg #EFF6FF, border #BFDBFE, text #1D4ED8): The CFB picks page's gap-week notice ("pick two CFB locks this week instead of one CFB + one NFL"). Like Danger and Warning, this stays a plain alert box outside the paper/board language — it's a system message, not a board fixture.
 
 ### Identity Palette (Named Rule)
 **The Same Hash, Different Canvas Rule (narrowed).** The six pastel/deep identity color pairs (`lib/avatar.ts`) still power every member avatar chip. Under The Whiteboard this rule no longer extends to group hero backgrounds — every group now shares one board color, and per-group identity moved to the hand-lettered name instead. Never assign these six colors manually or add a seventh; the hash math and every member's existing color assignment depend on the array staying fixed.
@@ -137,6 +146,7 @@ The palette is deliberately narrow: one dark board ground, one paper fill, one m
 
 ### Hierarchy
 - **Display** (PermanentMarker, 40px, uppercase, centered, line-height 46): The group name, lettered directly on the board. The only 40px text in the product.
+- **Page Title** (PermanentMarker, 26px, chalk-white): A page's own on-board headline when it isn't a group name — currently the NFL/CFB picks pages ("This Weekend's NFL Locks"). Chalk-white, not marker-red, because it sits directly on the board like the hero rather than on a paper card; sized between Display and Title since it's a real headline but a secondary one.
 - **Title** (PermanentMarker, 20px, marker-red): Section headers on every paper card ("The Standings", "Power Rankings", "Weekend Locks", "Recent activity").
 - **Label** (800, 11–13px, often uppercase with letter-spacing): Eyebrow ("THE BOARD"), table headers, timestamps, legend text.
 - **Body** (700, 13px): Member names, pick descriptions, chat messages, CTA subtext — the system-sans data voice.
@@ -162,6 +172,8 @@ Hybrid: the board and most paper cards are flat (dashed border does the separati
 ## Shapes
 
 **The Dashed-and-Tilted Rule.** Every paper card uses a dashed 1.5px border (`rgba(12,23,18,0.18)`, 10px radius) instead of the prior world's solid hairline, plus a small fixed rotation per card (between `-0.6deg` and `0.7deg`) so the board reads as hand-assembled rather than grid-aligned. Interactive pills (Share, Refresh, invite copy) stay fully round (999px) — the one shape carried over unchanged from the prior world. The hero CTA buttons use a softer 16px radius, between "pill" and "card," to read as bigger, weightier tap targets.
+
+**The List Restraint Rule.** Rotation and the `TapeCorner` accent are for single-instance surfaces (a section card, an empty-state card, a status strip) — never for items inside a repeated list. The NFL/CFB picks pages' game cards keep the chalk-paper fill and dashed border for board continuity but stay flat and square, exactly like the Weekly Locks grid's internal cells: a scrolling list of tilted, tape-pinned cards would fight scanability on a page that exists to make picks fast.
 
 ## Components
 

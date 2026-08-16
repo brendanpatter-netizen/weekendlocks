@@ -18,6 +18,9 @@ import { pickLabel } from "@/lib/pickLabel";
 import { alert } from "@/lib/alert";
 import { getOpenWeek, type OpenWeek } from "@/lib/openWeek";
 import { logoUri } from "@/lib/teamLogos";
+import { colors as theme } from "@/lib/theme";
+import LockIcon from "@/components/LockIcon";
+import TapeCorner from "@/components/TapeCorner";
 
 // lib/teamLogos.logoUri returns 'about:blank' when a name doesn't map to a
 // known team (e.g. "Over"/"Under" outcomes) — treat that as "no logo".
@@ -225,16 +228,19 @@ export default function NFLPicksPage() {
   }
 
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, gap: 12, paddingBottom: 24 }}>
-      <View style={{ flexDirection: "row", alignItems: "center" }}>
-        <Text style={{ fontWeight: "800", fontSize: 18, flex: 1 }}>
-          🔒 This Weekend's NFL Locks{openWeek ? ` — Week ${openWeek.week}` : ""}
-        </Text>
+    <ScrollView style={styles.pageOuter} contentContainerStyle={styles.page}>
+      <View style={styles.pageHeader}>
+        <View style={styles.pageTitleRow}>
+          <LockIcon size={22} color="#F5F3E7" />
+          <Text style={styles.pageTitle}>
+            This Weekend's NFL Locks{openWeek ? ` — Week ${openWeek.week}` : ""}
+          </Text>
+        </View>
         <Pressable
           onPress={() => router.push({ pathname: "/picks/college", params: { group: groupId ?? undefined } } as Href)}
-          style={{ paddingVertical: 6, paddingHorizontal: 8 }}
+          style={styles.crossLinkChip}
         >
-          <Text style={{ color: "#0B735F", fontWeight: "700" }}>NCAA ↗</Text>
+          <Text style={styles.crossLinkText}>NCAA ↗</Text>
         </Pressable>
       </View>
 
@@ -252,11 +258,11 @@ export default function NFLPicksPage() {
           </Text>
           {currentPick && (
             <Pressable onPress={handleClear} style={styles.clearBtn}>
-              <Text style={{ color: "#EF4444", fontWeight: "700", fontSize: 13 }}>Clear my pick</Text>
+              <Text style={{ color: "#DC2626", fontWeight: "700", fontSize: 13 }}>Clear my pick</Text>
             </Pressable>
           )}
           <Pressable onPress={() => router.push(`/groups/${groupId}` as Href)} style={styles.backBtn}>
-            <Text style={{ color: "#0B735F", fontWeight: "700", fontSize: 13 }}>Back to group</Text>
+            <Text style={{ color: theme.brand, fontWeight: "700", fontSize: 13 }}>Back to group</Text>
           </Pressable>
         </View>
       )}
@@ -265,6 +271,7 @@ export default function NFLPicksPage() {
         <ActivityIndicator style={{ marginTop: 12 }} />
       ) : openWeek === null ? (
         <View style={styles.noLiveWeek}>
+          <TapeCorner />
           <Text style={styles.noLiveWeekTitle}>No NFL week is live right now</Text>
           <Text style={styles.noLiveWeekBody}>Picks open once the next week's window starts — check back soon.</Text>
         </View>
@@ -273,7 +280,7 @@ export default function NFLPicksPage() {
       <View style={{ flexDirection: "row", gap: 8 }}>
         {(["spreads", "totals", "h2h"] as const).map((k) => (
           <Pressable key={k} onPress={() => setTab(k)}
-            style={[styles.tab, tab === k && { backgroundColor: "#0B735F", borderColor: "#0B735F" }]}>
+            style={[styles.tab, tab === k && styles.tabActive]}>
             <Text style={[styles.tabText, tab === k && { color: "white" }]}>{k.toUpperCase()}</Text>
           </Pressable>
         ))}
@@ -282,7 +289,7 @@ export default function NFLPicksPage() {
       {loading ? (
         <ActivityIndicator />
       ) : error ? (
-        <Text>Error loading odds.</Text>
+        <Text style={{ color: "#F5F3E7" }}>Error loading odds.</Text>
       ) : (
         (games ?? []).map((g: any) => {
           const markets = g.bookmakers?.[0]?.markets ?? [];
@@ -296,11 +303,11 @@ export default function NFLPicksPage() {
             <View key={g.id} style={[styles.gameCard, started && styles.gameCardStarted]}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                 {!!aLogo && <Image source={{ uri: aLogo }} style={styles.logo} />}
-                <Text style={{ fontWeight: "800", flex: 1 }}>{g.away_team} @ {g.home_team}</Text>
+                <Text style={{ fontWeight: "800", flex: 1, color: "#0C1712" }}>{g.away_team} @ {g.home_team}</Text>
                 {!!hLogo && <Image source={{ uri: hLogo }} style={styles.logo} />}
               </View>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <Text style={{ color: "#475569" }}>{new Date(g.commence_time).toLocaleString()}</Text>
+                <Text style={{ color: "#45564C" }}>{new Date(g.commence_time).toLocaleString()}</Text>
                 {started && <View style={styles.startedBadge}><Text style={styles.startedBadgeText}>Started</Text></View>}
               </View>
 
@@ -347,9 +354,29 @@ export default function NFLPicksPage() {
 }
 
 const styles = StyleSheet.create({
-  tab: { paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderRadius: 8, borderColor: "#CBD5E1", backgroundColor: "#F1F5F9" },
-  tabText: { fontWeight: "800", color: "#0F172A" },
-  gameCard: { backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12, marginBottom: 10, gap: 6 },
+  pageOuter: { flex: 1, backgroundColor: theme.felt },
+  page: { padding: 16, gap: 12, paddingBottom: 24 },
+
+  pageHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  pageTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1 },
+  pageTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 26, color: "#F5F3E7", flexShrink: 1 },
+  crossLinkChip: {
+    borderWidth: 1.5, borderColor: "rgba(245,243,231,0.4)", borderStyle: "dashed",
+    borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6,
+  },
+  crossLinkText: { color: "#F5F3E7", fontWeight: "800", fontSize: 12, letterSpacing: 0.3 },
+
+  tab: {
+    paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1.5, borderRadius: 999,
+    borderColor: "rgba(12,23,18,0.18)", borderStyle: "dashed", backgroundColor: "#F5F3E7",
+  },
+  tabActive: { backgroundColor: "#0B735F", borderColor: "#0B735F", borderStyle: "solid" },
+  tabText: { fontWeight: "800", color: "#0C1712", fontSize: 12 },
+
+  // Game cards stay flat, dashed-border paper (board continuity) but skip the
+  // per-card rotation/tape treatment — a dense scrolling list of tilted cards
+  // would fight scanability on a page that's for making picks fast.
+  gameCard: { backgroundColor: "#F5F3E7", borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)", borderRadius: 12, padding: 12, marginBottom: 10, gap: 6 },
   gameCardStarted: { opacity: 0.55 },
   startedBadge: { backgroundColor: "#F1F5F9", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
   startedBadgeText: { fontSize: 11, fontWeight: "700", color: "#64748B" },
@@ -358,19 +385,26 @@ const styles = StyleSheet.create({
   outcomeBtnTaken: { backgroundColor: "#F1F5F9", borderColor: "#E2E8F0" },
   outcomeTextTaken: { color: "#94A3B8", textDecorationLine: "line-through" },
   takenLabel: { marginLeft: "auto", fontSize: 11, color: "#94A3B8", fontStyle: "italic" },
-  clearBtn: { paddingVertical: 4, paddingHorizontal: 8, borderWidth: 1, borderRadius: 6, borderColor: "#EF4444", backgroundColor: "#EF44440D" },
-  backBtn: { paddingVertical: 4, paddingHorizontal: 8, borderWidth: 1, borderRadius: 6, borderColor: "#0B735F", backgroundColor: "#0B735F0D" },
+  clearBtn: { paddingVertical: 5, paddingHorizontal: 10, borderWidth: 1, borderRadius: 999, borderColor: "#DC2626", backgroundColor: "rgba(220,38,38,0.06)" },
+  backBtn: { paddingVertical: 5, paddingHorizontal: 10, borderWidth: 1, borderRadius: 999, borderColor: theme.brand, backgroundColor: "rgba(11,115,95,0.06)" },
   logo: { width: 28, height: 28, resizeMode: "contain" },
   outcomeLogo: { width: 20, height: 20, resizeMode: "contain" },
+
+  // The one highlighted strip on this page — same paper/dashed-gold/tilt
+  // recipe as the group dashboard's invite row, so the two "pinned note"
+  // moments in the product read as the same gesture.
   pickStatus: {
-    flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#F8FAFC",
-    borderWidth: 1, borderColor: "#E2E8F0", borderRadius: 8, padding: 10,
+    flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#F5F3E7",
+    borderWidth: 1.5, borderColor: "#B4901F", borderStyle: "dashed", borderRadius: 10,
+    paddingVertical: 10, paddingHorizontal: 12, transform: [{ rotate: "-0.4deg" }],
   },
-  pickStatusText: { flex: 1, fontWeight: "700", color: "#0F172A" },
+  pickStatusText: { flex: 1, fontWeight: "700", color: "#0C1712" },
+
   noLiveWeek: {
-    alignItems: "center", gap: 4, backgroundColor: "#F8FAFC", borderWidth: 1,
-    borderColor: "#E2E8F0", borderRadius: 12, padding: 24, marginTop: 8,
+    position: "relative", alignItems: "center", gap: 4, backgroundColor: "#F5F3E7",
+    borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)", borderStyle: "dashed", borderRadius: 10,
+    padding: 24, marginTop: 8, transform: [{ rotate: "0.6deg" }],
   },
-  noLiveWeekTitle: { fontWeight: "800", fontSize: 15, color: "#0F172A" },
-  noLiveWeekBody: { color: "#64748B", fontSize: 13, textAlign: "center" },
+  noLiveWeekTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 18, color: "#B23A2E" },
+  noLiveWeekBody: { color: "#45564C", fontSize: 13, textAlign: "center", fontWeight: "700" },
 });
