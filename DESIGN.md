@@ -97,7 +97,7 @@ WeekendLocks is a locker-room whiteboard, not a dashboard. This is a full replac
 
 The tone stays loud and personal — this is still the app where the group's AI-generated Power Rankings roast bot lives — but the loudness now comes from material (chalk, marker, tape, paper) instead of from a generic dark-mode sports-app template. Bold system-sans data (member names, records, pick text) sits inside the paper sheets; hand-lettered marker type is reserved for section titles and the group name, so the two voices stay distinct: the board talks in marker, the data talks in a normal confident sans.
 
-**Coverage:** Currently built out on the group dashboard and the NFL/CFB picks pages. Groups list, join flow, account, auth, and the home screen still run on the prior world and are the next surfaces in line — the felt/paper/marker system is meant to extend to all of them, not stay a one-page treatment.
+**Coverage:** Currently built out on the group dashboard, the NFL/CFB picks pages, and the groups list/join flow. Account, auth, and the home screen still run on the prior world and are next — the felt/paper/marker system is meant to extend to all of them, not stay a one-page treatment.
 
 **Key Characteristics:**
 - One board, not per-group hero colors: every group lands on the same felt-green board; identity now lives in the hand-lettered name and member avatar chips, not a per-group hash background.

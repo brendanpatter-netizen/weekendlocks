@@ -5,6 +5,7 @@ import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { supabase } from "../../../lib/supabase";
 import { alert } from "@/lib/alert";
+import { colors as theme } from "@/lib/theme";
 
 export default function JoinGroupByUrl() {
   const { code } = useLocalSearchParams<{ code?: string }>();
@@ -49,7 +50,7 @@ export default function JoinGroupByUrl() {
     <View style={styles.container}>
       {status === "joining" ? (
         <>
-          <ActivityIndicator />
+          <ActivityIndicator color="#F5F3E7" />
           <Text style={styles.muted}>Joining group…</Text>
         </>
       ) : (
@@ -66,6 +67,7 @@ const styles = StyleSheet.create({
     gap: 8,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: theme.felt,
   },
-  muted: { color: "#666" },
+  muted: { color: "rgba(245,243,231,0.7)", fontWeight: "700" },
 });

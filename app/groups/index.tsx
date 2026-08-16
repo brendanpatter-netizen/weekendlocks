@@ -16,6 +16,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../../lib/supabase";
 import { avatarColor, initials } from "@/lib/avatar";
 import { alert } from "@/lib/alert";
+import { colors as theme } from "@/lib/theme";
+import TapeCorner from "@/components/TapeCorner";
 
 type Group = {
   id: string;
@@ -149,7 +151,7 @@ export default function GroupsIndex() {
   if (loading) {
     return (
       <View style={[styles.outer, { alignItems: "center", justifyContent: "center", gap: 8 }]}>
-        <ActivityIndicator color="#0B735F" />
+        <ActivityIndicator color="#F5F3E7" />
         <Text style={styles.muted}>Loading groups…</Text>
       </View>
     );
@@ -168,7 +170,8 @@ export default function GroupsIndex() {
             <Text style={styles.muted}>Create a group or join one with a code.</Text>
 
             <View style={styles.actionsRow}>
-              <View style={styles.card}>
+              <View style={[styles.card, styles.cardTiltLeft]}>
+                <TapeCorner />
                 <View style={styles.cardHeader}>
                   <View style={[styles.cardIcon, { backgroundColor: "#E1F5EE" }]}>
                     <Ionicons name="add-circle-outline" size={20} color="#085041" />
@@ -179,7 +182,7 @@ export default function GroupsIndex() {
                   value={createName}
                   onChangeText={setCreateName}
                   placeholder="Group name"
-                  placeholderTextColor="#94A3B8"
+                  placeholderTextColor="#8B876F"
                   style={styles.input}
                 />
                 <Pressable onPress={createGroup} style={styles.button}>
@@ -187,7 +190,8 @@ export default function GroupsIndex() {
                 </Pressable>
               </View>
 
-              <View style={styles.card}>
+              <View style={[styles.card, styles.cardTiltRight]}>
+                <TapeCorner side="right" />
                 <View style={styles.cardHeader}>
                   <View style={[styles.cardIcon, { backgroundColor: "#E6F1FB" }]}>
                     <Ionicons name="key-outline" size={20} color="#0C447C" />
@@ -198,7 +202,7 @@ export default function GroupsIndex() {
                   value={joinCode}
                   onChangeText={setJoinCode}
                   placeholder="e.g. a1b2c3"
-                  placeholderTextColor="#94A3B8"
+                  placeholderTextColor="#8B876F"
                   autoCapitalize="none"
                   style={styles.input}
                 />
@@ -231,14 +235,14 @@ export default function GroupsIndex() {
                     Created {new Date(item.created_at).toLocaleDateString()}
                   </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+                <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
               </Pressable>
             </Link>
           );
         }}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Ionicons name="people-outline" size={28} color="#94A3B8" />
+            <Ionicons name="people-outline" size={28} color="rgba(245,243,231,0.4)" />
             <Text style={styles.muted}>You’re not in any groups yet.</Text>
           </View>
         }
@@ -248,35 +252,44 @@ export default function GroupsIndex() {
 }
 
 const styles = StyleSheet.create({
-  outer: { flex: 1, backgroundColor: "#F8FAFC" },
+  outer: { flex: 1, backgroundColor: theme.felt },
   container: { padding: 16, gap: 4 },
-  h1: { fontSize: 24, fontWeight: "800", color: "#0F172A" },
-  h2: { fontSize: 15, fontWeight: "700", color: "#0F172A" },
-  muted: { color: "#64748B" },
+  h1: { fontFamily: "PermanentMarker_400Regular", fontSize: 26, color: "#F5F3E7" },
+  h2: { fontFamily: "PermanentMarker_400Regular", fontSize: 16, color: "#B23A2E" },
+  muted: { color: "rgba(245,243,231,0.7)", fontWeight: "700" },
 
-  actionsRow: { flexDirection: "row", gap: 12, marginTop: 16, flexWrap: "wrap" },
+  actionsRow: { flexDirection: "row", gap: 14, marginTop: 16, flexWrap: "wrap" },
+  // Single-instance cards (not a repeated list) — full paper treatment,
+  // alternating tilt + tape side, same as the group dashboard's card pairs.
   card: {
+    position: "relative",
     flex: 1,
     minWidth: 220,
-    backgroundColor: "white",
+    backgroundColor: "#F5F3E7",
     padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
+    paddingTop: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: "rgba(12,23,18,0.18)",
+    borderStyle: "dashed",
     gap: 10,
   },
+  cardTiltLeft: { transform: [{ rotate: "-0.5deg" }] },
+  cardTiltRight: { transform: [{ rotate: "0.5deg" }] },
   cardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
   cardIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
 
   input: {
+    backgroundColor: "#FDFCF8",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "rgba(12,23,18,0.18)",
     borderRadius: 10,
     padding: 10,
     fontSize: 14,
+    color: "#0C1712",
   },
   button: {
-    backgroundColor: "#0B735F",
+    backgroundColor: theme.brand,
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 999,
@@ -285,30 +298,32 @@ const styles = StyleSheet.create({
   buttonText: { color: "white", fontWeight: "700" },
   buttonSecondary: {
     borderWidth: 1,
-    borderColor: "#0B735F",
+    borderColor: theme.brand,
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 999,
     alignSelf: "flex-start",
   },
-  buttonSecondaryText: { color: "#0B735F", fontWeight: "700" },
+  buttonSecondaryText: { color: theme.brand, fontWeight: "700" },
 
+  // Repeated list items — chalk-paper + dashed border for board continuity,
+  // but flat and square (List Restraint Rule), like the picks pages' game cards.
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     padding: 14,
-    backgroundColor: "white",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
+    backgroundColor: "#F5F3E7",
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "rgba(12,23,18,0.18)",
     marginBottom: 10,
   },
   rowBadge: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   rowBadgeText: { fontSize: 14, fontWeight: "700" },
   rowTitleLine: { flexDirection: "row", alignItems: "center", gap: 8 },
-  rowTitle: { fontWeight: "700", fontSize: 16, color: "#0F172A", flexShrink: 1 },
-  rowSub: { color: "#94A3B8", marginTop: 2, fontSize: 12 },
+  rowTitle: { fontWeight: "700", fontSize: 16, color: "#0C1712", flexShrink: 1 },
+  rowSub: { color: "#45564C", marginTop: 2, fontSize: 12 },
   ownerTag: { backgroundColor: "#FAEEDA", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
   ownerTagText: { fontSize: 10, fontWeight: "700", color: "#633806" },
 
