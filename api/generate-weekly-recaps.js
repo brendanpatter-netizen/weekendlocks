@@ -13,92 +13,14 @@
 // (group_id, user_id, week_of), so re-running the same week overwrites
 // rather than duplicates.
 //
-// Plain CommonJS/.js (not .ts) and the team-name-matching helpers below are
-// a deliberate copy of lib/teamMatch.ts's logic: this file can't import
-// that module directly because lib/supabase.ts (and much of lib/) pulls in
-// react-native, which doesn't load outside the Expo/Metro runtime.
+// Score grading (refreshScores) now lives in api/_lib/refreshScores.js,
+// shared with api/refresh-scores.js's more frequent cron — this job still
+// calls it before building recaps so a recap always reflects that week's
+// final scores even if the dedicated refresh cron hasn't run yet.
 
 const { createClient } = require("@supabase/supabase-js");
 const Anthropic = require("@anthropic-ai/sdk");
-
-// --- team name matching (copied from lib/teamMatch.ts) ---
-function normTeam(s) {
-  return (s ?? "")
-    .toLowerCase()
-    .replace(/\./g, "")
-    .replace(/&/g, "and")
-    .replace(/\s+st\./g, " state")
-    .replace(/[\s-]+/g, " ")
-    .trim();
-}
-const NFL_ALIASES = {
-  "ny giants": "new york giants", giants: "new york giants",
-  "ny jets": "new york jets", jets: "new york jets",
-  "la rams": "los angeles rams", rams: "los angeles rams",
-  "la chargers": "los angeles chargers", chargers: "los angeles chargers",
-  jax: "jacksonville jaguars", bucs: "tampa bay buccaneers",
-  "no saints": "new orleans saints", "ne patriots": "new england patriots",
-  "gb packers": "green bay packers", "kc chiefs": "kansas city chiefs",
-  "lv raiders": "las vegas raiders", "ari cardinals": "arizona cardinals",
-  "sf 49ers": "san francisco 49ers", "sea seahawks": "seattle seahawks",
-  tb: "tampa bay buccaneers", wsh: "washington commanders",
-};
-function aliasNFL(name) { return NFL_ALIASES[normTeam(name)] ?? normTeam(name); }
-function normFor(name, league) { return league === "nfl" ? aliasNFL(name) : normTeam(name); }
-function teamsLikelyMatch(a, b, league) {
-  const na = normFor(a, league);
-  const nb = normFor(b, league);
-  return na.includes(nb) || nb.includes(na);
-}
-function matchupsLikelyMatch(rHome, rAway, feedHome, feedAway, league) {
-  const dir = teamsLikelyMatch(rHome, feedHome, league) && teamsLikelyMatch(rAway, feedAway, league);
-  const swap = teamsLikelyMatch(rHome, feedAway, league) && teamsLikelyMatch(rAway, feedHome, league);
-  return dir || swap;
-}
-
-// --- score grading (mirrors lib/scores.ts's real-mode branch; this job
-// always uses real odds, there's no mock mode server-side) ---
-async function refreshScores(supabase, league) {
-  const cutoff = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
-  const { data: pending } = await supabase
-    .from("games")
-    .select("id, home, away, kickoff_at, status, weeks!inner(league)")
-    .eq("weeks.league", league)
-    .neq("status", "final")
-    .lt("kickoff_at", cutoff);
-  if (!pending || pending.length === 0) return { updated: 0 };
-
-  const oddsSportKey = league === "nfl" ? "americanfootball_nfl" : "americanfootball_ncaaf";
-  const apiKey = process.env.ODDS_API_KEY;
-  if (!apiKey) return { updated: 0, error: "Missing ODDS_API_KEY" };
-
-  const url = `https://api.the-odds-api.com/v4/sports/${oddsSportKey}/scores/?apiKey=${apiKey}&daysFrom=3`;
-  const res = await fetch(url);
-  if (!res.ok) return { updated: 0, error: `Scores fetch failed (${res.status})` };
-  const results = await res.json();
-  const completed = results.filter((r) => r.completed && r.scores?.length);
-
-  let updated = 0;
-  for (const g of pending) {
-    const center = new Date(g.kickoff_at).getTime();
-    const match = completed.find((r) => {
-      const withinWindow = Math.abs(new Date(r.commence_time).getTime() - center) < 48 * 60 * 60 * 1000;
-      return withinWindow && matchupsLikelyMatch(g.home, g.away, r.home_team, r.away_team, league);
-    });
-    if (!match || !match.scores) continue;
-    const homeEntry = match.scores.find((s) => s.name === match.home_team);
-    const awayEntry = match.scores.find((s) => s.name === match.away_team);
-    const home_score = homeEntry ? Number(homeEntry.score) : NaN;
-    const away_score = awayEntry ? Number(awayEntry.score) : NaN;
-    if (!Number.isFinite(home_score) || !Number.isFinite(away_score)) continue;
-
-    const { error } = await supabase.rpc("record_game_score", {
-      _game_id: g.id, _home_score: home_score, _away_score: away_score,
-    });
-    if (!error) updated++;
-  }
-  return { updated };
-}
+const { refreshScores } = require("./_lib/refreshScores");
 
 // The most recently completed week for a league, independent of the other
 // league's numbering (NFL and CFB each run their own week_num counter).

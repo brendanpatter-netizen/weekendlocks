@@ -13,6 +13,7 @@
     { "src": "/(.*)", "dest": "/index.html" }
   ],
   "crons": [
-    { "path": "/api/generate-weekly-recaps", "schedule": "0 12 * * 2" }
+    { "path": "/api/generate-weekly-recaps", "schedule": "0 12 * * 2" },
+    { "path": "/api/refresh-scores", "schedule": "0 10 * * 0,1,4,5,6" }
   ]
 }
