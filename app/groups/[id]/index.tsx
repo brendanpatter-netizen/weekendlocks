@@ -389,7 +389,6 @@ export default function GroupDashboardPage() {
                 keyExtractor={(m) => m.user_id}
                 scrollEnabled={false}
                 renderItem={({ item, index }) => {
-                  const color = avatarColor(item.user_id);
                   const overallRec = recordLabel(item.overall);
                   const overallPct = winPct(item.overall);
                   const vibe = recordVibe(item.overall);
@@ -397,9 +396,6 @@ export default function GroupDashboardPage() {
                     <View style={styles.tableRow}>
                       <Text style={styles.rankText}>{index + 1}</Text>
                       <View style={styles.userCell}>
-                        <View style={[styles.avatar, { backgroundColor: color.bg }]}>
-                          <Text style={[styles.avatarText, { color: color.fg }]}>{initials(item.display_name)}</Text>
-                        </View>
                         <Text style={styles.userName} numberOfLines={1}>{item.display_name}</Text>
                         {vibe && <Text style={styles.vibeChip}>{vibe}</Text>}
                       </View>
@@ -583,8 +579,6 @@ const styles = StyleSheet.create({
 
   rankText: { width: 22, fontWeight: "800", fontSize: 13, color: "#64748B" }, // was #94A3B8 (2.56:1) — failed WCAG AA
   userCell: { flex: 1.6, flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0 },
-  avatar: { width: 32, height: 32, borderRadius: 999, alignItems: "center", justifyContent: "center" },
-  avatarText: { fontSize: 12, fontWeight: "700" },
   userName: { fontWeight: "700", flexShrink: 1 },
   vibeChip: { fontSize: 11, fontWeight: "700", color: "#64748B", marginLeft: 2 },
 

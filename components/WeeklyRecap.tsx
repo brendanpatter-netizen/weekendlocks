@@ -6,8 +6,6 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { supabase } from "@/lib/supabase";
-import { avatarColor, initials } from "@/lib/avatar";
-import { colors as theme } from "@/lib/theme";
 import FlameIcon from "@/components/FlameIcon";
 import TapeCorner from "@/components/TapeCorner";
 
@@ -72,25 +70,19 @@ export default function WeeklyRecap({
           No recap yet — the bot roasts everyone every Tuesday morning once there's a week of picks to talk about.
         </Text>
       ) : (
-        recaps.map((r, i) => {
-          const color = avatarColor(r.user_id);
-          return (
-            <View key={r.user_id} style={[styles.row, i === 0 && styles.rowFirst]}>
-              <View style={[styles.avatar, { backgroundColor: color.bg }]}>
-                <Text style={[styles.avatarText, { color: color.fg }]}>{initials(r.display_name)}</Text>
+        recaps.map((r, i) => (
+          <View key={r.user_id} style={[styles.row, i === 0 && styles.rowFirst]}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <View style={styles.nameRow}>
+                {r.rank != null && (
+                  <Text style={[styles.rankBadge, r.rank === 1 && styles.rankBadgeFirst]}>#{r.rank}</Text>
+                )}
+                <Text style={styles.name}>{r.display_name}</Text>
               </View>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <View style={styles.nameRow}>
-                  {r.rank != null && (
-                    <Text style={[styles.rankBadge, r.rank === 1 && styles.rankBadgeFirst]}>#{r.rank}</Text>
-                  )}
-                  <Text style={styles.name}>{r.display_name}</Text>
-                </View>
-                <Text style={styles.recapText}>{r.recap_text}</Text>
-              </View>
+              <Text style={styles.recapText}>{r.recap_text}</Text>
             </View>
-          );
-        })
+          </View>
+        ))
       )}
     </View>
   );
@@ -117,8 +109,6 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "rgba(12,23,18,0.15)",
   },
   rowFirst: { borderTopWidth: 0, paddingTop: 8 },
-  avatar: { width: 32, height: 32, borderRadius: 999, alignItems: "center", justifyContent: "center" },
-  avatarText: { fontSize: 12, fontWeight: "700" },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 },
   rankBadge: {
     fontSize: 11, fontWeight: "800", color: "white", backgroundColor: "#0C1712",
@@ -126,10 +116,11 @@ const styles = StyleSheet.create({
   },
   // #1 gets circled in marker instead of a filled badge — the "coach
   // circled your name on the board" moment, the product's actual
-  // differentiator getting the loudest treatment on the page.
+  // differentiator getting the loudest treatment on the page. Straight,
+  // not tilted — a crooked circle read as broken, not hand-marked.
   rankBadgeFirst: {
     backgroundColor: "transparent", color: "#B23A2E", borderWidth: 2, borderColor: "#B23A2E",
-    borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, transform: [{ rotate: "-4deg" }],
+    borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2,
   },
   name: { fontWeight: "800", fontSize: 13, color: "#0C1712" },
   recapText: { fontSize: 13, color: "#2A362F", lineHeight: 19 },

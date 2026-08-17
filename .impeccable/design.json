@@ -51,9 +51,9 @@
       "name": "Rank Circle (First Place)",
       "kind": "chip",
       "refersTo": "rank-badge-first",
-      "description": "The #1 spot in Power Rankings — a marker-red circle outline, transparent fill, slight tilt. Replaced a filled dark pill from the prior world; the product's 'coach circled your name on the board' signature moment.",
+      "description": "The #1 spot in Power Rankings — a marker-red circle outline, transparent fill, straight (not tilted — an earlier -4deg version read as crooked per user feedback). Replaced a filled dark pill from the prior world; the product's 'coach circled your name on the board' signature moment.",
       "html": "<span class=\"ds-rank-first\">#1</span>",
-      "css": ".ds-rank-first { display: inline-block; background: transparent; color: #B23A2E; border: 2px solid #B23A2E; border-radius: 999px; font-size: 11px; font-weight: 800; padding: 2px 8px; transform: rotate(-4deg); }"
+      "css": ".ds-rank-first { display: inline-block; background: transparent; color: #B23A2E; border: 2px solid #B23A2E; border-radius: 999px; font-size: 11px; font-weight: 800; padding: 2px 8px; }"
     },
     {
       "name": "Rank Badge (Other)",
@@ -130,20 +130,21 @@
   ],
   "narrative": {
     "northStar": "The Whiteboard",
-    "overview": "WeekendLocks is a locker-room whiteboard, not a dashboard. This replaces the product's prior visual world (Turf Teal + slate + white cards) entirely. A dark chalkboard-green board (#063D31) fills the screen and is the header itself — the group name is hand-lettered directly onto it in large chalk-white PermanentMarker type beside a drawn padlock icon. Every section below reads as a sheet of paper taped to that board: chalk-paper fill, dashed hand-drawn outline, and a masking-tape corner accent. Cards stay square — tilt lives only in small accents (tape, the rank-1 circle, scattered logo badges), not the card body. The tone stays loud and personal, but the loudness now comes from material — chalk, marker, tape, paper — instead of a generic dark-mode sports-app template. Fully rolled out across the whole product: group dashboard, NFL/CFB picks pages, groups list/join, account, auth, and the home/marketing page.",
+    "overview": "WeekendLocks is a locker-room whiteboard, not a dashboard. This replaces the product's prior visual world (Turf Teal + slate + white cards) entirely. A dark chalkboard-green board (#063D31) fills the screen and is the header itself — the group name is hand-lettered directly onto it in large chalk-white PermanentMarker type beside a drawn padlock icon. Every section below reads as a sheet of paper taped to that board: chalk-paper fill, dashed hand-drawn outline, and a masking-tape corner accent. Cards and every UI badge stay square — tilt lives only in physical-prop accents (tape, scattered home-page logo badges), never on anything a user reads as a control. The tone stays loud and personal, but the loudness now comes from material — chalk, marker, tape, paper — instead of a generic dark-mode sports-app template. Fully rolled out across the whole product: group dashboard, NFL/CFB picks pages, groups list/join, account, auth, and the home/marketing page.",
     "keyCharacteristics": [
       "One board for every group: per-group hash-colored hero backgrounds were removed; identity now lives in the hand-lettered name and member avatar chips only.",
       "Paper-pinned-to-board is the universal card language — dashed border and a shared TapeCorner component, never hand-rolled per file. Cards are square; see The Accent-Only Tilt Rule.",
       "PermanentMarker is reserved for exactly two roles: the group name and section titles — never buttons, data, or body text.",
       "No emoji anywhere in the product — every former emoji (lock, trophy, flame) is now an authored SVG icon sharing one stroke grammar.",
-      "The #1 spot in Power Rankings is circled in marker (transparent, red ring, tilted) instead of a filled badge.",
+      "The #1 spot in Power Rankings is circled in marker (transparent, red ring), straight, instead of a filled badge.",
+      "No avatar chip in Standings or Power Rankings — the name already carries identity there; the chip stays where it's the only identity marker (Recent Activity, Weekly Locks grid header, chat).",
       "Only Standings and Power Rankings carry real shadow lift; Recent Activity and Chat stay flat."
     ],
     "rules": [
-      { "name": "The Same Hash, Different Canvas Rule (narrowed)", "body": "The six identity color pairs still power member avatars, but no longer extend to group hero backgrounds — every group now shares one board. Never hand-pick an identity color or add a seventh.", "section": "colors" },
+      { "name": "The Same Hash, Different Canvas Rule (narrowed)", "body": "The six identity color pairs still power member avatars where a chip is shown, but no longer extend to group hero backgrounds — every group now shares one board. Never hand-pick an identity color or add a seventh.", "section": "colors" },
       { "name": "The Two-Voice Rule", "body": "PermanentMarker is reserved for exactly two roles — the group name and section titles. It never appears on a button, a data value, or body copy.", "section": "typography" },
       { "name": "The Dashed Border Rule", "body": "Every paper card uses a dashed border instead of a solid hairline, so the board reads as hand-assembled.", "section": "shapes" },
-      { "name": "The Accent-Only Tilt Rule", "body": "Cards are always square — no card carries a rotation transform. An earlier pass tilted whole cards; user feedback confirmed it read as broken alignment, not charm. Tilt now lives only in corner-scale accents: TapeCorner, the rank-1 circle, scattered logo/icon chips.", "section": "shapes" },
+      { "name": "The Accent-Only Tilt Rule", "body": "Cards and any element read as UI (badges, circles, controls) are always square. An earlier pass tilted whole cards, then the Power Rankings #1 circle; both were flagged by direct user feedback as looking broken, not charming. Tilt survives only on physical-prop accents: TapeCorner, and the home page's scattered logo/icon chips.", "section": "shapes" },
       { "name": "The List Restraint Rule", "body": "The TapeCorner accent is for single-instance surfaces only, never for items inside a repeated list. The picks pages' game cards and the groups list's rows keep chalk-paper fill and dashed border but carry no tape.", "section": "shapes" },
       { "name": "The Two-Tier Lift Rule", "body": "Not every paper sheet gets the same shadow. Only Standings, Power Rankings, and the two hero CTAs earn real shadow lift; everything else stays flat.", "section": "elevation" }
     ],
@@ -158,8 +159,9 @@
       "Don't use opacity to indicate a disabled state on a chalk-paper surface — it blends into the board behind it.",
       "Don't add a seventh member-identity color or reorder the existing six.",
       "Don't apply the paper-card language to the Danger Zone — it stays a plain red alert box.",
-      "Don't rotate a whole card — tilt only belongs on corner-scale accents.",
-      "Don't use an emoji character anywhere in this product."
+      "Don't rotate a card, badge, or anything read as UI — tilt only belongs on physical-prop accents.",
+      "Don't use an emoji character anywhere in this product.",
+      "Don't add a member avatar chip next to a name already shown in the same row — it's redundant identity."
     ]
   }
 }
