@@ -4,10 +4,11 @@ export const unstable_settings = { prerender: false };
 import { useEffect, useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator, Platform } from "react-native";
 import { supabase } from "@/lib/supabase";
-import { useRouter } from "expo-router";
+import { useRouter, Link } from "expo-router";
 import { alert } from "@/lib/alert";
 import { colors as theme } from "@/lib/theme";
 import TapeCorner from "@/components/TapeCorner";
+import { LogoBadge } from "@/components/Logo";
 
 const colors = { primary: theme.brand, bg: theme.felt, text: "#0C1712", subtext: "#45564C" };
 
@@ -73,6 +74,11 @@ export default function ResetPassword() {
 
   return (
     <View style={styles.screen}>
+      <View style={styles.brandRow}>
+        <Link href="/" accessibilityLabel="Back to home">
+          <LogoBadge size={44} />
+        </Link>
+      </View>
       <View style={styles.card}>
         <TapeCorner />
         <Text style={styles.title}>Reset password</Text>
@@ -102,6 +108,7 @@ export default function ResetPassword() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center", padding: 20 },
+  brandRow: { marginBottom: 18 },
   card: {
     position: "relative",
     width: "100%", maxWidth: 520, backgroundColor: "#F5F3E7", borderRadius: 10, padding: 20, paddingTop: 24, gap: 12,

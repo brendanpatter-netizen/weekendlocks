@@ -6,7 +6,7 @@ import {
   View, Text, TextInput, Pressable, ActivityIndicator,
   StyleSheet, Platform,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, Link } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { alert } from "@/lib/alert";
 import { colors as theme } from "@/lib/theme";
@@ -209,7 +209,9 @@ export default function Login() {
   return (
     <View style={styles.screen}>
       <View style={styles.brandRow}>
-        <LogoBadge size={44} />
+        <Link href="/" accessibilityLabel="Back to home">
+          <LogoBadge size={44} />
+        </Link>
       </View>
       <View style={styles.card}>
         <TapeCorner />
@@ -384,9 +386,12 @@ const styles = StyleSheet.create({
   },
   title: { fontFamily: "PermanentMarker_400Regular", fontSize: 24, color: "#B23A2E", textTransform: "uppercase" },
   subtitle: { color: colors.subtext, marginBottom: 6, fontWeight: "700" },
-  toggleRow: { flexDirection: "row", gap: 8 },
+  // Fixed 2-per-row grid (not flex:1 in one row) — four labels like "Email
+  // Code" and "Magic Link" don't fit four-across without crowding/overflow
+  // on narrow phone widths.
+  toggleRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: 8 },
   toggleBtn: {
-    flex: 1, paddingVertical: 10, borderRadius: 999, borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)",
+    width: "48%", paddingVertical: 10, borderRadius: 999, borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)",
     borderStyle: "dashed", alignItems: "center", backgroundColor: "#FDFCF8",
   },
   toggleBtnActive: { borderColor: colors.primary, backgroundColor: colors.primary, borderStyle: "solid" },
