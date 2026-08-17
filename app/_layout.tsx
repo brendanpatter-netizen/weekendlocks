@@ -203,7 +203,7 @@ export default function RootLayout() {
               }}
             >
               <Link href="/how-it-works" style={{ paddingVertical: 12, paddingHorizontal: 16, color: "#0C1712", fontWeight: "700", fontSize: 15 }}>
-                How it works
+                How It Works
               </Link>
               <View style={{ height: 1, backgroundColor: "rgba(12,23,18,0.12)", marginHorizontal: 12 }} />
               <Link href="/groups" style={{ paddingVertical: 12, paddingHorizontal: 16, color: "#0C1712", fontWeight: "700", fontSize: 15 }}>
