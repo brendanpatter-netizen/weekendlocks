@@ -17,7 +17,10 @@ import { supabase } from "../../lib/supabase";
 import { avatarColor, initials } from "@/lib/avatar";
 import { alert } from "@/lib/alert";
 import { colors as theme } from "@/lib/theme";
+import { getOpenWeek } from "@/lib/openWeek";
+import { recordLabel, winPct, EMPTY_RECORD, type SeasonRecord } from "@/lib/records";
 import TapeCorner from "@/components/TapeCorner";
+import TrophyIcon from "@/components/TrophyIcon";
 
 type Group = {
   id: string;
@@ -27,9 +30,17 @@ type Group = {
   created_at: string;
 };
 
+type GroupPreview = {
+  members: { id: string; name: string }[];
+  memberCount: number;
+  leader: { name: string; record: SeasonRecord } | null;
+  needsPick: boolean;
+};
+
 export default function GroupsIndex() {
   const [loading, setLoading] = useState(true);
   const [groups, setGroups] = useState<Group[]>([]);
+  const [previews, setPreviews] = useState<Map<string, GroupPreview>>(new Map());
   const [createName, setCreateName] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -71,8 +82,96 @@ export default function GroupsIndex() {
       return;
     }
 
-    setGroups((data || []) as Group[]);
+    const rows = (data || []) as Group[];
+    setGroups(rows);
     setLoading(false);
+
+    // Board previews (leader/record, avatar cluster, "picks open" nudge) load
+    // separately and fill in a beat later — the base list shouldn't wait on
+    // N extra queries per group just to become visible.
+    void loadPreviews(rows, session.user.id);
+  }
+
+  async function loadPreviews(groupList: Group[], userId: string) {
+    const [nflWeek, cfbWeek] = await Promise.all([getOpenWeek("nfl"), getOpenWeek("cfb")]);
+    // Same "no NFL yet, CFB already open" gap-week rule as the picks pages —
+    // two CFB locks required instead of one CFB + one NFL.
+    const isGapWeek = !!cfbWeek && !nflWeek;
+
+    const entries = await Promise.all(
+      groupList.map(async (g): Promise<readonly [string, GroupPreview]> => {
+        const [{ data: gm }, { data: recordRows }] = await Promise.all([
+          supabase.from("group_members").select("user_id").eq("group_id", g.id),
+          supabase.from("member_records").select("user_id, wins, losses").eq("group_id", g.id),
+        ]);
+        const rosterIds = (gm ?? []).map((r: any) => r.user_id as string);
+
+        const { data: profs } = rosterIds.length
+          ? await supabase.from("profiles").select("id, username, display_name").in("id", rosterIds)
+          : { data: [] as any[] };
+        const nameById = new Map<string, string>(
+          rosterIds.map((uid) => {
+            const p = (profs ?? []).find((x: any) => x.id === uid);
+            return [uid, p?.username || p?.display_name || uid];
+          })
+        );
+
+        const recByUser = new Map<string, SeasonRecord>();
+        (recordRows ?? []).forEach((r: any) => {
+          const cur = recByUser.get(r.user_id) ?? { ...EMPTY_RECORD };
+          cur.wins += r.wins;
+          cur.losses += r.losses;
+          recByUser.set(r.user_id, cur);
+        });
+
+        // Same ranking rule as the Standings: win% among decided games,
+        // 0 decided sinks to the bottom, ties broken by name.
+        let leaderName: string | null = null;
+        let leaderRecord: SeasonRecord = EMPTY_RECORD;
+        let bestVal = -Infinity;
+        rosterIds.forEach((uid) => {
+          const rec = recByUser.get(uid) ?? EMPTY_RECORD;
+          const decided = rec.wins + rec.losses;
+          const val = decided === 0 ? -1 : rec.wins / decided;
+          const name = nameById.get(uid) ?? uid;
+          if (leaderName === null || val > bestVal || (val === bestVal && name.localeCompare(leaderName, undefined, { sensitivity: "base" }) < 0)) {
+            bestVal = val;
+            leaderName = name;
+            leaderRecord = rec;
+          }
+        });
+
+        let needsPick = false;
+        if (rosterIds.includes(userId) && (nflWeek || cfbWeek)) {
+          const { data: myPicks } = await supabase
+            .from("picks")
+            .select("sport, week, slot")
+            .eq("group_id", g.id)
+            .eq("user_id", userId);
+          const has = (sport: string, week: number, slot: number) =>
+            (myPicks ?? []).some((p: any) => p.sport === sport && p.week === week && p.slot === slot);
+          if (isGapWeek && cfbWeek) {
+            needsPick = !has("cfb", cfbWeek.week, 1) || !has("cfb", cfbWeek.week, 2);
+          } else {
+            const needsNfl = !!nflWeek && !has("nfl", nflWeek.week, 1);
+            const needsCfb = !!cfbWeek && !has("cfb", cfbWeek.week, 1);
+            needsPick = needsNfl || needsCfb;
+          }
+        }
+
+        return [
+          g.id,
+          {
+            members: rosterIds.slice(0, 4).map((uid) => ({ id: uid, name: nameById.get(uid) ?? uid })),
+            memberCount: rosterIds.length,
+            leader: leaderName ? { name: leaderName, record: leaderRecord } : null,
+            needsPick,
+          },
+        ] as const;
+      })
+    );
+
+    setPreviews(new Map(entries));
   }
 
   useEffect(() => {
@@ -218,24 +317,68 @@ export default function GroupsIndex() {
         renderItem={({ item }) => {
           const color = avatarColor(item.id);
           const isOwner = item.owner_user_id === currentUserId;
+          const preview = previews.get(item.id);
+          const leaderLabel = preview?.leader ? recordLabel(preview.leader.record) : null;
+          const overflow = preview ? preview.memberCount - preview.members.length : 0;
           return (
             <Link href={{ pathname: "/groups/[id]", params: { id: item.id } }} asChild>
               <Pressable style={styles.row}>
-                <View style={[styles.rowBadge, { backgroundColor: color.bg }]}>
-                  <Text style={[styles.rowBadgeText, { color: color.fg }]}>{initials(item.name)}</Text>
+                {preview?.needsPick && (
+                  <View style={styles.nudgeBadge}>
+                    <Text style={styles.nudgeBadgeText}>Picks open</Text>
+                  </View>
+                )}
+                <View style={styles.rowTop}>
+                  <View style={[styles.rowBadge, { backgroundColor: color.bg }]}>
+                    <Text style={[styles.rowBadgeText, { color: color.fg }]}>{initials(item.name)}</Text>
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <View style={styles.rowTitleLine}>
+                      <Text style={styles.rowTitle} numberOfLines={1}>{item.name}</Text>
+                      {isOwner && (
+                        <View style={styles.ownerTag}><Text style={styles.ownerTagText}>Owner</Text></View>
+                      )}
+                    </View>
+                    <Text style={styles.rowSub}>
+                      Created {new Date(item.created_at).toLocaleDateString()}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
                 </View>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <View style={styles.rowTitleLine}>
-                    <Text style={styles.rowTitle} numberOfLines={1}>{item.name}</Text>
-                    {isOwner && (
-                      <View style={styles.ownerTag}><Text style={styles.ownerTagText}>Owner</Text></View>
+
+                {preview && preview.members.length > 0 && (
+                  <View style={styles.rowPreview}>
+                    <View style={styles.cluster}>
+                      {preview.members.map((m, i) => {
+                        const c = avatarColor(m.id);
+                        return (
+                          <View
+                            key={m.id}
+                            style={[styles.clusterAvatar, { backgroundColor: c.bg, marginLeft: i === 0 ? 0 : -8 }]}
+                          >
+                            <Text style={[styles.clusterAvatarText, { color: c.fg }]}>{initials(m.name)}</Text>
+                          </View>
+                        );
+                      })}
+                      {overflow > 0 && (
+                        <View style={[styles.clusterAvatar, styles.clusterOverflow, { marginLeft: -8 }]}>
+                          <Text style={styles.clusterOverflowText}>+{overflow}</Text>
+                        </View>
+                      )}
+                    </View>
+                    {preview.leader && leaderLabel ? (
+                      <View style={styles.leaderLine}>
+                        <TrophyIcon size={13} color="#B23A2E" />
+                        <Text style={styles.leaderName} numberOfLines={1}>{preview.leader.name}</Text>
+                        <Text style={styles.leaderRecord}>
+                          {leaderLabel}{winPct(preview.leader.record) ? ` · ${winPct(preview.leader.record)}` : ""}
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.leaderRecord}>No picks yet this season</Text>
                     )}
                   </View>
-                  <Text style={styles.rowSub}>
-                    Created {new Date(item.created_at).toLocaleDateString()}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+                )}
               </Pressable>
             </Link>
           );
@@ -306,17 +449,18 @@ const styles = StyleSheet.create({
 
   // Repeated list items — chalk-paper + dashed border for board continuity,
   // but flat and square (List Restraint Rule), like the picks pages' game cards.
+  // Column now (was a single row): the top line is unchanged, a second
+  // "board preview" line (avatar cluster + leader) sits below it.
   row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    padding: 14,
+    position: "relative",
     backgroundColor: "#F5F3E7",
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: "rgba(12,23,18,0.18)",
+    padding: 14,
     marginBottom: 10,
   },
+  rowTop: { flexDirection: "row", alignItems: "center", gap: 12 },
   rowBadge: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   rowBadgeText: { fontSize: 14, fontWeight: "700" },
   rowTitleLine: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -324,6 +468,41 @@ const styles = StyleSheet.create({
   rowSub: { color: "#45564C", marginTop: 2, fontSize: 12 },
   ownerTag: { backgroundColor: "#FAEEDA", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
   ownerTagText: { fontSize: 10, fontWeight: "700", color: "#633806" },
+
+  // Board preview: member avatar cluster + the current standings leader —
+  // reason to glance at the list itself, not just a router to click through.
+  rowPreview: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(12,23,18,0.12)",
+  },
+  cluster: { flexDirection: "row", alignItems: "center" },
+  clusterAvatar: {
+    width: 24, height: 24, borderRadius: 999, alignItems: "center", justifyContent: "center",
+    borderWidth: 2, borderColor: "#F5F3E7",
+  },
+  clusterAvatarText: { fontSize: 10, fontWeight: "700" },
+  clusterOverflow: { backgroundColor: "#E9ECE8" },
+  clusterOverflowText: { fontSize: 9, fontWeight: "700", color: "#45564C" },
+  leaderLine: { flexDirection: "row", alignItems: "center", gap: 5, flexShrink: 1, minWidth: 0 },
+  leaderName: { fontSize: 13, fontWeight: "700", color: "#0C1712", flexShrink: 1 },
+  leaderRecord: { fontSize: 12, color: "#45564C", fontWeight: "600" },
+
+  // Square, no rotation — same as everything else in the product (see The
+  // Accent-Only Tilt Rule). Only unusual thing about it is the absolute
+  // position, overlapping the row's top edge like a corner flag. Marker-red
+  // + dashed keeps it in the existing "hand-marked" ink family instead of
+  // inventing a new alert color.
+  nudgeBadge: {
+    position: "absolute", top: -9, right: 14, backgroundColor: "#F5F3E7",
+    borderWidth: 1.5, borderColor: "#B23A2E", borderStyle: "dashed", borderRadius: 999,
+    paddingHorizontal: 10, paddingVertical: 3,
+  },
+  nudgeBadgeText: { fontSize: 10, fontWeight: "800", color: "#B23A2E", letterSpacing: 0.3, textTransform: "uppercase" },
 
   emptyState: { alignItems: "center", gap: 8, paddingVertical: 32 },
 });

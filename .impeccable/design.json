@@ -142,6 +142,22 @@
       "description": "The one highlighted paper strip per page — the group dashboard's invite row and the picks pages' pick-status bar share this exact recipe: chalk paper, dashed gold border, square.",
       "html": "<div class=\"ds-strip\">Your pick: Chiefs -3.5</div>",
       "css": ".ds-strip { background: #F5F3E7; border: 1.5px dashed #B4901F; border-radius: 10px; padding: 10px 12px; }"
+    },
+    {
+      "name": "Group Row Board Preview",
+      "kind": "custom",
+      "refersTo": "group-row-preview",
+      "description": "The second line on each groups-list row: an overlapping avatar cluster (2px chalk-white border between circles) plus the current standings leader (TrophyIcon + name + record). The one repeated-list item with a preview line instead of being a pure link.",
+      "html": "<div class=\"ds-cluster\"><span style=\"background:#E1F5EE;color:#085041\">B</span><span style=\"background:#FAECE7;color:#712B13;margin-left:-8px\">C</span></div>",
+      "css": ".ds-cluster span { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 999px; border: 2px solid #F5F3E7; font-size: 10px; font-weight: 700; }"
+    },
+    {
+      "name": "Picks Open Badge",
+      "kind": "custom",
+      "refersTo": "picks-open-badge",
+      "description": "Absolutely-positioned callout overlapping a group row's top-right corner, shown only when the viewer hasn't made this week's required picks in that group. Square, no rotation.",
+      "html": "<div class=\"ds-picks-open\">Picks open</div>",
+      "css": ".ds-picks-open { position: absolute; top: -9px; right: 14px; background: #F5F3E7; border: 1.5px dashed #B23A2E; border-radius: 999px; padding: 3px 10px; font-size: 10px; font-weight: 800; color: #B23A2E; text-transform: uppercase; letter-spacing: 0.3px; }"
     }
   ],
   "narrative": {
