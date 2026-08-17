@@ -293,7 +293,7 @@ export default function GroupsIndex() {
         keyExtractor={(g) => g.id}
         ListHeaderComponent={
           <>
-            <Text style={styles.h1}>Your groups</Text>
+            <Text style={styles.h1}>Start your group</Text>
             <Text style={styles.muted}>Create a group or join one with a code.</Text>
 
             <View style={styles.actionsRow}>
@@ -339,7 +339,7 @@ export default function GroupsIndex() {
               </View>
             </View>
 
-            <View style={{ marginTop: 20 }} />
+            <Text style={styles.h1Secondary}>Your groups</Text>
           </>
         }
         renderItem={({ item }) => {
@@ -357,12 +357,9 @@ export default function GroupsIndex() {
                   </View>
                 )}
                 <View style={styles.rowTop}>
-                  <View style={[styles.rowBadge, { backgroundColor: color.bg }]}>
-                    <Text style={[styles.rowBadgeText, { color: color.fg }]}>{initials(item.name)}</Text>
-                  </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <View style={styles.rowTitleLine}>
-                      <Text style={styles.rowTitle} numberOfLines={1}>{item.name}</Text>
+                      <Text style={[styles.rowTitle, { color: color.fg }]} numberOfLines={1}>{item.name}</Text>
                       {isOwner && (
                         <View style={styles.ownerTag}><Text style={styles.ownerTagText}>Owner</Text></View>
                       )}
@@ -431,6 +428,9 @@ const styles = StyleSheet.create({
   outer: { flex: 1, backgroundColor: theme.felt },
   container: { padding: 16, gap: 4 },
   h1: { fontFamily: "PermanentMarker_400Regular", fontSize: 26, color: "#F5F3E7" },
+  // Sits directly on the board (not a paper card), so it stays chalk-white
+  // like the primary h1 — smaller only, to read as secondary to it.
+  h1Secondary: { fontFamily: "PermanentMarker_400Regular", fontSize: 20, color: "#F5F3E7", marginTop: 26, marginBottom: 4 },
   h2: { fontFamily: "PermanentMarker_400Regular", fontSize: 16, color: "#B23A2E" },
   muted: { color: "rgba(245,243,231,0.7)", fontWeight: "700" },
 
@@ -494,10 +494,15 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   rowTop: { flexDirection: "row", alignItems: "center", gap: 12 },
-  rowBadge: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  rowBadgeText: { fontSize: 14, fontWeight: "700" },
   rowTitleLine: { flexDirection: "row", alignItems: "center", gap: 8 },
-  rowTitle: { fontWeight: "700", fontSize: 16, color: "#0C1712", flexShrink: 1 },
+  // Hand-lettered like every other title in the product (see The Two-Voice
+  // Rule) instead of plain bold system text — the group's own name earning
+  // the same PermanentMarker treatment it gets on its own dashboard hero,
+  // just sized for a list row. Colored per-group via the same identity hash
+  // that already drives the avatar/member colors elsewhere (inline, not
+  // hardcoded here) rather than a flat ink color, since removing the
+  // initials badge means the name itself needs to carry that color signal.
+  rowTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 20, flexShrink: 1 },
   rowSub: { color: "#45564C", marginTop: 2, fontSize: 12 },
   ownerTag: { backgroundColor: "#FAEEDA", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
   ownerTagText: { fontSize: 10, fontWeight: "700", color: "#633806" },

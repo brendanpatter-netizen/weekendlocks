@@ -144,6 +144,14 @@
       "css": ".ds-strip { background: #F5F3E7; border: 1.5px dashed #B4901F; border-radius: 10px; padding: 10px 12px; }"
     },
     {
+      "name": "Group Row Name",
+      "kind": "custom",
+      "refersTo": "group-row-name",
+      "description": "The group name in a groups-list row: PermanentMarker 20px (same size as any paper card's Title), colored via avatarColor(groupId).fg — the first place the identity hash keys off a group id and colors text rather than an avatar chip. Replaced a plain bold system-sans name plus a redundant initials badge, which was removed entirely (see the redundant-identity Don't).",
+      "html": "<div style=\"font-family:'Permanent Marker',cursive;font-size:20px;color:#3C3489\">123</div>",
+      "css": ""
+    },
+    {
       "name": "Group Row Board Preview",
       "kind": "custom",
       "refersTo": "group-row-preview",
@@ -173,7 +181,7 @@
       "Only Standings and Power Rankings carry real shadow lift; Recent Activity and Chat stay flat."
     ],
     "rules": [
-      { "name": "The Same Hash, Different Canvas Rule (narrowed)", "body": "The six identity color pairs still power member avatars where a chip is shown, but no longer extend to group hero backgrounds — every group now shares one board. Never hand-pick an identity color or add a seventh.", "section": "colors" },
+      { "name": "The Same Hash, Different Canvas Rule (narrowed)", "body": "The six identity color pairs power identity color wherever it's shown, keyed by whichever id is being colored — member id for avatars, group id for the groups list row's own name text. No longer extends to group hero backgrounds — every group now shares one board. Never hand-pick an identity color or add a seventh.", "section": "colors" },
       { "name": "The Two-Voice Rule", "body": "PermanentMarker is reserved for exactly two roles — the group name and section titles. It never appears on a button, a data value, or body copy.", "section": "typography" },
       { "name": "The Dashed Border Rule", "body": "Every paper card uses a dashed border instead of a solid hairline, so the board reads as hand-assembled.", "section": "shapes" },
       { "name": "The Accent-Only Tilt Rule (final)", "body": "Nothing tilts except TapeCorner (-3deg/3deg) — full stop. Three separate passes tried tilt elsewhere (whole cards, the Power Rankings #1 circle, the home page's logo/icon chips) and user feedback flagged every one as broken, not hand-drawn. Do not reintroduce rotation anywhere else, including small 'decorative' accents that seem safe.", "section": "shapes" },
