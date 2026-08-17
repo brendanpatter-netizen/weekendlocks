@@ -10,19 +10,19 @@ import { logoUri } from "@/lib/teamLogos";
 import { colors as theme } from "@/lib/theme";
 import TapeCorner from "@/components/TapeCorner";
 
-const HERO_TEAMS: { name: string; sport: "nfl" | "ncaaf"; rotate: number }[] = [
-  { name: "Kansas City Chiefs", sport: "nfl", rotate: -8 },
-  { name: "Philadelphia Eagles", sport: "nfl", rotate: 6 },
-  { name: "Dallas Cowboys", sport: "nfl", rotate: -4 },
-  { name: "Buffalo Bills", sport: "nfl", rotate: 10 },
-  { name: "Georgia Bulldogs", sport: "ncaaf", rotate: -10 },
-  { name: "Ohio State Buckeyes", sport: "ncaaf", rotate: 5 },
+const HERO_TEAMS: { name: string; sport: "nfl" | "ncaaf" }[] = [
+  { name: "Kansas City Chiefs", sport: "nfl" },
+  { name: "Philadelphia Eagles", sport: "nfl" },
+  { name: "Dallas Cowboys", sport: "nfl" },
+  { name: "Buffalo Bills", sport: "nfl" },
+  { name: "Georgia Bulldogs", sport: "ncaaf" },
+  { name: "Ohio State Buckeyes", sport: "ncaaf" },
 ];
 
 const STEPS = [
-  { icon: "people-outline" as const, tint: "#E1F5EE", iconColor: "#085041", title: "Squad up", body: "Create a group or join one with a code", rotate: -4 },
-  { icon: "locate-outline" as const, tint: "#E6F1FB", iconColor: "#0C447C", title: "Call your shot", body: "One NFL and one CFB lock, every week", rotate: 4 },
-  { icon: "trophy-outline" as const, tint: "#FAECE7", iconColor: "#712B13", title: "Rule the board", body: "Records build all season, live in your group", rotate: -4 },
+  { icon: "people-outline" as const, tint: "#E1F5EE", iconColor: "#085041", title: "Squad up", body: "Create a group or join one with a code" },
+  { icon: "locate-outline" as const, tint: "#E6F1FB", iconColor: "#0C447C", title: "Call your shot", body: "One NFL and one CFB lock, every week" },
+  { icon: "trophy-outline" as const, tint: "#FAECE7", iconColor: "#712B13", title: "Rule the board", body: "Records build all season, live in your group" },
 ];
 
 export default function Home() {
@@ -39,10 +39,7 @@ export default function Home() {
       <View style={styles.hero}>
         <View style={styles.logoRow}>
           {HERO_TEAMS.map((t) => (
-            <View
-              key={t.name}
-              style={[styles.logoBadge, { transform: [{ rotate: `${t.rotate}deg` }] }]}
-            >
+            <View key={t.name} style={styles.logoBadge}>
               <Image source={{ uri: logoUri(t.name, t.sport) }} style={styles.logoImg} resizeMode="contain" />
             </View>
           ))}
@@ -79,7 +76,7 @@ export default function Home() {
         {STEPS.map((s, i) => (
           <View key={s.title} style={styles.stepCard}>
             <TapeCorner side={i % 2 === 0 ? "left" : "right"} />
-            <View style={[styles.stepIcon, { backgroundColor: s.tint, transform: [{ rotate: `${s.rotate}deg` }] }]}>
+            <View style={[styles.stepIcon, { backgroundColor: s.tint }]}>
               <Ionicons name={s.icon} size={22} color={s.iconColor} />
             </View>
             <Text style={styles.stepTitle}>{s.title}</Text>
@@ -148,9 +145,8 @@ const styles = StyleSheet.create({
   },
 
   hero: { alignItems: "center", paddingTop: 12, gap: 4 },
-  // The scattered, individually-rotated team badges already read as photos
-  // pinned to a corkboard — the dashed gold ring ties them to the same
-  // tape/pin material language without adding a TapeCorner to all six.
+  // Square, per The Accent-Only Tilt Rule — only TapeCorner ever tilts. The
+  // dashed gold ring is what ties these to the tape/pin material language.
   logoRow: { flexDirection: "row", gap: 10, marginBottom: 18, flexWrap: "wrap", justifyContent: "center" },
   logoBadge: {
     width: 48, height: 48, borderRadius: 999, backgroundColor: "white",
