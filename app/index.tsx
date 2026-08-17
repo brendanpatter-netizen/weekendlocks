@@ -1,11 +1,9 @@
 // FILE: app/index.tsx
 export const unstable_settings = { prerender: false };
 
-import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, Image, ScrollView, Pressable } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { supabase } from "@/lib/supabase";
 import { logoUri } from "@/lib/teamLogos";
 import { colors as theme } from "@/lib/theme";
 import TapeCorner from "@/components/TapeCorner";
@@ -26,13 +24,7 @@ const STEPS = [
 ];
 
 export default function Home() {
-  const [signedIn, setSignedIn] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setSignedIn(!!data.user));
-  }, []);
-
-  const primaryCta = () => router.push(signedIn ? "/groups" : "/auth/login");
+  const primaryCta = () => router.push("/auth/login");
 
   return (
     <ScrollView style={styles.pageOuter} contentContainerStyle={styles.page}>
@@ -61,7 +53,7 @@ export default function Home() {
 
         <View style={styles.ctaRow}>
           <Pressable style={styles.ctaPrimary} onPress={primaryCta}>
-            <Text style={styles.ctaPrimaryText}>{signedIn ? "Go to your groups" : "Get started"}</Text>
+            <Text style={styles.ctaPrimaryText}>Get started</Text>
             <Ionicons name="arrow-forward" size={16} color="white" />
           </Pressable>
         </View>
@@ -126,7 +118,7 @@ export default function Home() {
         <Text style={styles.closingTitle}>Think you can call it better?</Text>
         <Text style={styles.closingSub}>Prove it. Your group is waiting.</Text>
         <Pressable style={styles.ctaPrimary} onPress={primaryCta}>
-          <Text style={styles.ctaPrimaryText}>{signedIn ? "Go to your groups" : "Get started"}</Text>
+          <Text style={styles.ctaPrimaryText}>Get started</Text>
         </Pressable>
       </View>
     </ScrollView>
