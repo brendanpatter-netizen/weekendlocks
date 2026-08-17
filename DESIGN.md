@@ -100,7 +100,7 @@ WeekendLocks is a locker-room whiteboard, not a dashboard. This is a full replac
 
 The tone stays loud and personal — this is still the app where the group's AI-generated Power Rankings roast bot lives — but the loudness now comes from material (chalk, marker, tape, paper) instead of from a generic dark-mode sports-app template. Bold system-sans data (member names, records, pick text) sits inside the paper sheets; hand-lettered marker type is reserved for section titles and the group name, so the two voices stay distinct: the board talks in marker, the data talks in a normal confident sans.
 
-**Coverage:** Fully rolled out — group dashboard, NFL/CFB picks pages, groups list/join flow, account, all three auth screens, and the home/marketing page all run on this world now. The home hero's headline is the one place PermanentMarker sizes up past the 20px section-title tier (34px, on-board chalk-white) — the product's single loudest "written on the board" moment, reserved for that one spot.
+**Coverage:** Fully rolled out — group dashboard, NFL/CFB picks pages, groups list/join flow, account, all three auth screens, the home/marketing page, and the How It Works rules page all run on this world now. The home hero's headline is the one place PermanentMarker sizes up past the 20px section-title tier (34px, on-board chalk-white) — the product's single loudest "written on the board" moment, reserved for that one spot.
 
 **Key Characteristics:**
 - One board, not per-group hero colors: every group lands on the same felt-green board; identity now lives in the hand-lettered name and member avatar chips, not a per-group hash background.
@@ -200,6 +200,9 @@ Hybrid: the board and most paper cards are flat (dashed border does the separati
 ### Section Icons
 Every section that once carried an emoji now carries a matching authored SVG instead: `LockIcon` (padlock, Weekly Locks / board eyebrow), `TrophyIcon` (Standings), `FlameIcon` (Power Rankings). All three share one visual grammar — unfilled shapes, `strokeWidth` ~2.2–2.4, rounded caps/joins, sized 13–22px, colored to match their context (chalk-white on the board, marker-red on paper). A new section icon should extend this set rather than reach for an emoji or a filled icon-font glyph.
 
+### How It Works (rules page)
+On-board hero (eyebrow + PermanentMarker title, same recipe as a group's own hero) leading into a stack of square paper cards, one per rule topic. Includes one static illustrative game card — deliberately styled close to but distinct from the real picks-page game card (plain corner radius, no dashed border) so it reads as "here's roughly what that looks like," not as a live, tappable control.
+
 ### Weekly Locks Grid (signature component)
 Unchanged in function and data density from the prior world — still the season-long spreadsheet tracker. Restyled to the paper-card language (dashed border, tape corner, PermanentMarker title with the drawn `LockIcon` beside it in marker-red) but the internal grid cells (win/loss/pending colors, legend) intentionally kept in their original slate/semantic colors — the grid should stay legible as a spreadsheet even as the shell around it got louder.
 
@@ -207,7 +210,7 @@ Unchanged in function and data density from the prior world — still the season
 Countdown list, #1 first, no avatar chip (name carries identity; see The Same Hash, Different Canvas Rule). The rank-1 badge is the one place this pass changed a functional treatment, not just a shell: a filled dark pill became a transparent marker-red circle outline, straight — the board's own "circled in marker" gesture, applied to the product's actual differentiator.
 
 ### Navigation
-Unchanged: minimal top bar (Groups / Account / Sign in-out) on the board-felt background.
+Top bar is the logo plus a single hamburger button (`Ionicons` `menu-outline`/`close`) on the board-felt background — every nav link that used to sit inline in the header now lives in one dropdown, opened from that button. The dropdown itself is a chalk-paper, dashed-border, square panel (see The Accent-Only Tilt Rule — it's UI, not a prop) anchored under the button, with a `card-lift`-strength shadow so it reads as floating above the page; a full-screen transparent overlay behind it closes the menu on outside tap, and it also auto-closes on every navigation. Order is fixed: **How it works, Groups, Account, Sign out** (or Sign in, signed out) — How it works leads because it's the one entry a brand-new, not-yet-signed-in visitor needs first.
 
 ## Do's and Don'ts
 

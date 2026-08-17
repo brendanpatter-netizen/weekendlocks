@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { View, Platform, Text, Pressable } from "react-native";
 import { Slot, usePathname, useRouter, Link } from "expo-router";
 import { useFonts, RobotoCondensed_900Black } from "@expo-google-fonts/roboto-condensed";
+import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "@/lib/supabase";
 import { AlertHost } from "@/lib/alert";
 import { BrandLockup } from "@/components/Logo";
@@ -79,6 +80,7 @@ export default function RootLayout() {
 
   const [ready, setReady] = useState(false);
   const [hasSession, setHasSession] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const lastRedirect = useRef<string | null>(null);
 
   useEffect(() => {
@@ -116,11 +118,15 @@ export default function RootLayout() {
     };
   }, [pathname, router]);
 
+  // Close the nav menu on every navigation, so it never lingers over a new page.
+  useEffect(() => { setMenuOpen(false); }, [pathname]);
+
   // Public routes (add /groups here)
   const isPublic = (p?: string) =>
     !!p &&
     (p === "/" ||
       p === "/index" ||
+      p.startsWith("/how-it-works") ||
       p.startsWith("/picks") ||
       p.startsWith("/groups") || // <-- NEW
       p.startsWith("/auth")); // login/reset/callback are all under /auth
@@ -147,7 +153,7 @@ export default function RootLayout() {
   return (
     <ErrorBoundary>
       <View style={{ flex: 1 }}>
-        {/* Simple web header with a Groups link */}
+        {/* Web header: logo + a single hamburger menu covering all nav */}
         {showHeader && (
           <View
             style={{
@@ -164,24 +170,54 @@ export default function RootLayout() {
               <BrandLockup size={28} />
             </Link>
 
-            <View style={{ flexDirection: "row", gap: 18, alignItems: "center" }}>
-              <Link href="/groups" style={{ color: "#CFE3D8", fontWeight: "700" }}>
+            <Pressable
+              onPress={() => setMenuOpen((v) => !v)}
+              style={{ padding: 6 }}
+              accessibilityRole="button"
+              accessibilityLabel={menuOpen ? "Close menu" : "Open menu"}
+            >
+              <Ionicons name={menuOpen ? "close" : "menu-outline"} size={26} color="#F5F3E7" />
+            </Pressable>
+          </View>
+        )}
+
+        {showHeader && menuOpen && (
+          <>
+            <Pressable
+              onPress={() => setMenuOpen(false)}
+              style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 20 }}
+            />
+            <View
+              style={{
+                position: "absolute", top: 52, right: 14, zIndex: 21, minWidth: 200,
+                backgroundColor: "#F5F3E7", borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)",
+                borderStyle: "dashed", borderRadius: 10, paddingVertical: 6,
+                shadowColor: "#000", shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 6,
+              }}
+            >
+              <Link href="/how-it-works" style={{ paddingVertical: 12, paddingHorizontal: 16, color: "#0C1712", fontWeight: "700", fontSize: 15 }}>
+                How it works
+              </Link>
+              <View style={{ height: 1, backgroundColor: "rgba(12,23,18,0.12)", marginHorizontal: 12 }} />
+              <Link href="/groups" style={{ paddingVertical: 12, paddingHorizontal: 16, color: "#0C1712", fontWeight: "700", fontSize: 15 }}>
                 Groups
               </Link>
-              <Link href="/account" style={{ color: "#CFE3D8", fontWeight: "700" }}>
+              <View style={{ height: 1, backgroundColor: "rgba(12,23,18,0.12)", marginHorizontal: 12 }} />
+              <Link href="/account" style={{ paddingVertical: 12, paddingHorizontal: 16, color: "#0C1712", fontWeight: "700", fontSize: 15 }}>
                 Account
               </Link>
+              <View style={{ height: 1, backgroundColor: "rgba(12,23,18,0.12)", marginHorizontal: 12 }} />
               {hasSession ? (
-                <Pressable onPress={signOut}>
-                  <Text style={{ color: "#CFE3D8", fontWeight: "700" }}>Sign out</Text>
+                <Pressable onPress={signOut} style={{ paddingVertical: 12, paddingHorizontal: 16 }}>
+                  <Text style={{ color: "#0C1712", fontWeight: "700", fontSize: 15 }}>Sign out</Text>
                 </Pressable>
               ) : (
-                <Link href="/auth/login" style={{ color: "#CFE3D8", fontWeight: "700" }}>
+                <Link href="/auth/login" style={{ paddingVertical: 12, paddingHorizontal: 16, color: "#0C1712", fontWeight: "700", fontSize: 15 }}>
                   Sign in
                 </Link>
               )}
             </View>
-          </View>
+          </>
         )}
 
         <Slot />
