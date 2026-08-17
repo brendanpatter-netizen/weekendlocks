@@ -13,7 +13,16 @@ import { colors as theme } from "@/lib/theme";
 import { LogoBadge } from "@/components/Logo";
 import TapeCorner from "@/components/TapeCorner";
 
-type Mode = "code" | "link" | "password";
+type Mode = "code" | "link" | "password" | "phone";
+
+// US-only for now: 10 digits -> +1XXXXXXXXXX (E.164). Already-E.164 input
+// (starts with +) passes through untouched.
+function toE164(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("+")) return trimmed;
+  const digits = trimmed.replace(/\D/g, "");
+  return digits.length === 10 ? `+1${digits}` : `+${digits}`;
+}
 
 // Local names kept so the rest of this file reads unchanged — values now
 // come from the one shared palette instead of a page-local hardcoded set.
@@ -32,6 +41,9 @@ export default function Login() {
   const [code, setCode] = useState("");
   const [codeSent, setCodeSent] = useState(false);
   const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState("");
+  const [phoneCode, setPhoneCode] = useState("");
+  const [phoneCodeSent, setPhoneCodeSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [fatal, setFatal] = useState<string | null>(null);
 
@@ -83,6 +95,46 @@ export default function Login() {
     setSafe(setLoading, true);
     try {
       const { error } = await supabase.auth.verifyOtp({ email: addr, token, type: "email" });
+      if (error) throw error;
+      router.replace("/account"); // first-time flow will nudge here anyway
+    } catch (e: any) {
+      console.error(e);
+      setSafe(setFatal, e?.message ?? "Couldn’t verify code.");
+      alert("Invalid code", e?.message ?? "Check the code and try again.");
+    } finally {
+      setSafe(setLoading, false);
+    }
+  }
+
+  // Phone / SMS OTP. Requires a phone provider (e.g. Twilio) configured in
+  // the Supabase dashboard under Authentication > Providers > Phone — until
+  // that's set up, signInWithOtp will fail server-side even though this UI
+  // works fine.
+  async function sendPhoneCode() {
+    const to = toE164(phone);
+    if (!to) return;
+    setSafe(setLoading, true);
+    try {
+      const { error } = await supabase.auth.signInWithOtp({ phone: to });
+      if (error) throw error;
+      setSafe(setPhoneCodeSent, true);
+      alert("Code sent", "Enter the 6-digit code from your text message.");
+    } catch (e: any) {
+      console.error(e);
+      setSafe(setFatal, e?.message ?? "Couldn’t send code.");
+      alert("Couldn’t send code", e?.message ?? "Try again.");
+    } finally {
+      setSafe(setLoading, false);
+    }
+  }
+
+  async function verifyPhoneCode() {
+    const to = toE164(phone);
+    const token = phoneCode.trim();
+    if (!to || token.length !== 6) return;
+    setSafe(setLoading, true);
+    try {
+      const { error } = await supabase.auth.verifyOtp({ phone: to, token, type: "sms" });
       if (error) throw error;
       router.replace("/account"); // first-time flow will nudge here anyway
     } catch (e: any) {
@@ -162,12 +214,12 @@ export default function Login() {
       <View style={styles.card}>
         <TapeCorner />
         <Text style={styles.title}>Sign in</Text>
-        <Text style={styles.subtitle}>Enter your email and choose a sign-in method.</Text>
+        <Text style={styles.subtitle}>Choose how you'd like to sign in.</Text>
 
         {/* Mode toggle */}
         <View style={styles.toggleRow}>
           <Pressable onPress={() => setMode("code")} style={[styles.toggleBtn, mode === "code" && styles.toggleBtnActive]}>
-            <Text style={[styles.toggleText, mode === "code" && styles.toggleTextActive]}>6-Digit Code</Text>
+            <Text style={[styles.toggleText, mode === "code" && styles.toggleTextActive]}>Email Code</Text>
           </Pressable>
           <Pressable onPress={() => setMode("link")} style={[styles.toggleBtn, mode === "link" && styles.toggleBtnActive]}>
             <Text style={[styles.toggleText, mode === "link" && styles.toggleTextActive]}>Magic Link</Text>
@@ -175,82 +227,132 @@ export default function Login() {
           <Pressable onPress={() => setMode("password")} style={[styles.toggleBtn, mode === "password" && styles.toggleBtnActive]}>
             <Text style={[styles.toggleText, mode === "password" && styles.toggleTextActive]}>Password</Text>
           </Pressable>
+          <Pressable onPress={() => setMode("phone")} style={[styles.toggleBtn, mode === "phone" && styles.toggleBtnActive]}>
+            <Text style={[styles.toggleText, mode === "phone" && styles.toggleTextActive]}>Phone</Text>
+          </Pressable>
         </View>
 
-        {/* Shared email input */}
-        <TextInput
-          placeholder="you@example.com"
-          autoCapitalize="none"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
-          style={styles.input}
-        />
-
-        {mode === "password" ? (
+        {mode === "phone" && (
           <>
             <TextInput
-              placeholder="Password"
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
+              placeholder="(555) 123-4567"
+              autoCapitalize="none"
+              keyboardType="phone-pad"
+              value={phone}
+              onChangeText={setPhone}
               style={styles.input}
             />
-
             <Pressable
-              onPress={signInWithPassword}
-              disabled={loading || !email.trim() || !password}
-              style={[styles.cta, (!email.trim() || !password || loading) && styles.ctaDisabled]}
+              onPress={sendPhoneCode}
+              disabled={loading || !phone.trim()}
+              style={[styles.cta, (!phone.trim() || loading) && styles.ctaDisabled]}
             >
-              {loading ? <ActivityIndicator /> : <Text style={styles.ctaText}>Sign in</Text>}
+              {loading ? <ActivityIndicator /> : <Text style={styles.ctaText}>{phoneCodeSent ? "Resend code" : "Send code"}</Text>}
             </Pressable>
 
-            <Pressable
-              onPress={createWithPassword}
-              disabled={loading || !email.trim() || !password}
-              style={[styles.ctaOutline, (!email.trim() || !password || loading) && styles.ctaOutlineDisabled]}
-            >
-              {loading ? <ActivityIndicator /> : <Text style={styles.ctaOutlineText}>Create account</Text>}
-            </Pressable>
-
-            <Pressable onPress={sendReset} disabled={loading || !email.trim()}>
-              <Text style={{ color: colors.primary, textDecorationLine: "underline", textAlign: "center", marginTop: 8 }}>
-                Forgot password?
-              </Text>
-            </Pressable>
-          </>
-        ) : (
-          <>
-            <Pressable
-              onPress={send}
-              disabled={loading || !email.trim()}
-              style={[styles.cta, (!email.trim() || loading) && styles.ctaDisabled]}
-            >
-              {loading ? <ActivityIndicator /> : (
-                <Text style={styles.ctaText}>
-                  {mode === "code" ? (codeSent ? "Resend code" : "Send code") : "Send magic link"}
-                </Text>
-              )}
-            </Pressable>
-
-            {mode === "code" && codeSent && (
+            {phoneCodeSent && (
               <>
                 <Text style={styles.helper}>Enter the 6-digit code</Text>
                 <TextInput
                   placeholder="123456"
                   keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
                   maxLength={6}
-                  value={code}
-                  onChangeText={(t) => setCode(t.replace(/\D/g, ""))}
+                  value={phoneCode}
+                  onChangeText={(t) => setPhoneCode(t.replace(/\D/g, ""))}
                   style={styles.codeInput}
                 />
                 <Pressable
-                  onPress={verify}
-                  disabled={loading || code.length !== 6}
-                  style={[styles.ctaOutline, (loading || code.length !== 6) && styles.ctaOutlineDisabled]}
+                  onPress={verifyPhoneCode}
+                  disabled={loading || phoneCode.length !== 6}
+                  style={[styles.ctaOutline, (loading || phoneCode.length !== 6) && styles.ctaOutlineDisabled]}
                 >
                   {loading ? <ActivityIndicator /> : <Text style={styles.ctaOutlineText}>Verify & Sign in</Text>}
                 </Pressable>
+              </>
+            )}
+          </>
+        )}
+
+        {mode !== "phone" && (
+          <>
+            {/* Shared email input */}
+            <TextInput
+              placeholder="you@example.com"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              value={email}
+              onChangeText={setEmail}
+              style={styles.input}
+            />
+
+            {mode === "password" && (
+              <>
+                <TextInput
+                  placeholder="Password"
+                  secureTextEntry
+                  value={password}
+                  onChangeText={setPassword}
+                  style={styles.input}
+                />
+
+                <Pressable
+                  onPress={signInWithPassword}
+                  disabled={loading || !email.trim() || !password}
+                  style={[styles.cta, (!email.trim() || !password || loading) && styles.ctaDisabled]}
+                >
+                  {loading ? <ActivityIndicator /> : <Text style={styles.ctaText}>Sign in</Text>}
+                </Pressable>
+
+                <Pressable
+                  onPress={createWithPassword}
+                  disabled={loading || !email.trim() || !password}
+                  style={[styles.ctaOutline, (!email.trim() || !password || loading) && styles.ctaOutlineDisabled]}
+                >
+                  {loading ? <ActivityIndicator /> : <Text style={styles.ctaOutlineText}>Create account</Text>}
+                </Pressable>
+
+                <Pressable onPress={sendReset} disabled={loading || !email.trim()}>
+                  <Text style={{ color: colors.primary, textDecorationLine: "underline", textAlign: "center", marginTop: 8 }}>
+                    Forgot password?
+                  </Text>
+                </Pressable>
+              </>
+            )}
+
+            {(mode === "code" || mode === "link") && (
+              <>
+                <Pressable
+                  onPress={send}
+                  disabled={loading || !email.trim()}
+                  style={[styles.cta, (!email.trim() || loading) && styles.ctaDisabled]}
+                >
+                  {loading ? <ActivityIndicator /> : (
+                    <Text style={styles.ctaText}>
+                      {mode === "code" ? (codeSent ? "Resend code" : "Send code") : "Send magic link"}
+                    </Text>
+                  )}
+                </Pressable>
+
+                {mode === "code" && codeSent && (
+                  <>
+                    <Text style={styles.helper}>Enter the 6-digit code</Text>
+                    <TextInput
+                      placeholder="123456"
+                      keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                      maxLength={6}
+                      value={code}
+                      onChangeText={(t) => setCode(t.replace(/\D/g, ""))}
+                      style={styles.codeInput}
+                    />
+                    <Pressable
+                      onPress={verify}
+                      disabled={loading || code.length !== 6}
+                      style={[styles.ctaOutline, (loading || code.length !== 6) && styles.ctaOutlineDisabled]}
+                    >
+                      {loading ? <ActivityIndicator /> : <Text style={styles.ctaOutlineText}>Verify & Sign in</Text>}
+                    </Pressable>
+                  </>
+                )}
               </>
             )}
           </>

@@ -22,6 +22,7 @@ const colors = {
 
 export default function AccountPage() {
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [username, setUsername] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
 
@@ -36,6 +37,7 @@ export default function AccountPage() {
       if (!user) return;
 
       setEmail(user.email ?? "");
+      setPhone(user.phone ?? "");
 
       // Read profile (just id, username)
       const { data, error } = await supabase
@@ -134,6 +136,13 @@ export default function AccountPage() {
             <Text style={styles.label}>Email</Text>
             <Text style={styles.value}>{email || "—"}</Text>
           </View>
+
+          {!!phone && (
+            <View style={styles.row}>
+              <Text style={styles.label}>Phone</Text>
+              <Text style={styles.value}>{phone}</Text>
+            </View>
+          )}
 
           <View style={styles.row}>
             <Text style={styles.label}>Display name (username)</Text>
