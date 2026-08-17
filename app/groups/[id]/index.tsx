@@ -33,7 +33,6 @@ import { useLocalSearchParams, router, Href } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { supabase } from "@/lib/supabase";
 import { refreshScoresForSport } from "@/lib/scores";
-import { avatarColor, initials } from "@/lib/avatar";
 import { logoUri } from "@/lib/teamLogos";
 import { alert } from "@/lib/alert";
 import { recordLabel, winPct, recordVibe, EMPTY_RECORD, type SeasonRecord } from "@/lib/records";
@@ -436,13 +435,9 @@ export default function GroupDashboardPage() {
                 style={styles.activityList}
                 nestedScrollEnabled
                 renderItem={({ item }) => {
-                  const color = avatarColor(item.user_id);
                   const logo = pickLogo(item.team, item.sport === "nfl" ? "nfl" : "ncaaf");
                   return (
                     <View style={styles.feedRow}>
-                      <View style={[styles.avatarSm, { backgroundColor: color.bg }]}>
-                        <Text style={[styles.avatarTextSm, { color: color.fg }]}>{initials(item.display_name)}</Text>
-                      </View>
                       {!!logo && <Image source={{ uri: logo }} style={styles.feedLogo} />}
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text style={styles.feedTitle}>
@@ -591,8 +586,6 @@ const styles = StyleSheet.create({
   activityList: { maxHeight: 380 },
 
   feedRow: { paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#E5E7EB", flexDirection: "row", gap: 10 },
-  avatarSm: { width: 26, height: 26, borderRadius: 999, alignItems: "center", justifyContent: "center", marginTop: 1 },
-  avatarTextSm: { fontSize: 10, fontWeight: "700" },
   feedLogo: { width: 18, height: 18, resizeMode: "contain", marginTop: 2 },
   feedTitle: { fontSize: 13, color: "#0F172A" },
   feedSub: { color: "#334155", fontSize: 12, marginTop: 2 },

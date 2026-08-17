@@ -137,7 +137,7 @@
       "PermanentMarker is reserved for exactly two roles: the group name and section titles — never buttons, data, or body text.",
       "No emoji anywhere in the product — every former emoji (lock, trophy, flame) is now an authored SVG icon sharing one stroke grammar.",
       "The #1 spot in Power Rankings is circled in marker (transparent, red ring), straight, instead of a filled badge.",
-      "No avatar chip in Standings or Power Rankings — the name already carries identity there; the chip stays where it's the only identity marker (Recent Activity, Weekly Locks grid header, chat).",
+      "No avatar chip anywhere a name is already shown in the same row — Standings, Power Rankings, Recent Activity, and Chat all dropped theirs. Member identity color survives only in the Weekly Locks grid header, where the colored background is the name cell.",
       "Only Standings and Power Rankings carry real shadow lift; Recent Activity and Chat stay flat."
     ],
     "rules": [

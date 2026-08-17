@@ -2,9 +2,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, TextInput, Pressable, FlatList, StyleSheet } from "react-native";
 import { supabase } from "@/lib/supabase";
-import { avatarColor, initials } from "@/lib/avatar";
 import { alert } from "@/lib/alert";
 import { colors as theme } from "@/lib/theme";
+import TapeCorner from "@/components/TapeCorner";
 
 type ChatMessage = { id: string; user_id: string; body: string; created_at: string };
 
@@ -74,6 +74,7 @@ export default function GroupChat({
 
   return (
     <View style={styles.card}>
+      <TapeCorner side="right" />
       <Text style={styles.cardTitle}>Chat</Text>
 
       <View style={styles.listBox}>
@@ -92,13 +93,9 @@ export default function GroupChat({
           contentContainerStyle={{ paddingVertical: 4 }}
           renderItem={({ item }) => {
             const name = nameById.get(item.user_id) ?? "Someone";
-            const color = avatarColor(item.user_id);
             const mine = item.user_id === currentUserId;
             return (
               <View style={styles.msgRow}>
-                <View style={[styles.avatar, { backgroundColor: color.bg }]}>
-                  <Text style={[styles.avatarText, { color: color.fg }]}>{initials(name)}</Text>
-                </View>
                 <View style={[styles.bubble, mine && styles.bubbleMine]}>
                   <Text style={styles.msgName}>{name}</Text>
                   <Text style={styles.msgBody}>{item.body}</Text>
@@ -130,30 +127,33 @@ export default function GroupChat({
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12, gap: 8 },
-  cardTitle: { fontWeight: "800" },
-  empty: { paddingVertical: 8, color: "#64748B" },
+  // Same chalk-paper/dashed-border/tape language as every other card on
+  // the board — square, per The Accent-Only Tilt Rule.
+  card: {
+    position: "relative",
+    backgroundColor: "#F5F3E7", borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)", borderStyle: "dashed",
+    borderRadius: 10, padding: 12, paddingTop: 16, gap: 8,
+  },
+  cardTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 20, color: "#B23A2E" },
+  empty: { paddingVertical: 8, color: "#45564C" },
 
   listBox: {
-    height: 320, backgroundColor: "#F8FAFC", borderRadius: 10,
-    borderWidth: 1, borderColor: "#E2E8F0", padding: 8,
+    height: 320, backgroundColor: "#FDFCF8", borderRadius: 10,
+    borderWidth: 1, borderColor: "rgba(12,23,18,0.12)", padding: 8,
   },
   list: { flex: 1 },
   msgRow: { flexDirection: "row", gap: 8, paddingVertical: 6, alignItems: "flex-end" },
 
-  avatar: { width: 28, height: 28, borderRadius: 999, alignItems: "center", justifyContent: "center" },
-  avatarText: { fontSize: 11, fontWeight: "700" },
-
-  bubble: { maxWidth: "75%", backgroundColor: "#F1F5F9", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 },
+  bubble: { maxWidth: "75%", backgroundColor: "#D6D2BE", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 },
   bubbleMine: { backgroundColor: `${theme.brand}22` },
   msgName: { fontSize: 12, fontWeight: "700", color: theme.brand, marginBottom: 2 },
-  msgBody: { fontSize: 15, color: "#0F172A" },
-  msgTime: { fontSize: 11, color: "#64748B", marginTop: 3, textAlign: "right" }, // was #94A3B8 (2.56:1) — failed WCAG AA
+  msgBody: { fontSize: 15, color: "#0C1712" },
+  msgTime: { fontSize: 11, color: "#45564C", marginTop: 3, textAlign: "right" },
 
   inputRow: { flexDirection: "row", gap: 8, marginTop: 4 },
   input: {
-    flex: 1, borderWidth: 1, borderColor: "#E2E8F0", borderRadius: 999,
-    paddingHorizontal: 14, paddingVertical: 8, fontSize: 15,
+    flex: 1, borderWidth: 1, borderColor: "rgba(12,23,18,0.18)", borderRadius: 999,
+    paddingHorizontal: 14, paddingVertical: 8, fontSize: 15, backgroundColor: "#FDFCF8", color: "#0C1712",
   },
   sendBtn: { backgroundColor: theme.brand, paddingHorizontal: 16, borderRadius: 999, justifyContent: "center" },
   sendBtnDisabled: { opacity: 0.5 },
