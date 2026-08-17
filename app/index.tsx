@@ -64,11 +64,6 @@ export default function Home() {
             <Text style={styles.ctaPrimaryText}>{signedIn ? "Go to your groups" : "Get started"}</Text>
             <Ionicons name="arrow-forward" size={16} color="white" />
           </Pressable>
-          {!signedIn && (
-            <Pressable style={styles.ctaSecondary} onPress={() => router.push("/auth/login")}>
-              <Text style={styles.ctaSecondaryText}>Sign in</Text>
-            </Pressable>
-          )}
         </View>
       </View>
 
@@ -176,11 +171,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22, height: 46, borderRadius: 999, justifyContent: "center",
   },
   ctaPrimaryText: { color: "white", fontWeight: "700", fontSize: 15 },
-  ctaSecondary: {
-    paddingHorizontal: 22, height: 46, borderRadius: 999, justifyContent: "center",
-    borderWidth: 1.5, borderColor: "rgba(245,243,231,0.4)", borderStyle: "dashed",
-  },
-  ctaSecondaryText: { color: "#F5F3E7", fontWeight: "700", fontSize: 15 },
 
   // A fixed set of three — not a growing list — so each gets the paper
   // treatment: dashed border and tape, square rather than tilted.
