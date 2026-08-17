@@ -7,6 +7,7 @@ import {
   TextInput,
   StyleSheet,
   Pressable,
+  ScrollView,
 } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { alert } from "@/lib/alert";
@@ -192,7 +193,7 @@ export default function AccountPage() {
   };
 
   return (
-    <View style={styles.screen}>
+    <ScrollView style={styles.screen} contentContainerStyle={styles.screenContent}>
       <View style={styles.card}>
         <TapeCorner />
         <Text style={styles.title}>My Account</Text>
@@ -315,7 +316,7 @@ export default function AccountPage() {
           <Text style={styles.signOutText}>Sign out</Text>
         </Pressable>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -323,6 +324,8 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.bg,
+  },
+  screenContent: {
     padding: 20,
     alignItems: "center",
   },
