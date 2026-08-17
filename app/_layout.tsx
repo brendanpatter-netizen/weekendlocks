@@ -3,10 +3,10 @@ import React, { useEffect, useRef, useState } from "react";
 import { View, Platform, Text, Pressable } from "react-native";
 import { Slot, usePathname, useRouter, Link } from "expo-router";
 import { useFonts, RobotoCondensed_900Black } from "@expo-google-fonts/roboto-condensed";
-import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "@/lib/supabase";
 import { AlertHost } from "@/lib/alert";
 import { BrandLockup } from "@/components/Logo";
+import MenuToggleIcon from "@/components/MenuToggleIcon";
 import { colors } from "@/lib/theme";
 
 /** Simple error boundary so we never see a blank page */
@@ -159,7 +159,7 @@ export default function RootLayout() {
             style={{
               backgroundColor: colors.felt,
               paddingHorizontal: 14,
-              paddingVertical: 14,
+              paddingVertical: 18,
               flexDirection: "row",
               alignItems: "center",
               justifyContent: "flex-end",
@@ -173,7 +173,7 @@ export default function RootLayout() {
               pointerEvents="box-none"
             >
               <Link href="/" style={{ textDecorationLine: "none" }}>
-                <BrandLockup size={32} />
+                <BrandLockup size={44} />
               </Link>
             </View>
 
@@ -183,7 +183,7 @@ export default function RootLayout() {
               accessibilityRole="button"
               accessibilityLabel={menuOpen ? "Close menu" : "Open menu"}
             >
-              <Ionicons name={menuOpen ? "close" : "menu-outline"} size={26} color="#F5F3E7" />
+              <MenuToggleIcon open={menuOpen} size={26} color="#F5F3E7" />
             </Pressable>
           </View>
         )}

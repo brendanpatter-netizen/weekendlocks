@@ -1,12 +1,23 @@
 // FILE: app/index.tsx
-export const unstable_settings = { prerender: false };
+// Prerendered to real static HTML (see app.json's web.output: "static") —
+// this page has no session-dependent content, so it's safe to serve
+// pre-rendered for crawlers/link-previews. Every icon on this page is a
+// hand-drawn SVG rather than an Ionicons glyph for exactly that reason: see
+// components/ArrowRightIcon.tsx for why Ionicons breaks hydration here.
+export const unstable_settings = { prerender: true };
 
 import { View, Text, StyleSheet, Image, ScrollView, Pressable } from "react-native";
 import { router } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import Head from "expo-router/head";
 import { logoUri } from "@/lib/teamLogos";
 import { colors as theme } from "@/lib/theme";
 import TapeCorner from "@/components/TapeCorner";
+import ArrowRightIcon from "@/components/ArrowRightIcon";
+import ChartIcon from "@/components/ChartIcon";
+import PeopleIcon from "@/components/PeopleIcon";
+import LocateIcon from "@/components/LocateIcon";
+import TrophyIcon from "@/components/TrophyIcon";
+import FlameIcon from "@/components/FlameIcon";
 
 const HERO_TEAMS: { name: string; sport: "nfl" | "ncaaf" }[] = [
   { name: "Kansas City Chiefs", sport: "nfl" },
@@ -18,16 +29,31 @@ const HERO_TEAMS: { name: string; sport: "nfl" | "ncaaf" }[] = [
 ];
 
 const STEPS = [
-  { icon: "people-outline" as const, tint: "#E1F5EE", iconColor: "#085041", title: "Squad up", body: "Create a group or join one with a code" },
-  { icon: "locate-outline" as const, tint: "#E6F1FB", iconColor: "#0C447C", title: "Call your shot", body: "One NFL and one CFB lock, every week" },
-  { icon: "trophy-outline" as const, tint: "#FAECE7", iconColor: "#712B13", title: "Rule the board", body: "Records build all season, live in your group" },
+  { Icon: PeopleIcon, tint: "#E1F5EE", iconColor: "#085041", title: "Squad up", body: "Create a group or join one with a code" },
+  { Icon: LocateIcon, tint: "#E6F1FB", iconColor: "#0C447C", title: "Call your shot", body: "One NFL and one CFB lock, every week" },
+  { Icon: TrophyIcon, tint: "#FAECE7", iconColor: "#712B13", title: "Rule the board", body: "Records build all season, live in your group" },
 ];
 
 export default function Home() {
   const primaryCta = () => router.push("/auth/login");
+  const howItWorksCta = () => router.push("/how-it-works");
 
   return (
     <ScrollView style={styles.pageOuter} contentContainerStyle={styles.page}>
+      <Head>
+        <title>WeekendLocks | Weekly Sports Picks With Friends</title>
+        <meta
+          name="description"
+          content="Pick your best NFL or college football lock every weekend. Create groups, compete with friends, build winning streaks, and climb the leaderboard."
+        />
+        <meta property="og:title" content="WeekendLocks | Weekly Sports Picks With Friends" />
+        <meta
+          property="og:description"
+          content="Pick your best NFL or college football lock every weekend. Create groups, compete with friends, build winning streaks, and climb the leaderboard."
+        />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary" />
+      </Head>
       <View style={styles.hero}>
         <View style={styles.logoRow}>
           {HERO_TEAMS.map((t) => (
@@ -38,7 +64,7 @@ export default function Home() {
         </View>
 
         <View style={styles.pill}>
-          <Ionicons name="flame-outline" size={16} color="#412402" />
+          <FlameIcon size={16} color="#412402" />
           <Text style={styles.pillText}>Free to play with your crew</Text>
         </View>
 
@@ -52,9 +78,9 @@ export default function Home() {
         </Text>
 
         <View style={styles.ctaRow}>
-          <Pressable style={styles.ctaPrimary} onPress={primaryCta}>
-            <Text style={styles.ctaPrimaryText}>Get started</Text>
-            <Ionicons name="arrow-forward" size={16} color="white" />
+          <Pressable style={styles.ctaPrimary} onPress={howItWorksCta}>
+            <Text style={styles.ctaPrimaryText}>How It Works</Text>
+            <ArrowRightIcon size={16} color="white" />
           </Pressable>
         </View>
       </View>
@@ -64,7 +90,7 @@ export default function Home() {
           <View key={s.title} style={styles.stepCard}>
             <TapeCorner side={i % 2 === 0 ? "left" : "right"} />
             <View style={[styles.stepIcon, { backgroundColor: s.tint }]}>
-              <Ionicons name={s.icon} size={22} color={s.iconColor} />
+              <s.Icon size={22} color={s.iconColor} />
             </View>
             <Text style={styles.stepTitle}>{s.title}</Text>
             <Text style={styles.stepBody}>{s.body}</Text>
@@ -75,7 +101,7 @@ export default function Home() {
       <View style={styles.leaderCard}>
         <TapeCorner />
         <View style={styles.leaderHeader}>
-          <Ionicons name="bar-chart-outline" size={16} color={theme.brand} />
+          <ChartIcon size={16} color={theme.brand} />
           <Text style={styles.leaderHeaderText}>This week in "The Boys"</Text>
         </View>
         <View style={[styles.leaderRow, styles.leaderRowHead]}>

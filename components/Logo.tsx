@@ -53,7 +53,7 @@ export function LogoBadge({ size = 40 }: { size?: number }) {
 export function BrandLockup({ size = 30 }: { size?: number }) {
   return (
     <View style={styles.lockup}>
-      <LogoMark size={size} color="#F5F3E7" />
+      <LogoMark size={size * 1.2} color="#F5F3E7" />
       <Text style={[styles.lockupText, { fontSize: size * 0.62 }]}>
         Weekend<Text style={styles.lockupAccent}>Locks</Text>
       </Text>

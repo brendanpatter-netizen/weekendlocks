@@ -1,7 +1,11 @@
-export const unstable_settings = { prerender: false };
+// Prerendered to real static HTML (see app.json's web.output: "static") —
+// this page has no session-dependent content, and already uses hand-drawn
+// SVG icons rather than Ionicons, so it's hydration-safe as-is.
+export const unstable_settings = { prerender: true };
 
 import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import { router } from "expo-router";
+import Head from "expo-router/head";
 import { colors as theme } from "@/lib/theme";
 import LockIcon from "@/components/LockIcon";
 import TrophyIcon from "@/components/TrophyIcon";
@@ -116,6 +120,13 @@ function SampleLocksGrid() {
 export default function HowItWorks() {
   return (
     <ScrollView style={styles.pageOuter} contentContainerStyle={styles.page}>
+      <Head>
+        <title>How It Works — WeekendLocks</title>
+        <meta
+          name="description"
+          content="One NFL lock and one CFB lock every week. See how picks, standings, and the weekly AI recap work before you start your group."
+        />
+      </Head>
       <View style={styles.hero}>
         <View style={styles.heroEyebrow}>
           <LockIcon size={13} color="#F5F3E7" />
