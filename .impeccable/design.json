@@ -147,7 +147,7 @@
       "name": "Group Row Board Preview",
       "kind": "custom",
       "refersTo": "group-row-preview",
-      "description": "The second line on each groups-list row: an overlapping avatar cluster (2px chalk-white border between circles) plus the current standings leader (TrophyIcon + name + record). The one repeated-list item with a preview line instead of being a pure link.",
+      "description": "The second line on each groups-list row: an overlapping avatar cluster (2px chalk-white border between circles) plus the current standings leader (TrophyIcon + name + record + their most recent lock's team logo, white-backed, flush right). The one place a real team-logo image appears outside a picks page, and the one repeated-list item with a preview line instead of being a pure link.",
       "html": "<div class=\"ds-cluster\"><span style=\"background:#E1F5EE;color:#085041\">B</span><span style=\"background:#FAECE7;color:#712B13;margin-left:-8px\">C</span></div>",
       "css": ".ds-cluster span { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 999px; border: 2px solid #F5F3E7; font-size: 10px; font-weight: 700; }"
     },
