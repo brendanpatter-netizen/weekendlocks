@@ -11,6 +11,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { alert } from "@/lib/alert";
 import { colors as theme } from "@/lib/theme";
+import { toE164 } from "@/lib/phone";
 import TapeCorner from "@/components/TapeCorner";
 
 const colors = {
@@ -29,6 +30,21 @@ export default function AccountPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
+
+  // Add a phone number to an email-based account (SMS OTP, same mechanism
+  // as the login page's phone sign-in, but via updateUser + a "phone_change"
+  // verify instead of signInWithOtp — this attaches to the CURRENT user
+  // rather than creating a new one).
+  const [addPhoneInput, setAddPhoneInput] = useState("");
+  const [addPhoneCode, setAddPhoneCode] = useState("");
+  const [addPhoneCodeSent, setAddPhoneCodeSent] = useState(false);
+  const [addingPhone, setAddingPhone] = useState(false);
+
+  // Add an email to a phone-based account — Supabase confirms this via a
+  // link to the new address (like magic link / reset password), not a code.
+  const [addEmailInput, setAddEmailInput] = useState("");
+  const [addingEmail, setAddingEmail] = useState(false);
+  const [addEmailSent, setAddEmailSent] = useState(false);
 
   // Load email + display name
   useEffect(() => {
@@ -114,6 +130,59 @@ export default function AccountPage() {
     }
   };
 
+  const sendAddPhoneCode = async () => {
+    const to = toE164(addPhoneInput);
+    if (!to) return;
+    setAddingPhone(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ phone: to });
+      if (error) throw error;
+      setAddPhoneCodeSent(true);
+      alert("Code sent", "Enter the 6-digit code from your text message.");
+    } catch (e: any) {
+      alert("Couldn’t send code", e?.message ?? "Please try again.");
+    } finally {
+      setAddingPhone(false);
+    }
+  };
+
+  const verifyAddPhoneCode = async () => {
+    const to = toE164(addPhoneInput);
+    const token = addPhoneCode.trim();
+    if (!to || token.length !== 6) return;
+    setAddingPhone(true);
+    try {
+      const { error } = await supabase.auth.verifyOtp({ phone: to, token, type: "phone_change" });
+      if (error) throw error;
+      setPhone(to);
+      setAddPhoneInput("");
+      setAddPhoneCode("");
+      setAddPhoneCodeSent(false);
+      alert("Phone added", "You can now sign in with this phone number too.");
+    } catch (e: any) {
+      alert("Invalid code", e?.message ?? "Check the code and try again.");
+    } finally {
+      setAddingPhone(false);
+    }
+  };
+
+  const sendAddEmail = async () => {
+    const addr = addEmailInput.trim();
+    if (!addr) return;
+    setAddingEmail(true);
+    try {
+      const origin = typeof window !== "undefined" && window.location ? window.location.origin : "";
+      const { error } = await supabase.auth.updateUser({ email: addr }, { emailRedirectTo: origin + "/auth/callback" });
+      if (error) throw error;
+      setAddEmailSent(true);
+      alert("Check your inbox", "Click the confirmation link we sent to finish adding this email.");
+    } catch (e: any) {
+      alert("Couldn’t add email", e?.message ?? "Please try again.");
+    } finally {
+      setAddingEmail(false);
+    }
+  };
+
   const signOut = async () => {
     try {
       await supabase.auth.signOut();
@@ -134,15 +203,63 @@ export default function AccountPage() {
 
           <View style={styles.row}>
             <Text style={styles.label}>Email</Text>
-            <Text style={styles.value}>{email || "—"}</Text>
+            {email ? (
+              <Text style={styles.value}>{email}</Text>
+            ) : addEmailSent ? (
+              <Text style={styles.value}>Check {addEmailInput} for a confirmation link.</Text>
+            ) : (
+              <>
+                <Text style={styles.value}>—</Text>
+                <TextInput
+                  placeholder="you@example.com"
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  value={addEmailInput}
+                  onChangeText={setAddEmailInput}
+                  style={styles.input}
+                />
+                <Pressable onPress={sendAddEmail} disabled={addingEmail || !addEmailInput.trim()} style={styles.primaryBtn}>
+                  <Text style={styles.primaryBtnText}>{addingEmail ? "Sending..." : "Add email"}</Text>
+                </Pressable>
+              </>
+            )}
           </View>
 
-          {!!phone && (
-            <View style={styles.row}>
-              <Text style={styles.label}>Phone</Text>
+          <View style={styles.row}>
+            <Text style={styles.label}>Phone</Text>
+            {phone ? (
               <Text style={styles.value}>{phone}</Text>
-            </View>
-          )}
+            ) : addPhoneCodeSent ? (
+              <>
+                <Text style={styles.value}>Enter the 6-digit code we texted you.</Text>
+                <TextInput
+                  placeholder="123456"
+                  keyboardType="numeric"
+                  maxLength={6}
+                  value={addPhoneCode}
+                  onChangeText={(t) => setAddPhoneCode(t.replace(/\D/g, ""))}
+                  style={styles.input}
+                />
+                <Pressable onPress={verifyAddPhoneCode} disabled={addingPhone || addPhoneCode.length !== 6} style={styles.primaryBtn}>
+                  <Text style={styles.primaryBtnText}>{addingPhone ? "Verifying..." : "Verify & add"}</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Text style={styles.value}>—</Text>
+                <TextInput
+                  placeholder="(555) 123-4567"
+                  keyboardType="phone-pad"
+                  value={addPhoneInput}
+                  onChangeText={setAddPhoneInput}
+                  style={styles.input}
+                />
+                <Pressable onPress={sendAddPhoneCode} disabled={addingPhone || !addPhoneInput.trim()} style={styles.primaryBtn}>
+                  <Text style={styles.primaryBtnText}>{addingPhone ? "Sending..." : "Add phone"}</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
 
           <View style={styles.row}>
             <Text style={styles.label}>Display name (username)</Text>

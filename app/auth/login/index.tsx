@@ -12,17 +12,9 @@ import { alert } from "@/lib/alert";
 import { colors as theme } from "@/lib/theme";
 import { LogoBadge } from "@/components/Logo";
 import TapeCorner from "@/components/TapeCorner";
+import { toE164 } from "@/lib/phone";
 
 type Mode = "code" | "link" | "password" | "phone";
-
-// US-only for now: 10 digits -> +1XXXXXXXXXX (E.164). Already-E.164 input
-// (starts with +) passes through untouched.
-function toE164(raw: string): string {
-  const trimmed = raw.trim();
-  if (trimmed.startsWith("+")) return trimmed;
-  const digits = trimmed.replace(/\D/g, "");
-  return digits.length === 10 ? `+1${digits}` : `+${digits}`;
-}
 
 // Local names kept so the rest of this file reads unchanged — values now
 // come from the one shared palette instead of a page-local hardcoded set.
