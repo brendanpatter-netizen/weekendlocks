@@ -32,11 +32,11 @@ import {
 import { useLocalSearchParams, router, Href } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { supabase } from "@/lib/supabase";
-import { refreshScoresForSport } from "@/lib/scores";
 import { logoUri } from "@/lib/teamLogos";
 import { alert } from "@/lib/alert";
 import { recordLabel, winPct, recordVibe, EMPTY_RECORD, type SeasonRecord } from "@/lib/records";
 import { getOpenWeek, getNextWeek, type OpenWeek } from "@/lib/openWeek";
+import { displayWeek } from "@/lib/weekLabel";
 import { colors as theme } from "@/lib/theme";
 import GroupChat from "@/components/GroupChat";
 import WeeklyPicksGrid from "@/components/WeeklyPicksGrid";
@@ -113,11 +113,10 @@ export default function GroupDashboardPage() {
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshingScores, setRefreshingScores] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   // Bumped on every load so WeeklyPicksGrid (which fetches its own,
-  // season-wide data) knows to refetch too — including after "Refresh scores".
+  // season-wide data) knows to refetch too.
   const [dataVersion, setDataVersion] = useState(0);
 
   useEffect(() => {
@@ -205,21 +204,6 @@ export default function GroupDashboardPage() {
     return () => { alive = false; };
   }, [groupId]);
 
-  async function handleRefreshScores() {
-    setRefreshingScores(true);
-    try {
-      const [nfl, cfb] = await Promise.all([
-        refreshScoresForSport("nfl"),
-        refreshScoresForSport("cfb"),
-      ]);
-      const err = nfl.error || cfb.error;
-      if (err) setBanner(err);
-      await loadDashboard(() => true);
-    } finally {
-      setRefreshingScores(false);
-    }
-  }
-
   const inviteLink = inviteCode ? `https://weekendlocks.com/groups/join?code=${inviteCode}` : null;
 
   const copyInviteCode = async () => {
@@ -285,14 +269,14 @@ export default function GroupDashboardPage() {
             disabled={!nflOpenWeek}
             onPress={() => router.push({ pathname: "/picks/page", params: { group: groupId } } as Href)}
             accessibilityRole="button"
-            accessibilityLabel={nflOpenWeek ? `Make NFL picks, week ${nflOpenWeek.week} is live` : "NFL picks, not live yet"}
+            accessibilityLabel={nflOpenWeek ? `Make NFL picks, week ${displayWeek(nflOpenWeek.week)} is live` : "NFL picks, not live yet"}
           >
             <View style={[styles.pickCtaIcon, { backgroundColor: "#E1F5EE" }]}>
               <Image source={{ uri: NFL_LEAGUE_LOGO }} style={[styles.pickCtaLogo, !nflOpenWeek && styles.pickCtaLogoDisabled]} resizeMode="contain" />
             </View>
             <Text style={[styles.pickCtaTitle, !nflOpenWeek && styles.pickCtaTitleDisabled]}>NFL</Text>
             <Text style={styles.pickCtaSub}>
-              {nflOpenWeek ? `Week ${nflOpenWeek.week} now live` : nflOpenWeek === null ? "Not live yet" : "Loading…"}
+              {nflOpenWeek ? `Week ${displayWeek(nflOpenWeek.week)} now live` : nflOpenWeek === null ? "Not live yet" : "Loading…"}
             </Text>
           </Pressable>
           <Pressable
@@ -300,14 +284,14 @@ export default function GroupDashboardPage() {
             disabled={!cfbOpenWeek}
             onPress={() => router.push({ pathname: "/picks/college", params: { group: groupId } } as Href)}
             accessibilityRole="button"
-            accessibilityLabel={cfbOpenWeek ? `Make CFB picks, week ${cfbOpenWeek.week} is live` : "CFB picks, not live yet"}
+            accessibilityLabel={cfbOpenWeek ? `Make CFB picks, week ${displayWeek(cfbOpenWeek.week)} is live` : "CFB picks, not live yet"}
           >
             <View style={[styles.pickCtaIcon, { backgroundColor: "#E6F1FB" }]}>
               <Image source={{ uri: NCAA_LEAGUE_LOGO }} style={[styles.pickCtaLogo, !cfbOpenWeek && styles.pickCtaLogoDisabled]} resizeMode="contain" />
             </View>
             <Text style={[styles.pickCtaTitle, !cfbOpenWeek && styles.pickCtaTitleDisabled]}>CFB</Text>
             <Text style={styles.pickCtaSub}>
-              {cfbOpenWeek ? `Week ${cfbOpenWeek.week} now live` : cfbOpenWeek === null ? "Not live yet" : "Loading…"}
+              {cfbOpenWeek ? `Week ${displayWeek(cfbOpenWeek.week)} now live` : cfbOpenWeek === null ? "Not live yet" : "Loading…"}
             </Text>
           </Pressable>
         </View>
@@ -317,7 +301,7 @@ export default function GroupDashboardPage() {
             <Image source={{ uri: NFL_LEAGUE_LOGO }} style={styles.heroScheduleLogo} resizeMode="contain" />
             <Text style={styles.heroScheduleText} numberOfLines={1}>
               {nflOpenWeek
-                ? `Wk ${nflOpenWeek.week} · ${formatWindow(nflOpenWeek)}`
+                ? `Wk ${displayWeek(nflOpenWeek.week)} · ${formatWindow(nflOpenWeek)}`
                 : nflNextWeek
                 ? `Opens ${formatDate(nflNextWeek.opensAt)}`
                 : nflOpenWeek === null ? "Not live" : "Checking…"}
@@ -328,7 +312,7 @@ export default function GroupDashboardPage() {
             <Image source={{ uri: NCAA_LEAGUE_LOGO }} style={styles.heroScheduleLogo} resizeMode="contain" />
             <Text style={styles.heroScheduleText} numberOfLines={1}>
               {cfbOpenWeek
-                ? `Wk ${cfbOpenWeek.week} · ${formatWindow(cfbOpenWeek)}`
+                ? `Wk ${displayWeek(cfbOpenWeek.week)} · ${formatWindow(cfbOpenWeek)}`
                 : cfbNextWeek
                 ? `Opens ${formatDate(cfbNextWeek.opensAt)}`
                 : cfbOpenWeek === null ? "Not live" : "Checking…"}
@@ -365,15 +349,6 @@ export default function GroupDashboardPage() {
                 <TrophyIcon size={18} color="#B23A2E" />
                 <Text style={styles.cardTitle}>The Standings</Text>
               </View>
-              <Pressable
-                onPress={handleRefreshScores}
-                disabled={refreshingScores}
-                style={styles.refreshBtn}
-                accessibilityRole="button"
-                accessibilityLabel="Refresh scores"
-              >
-                <Text style={styles.refreshBtnText}>{refreshingScores ? "Checking…" : "Refresh scores"}</Text>
-              </Pressable>
             </View>
             <View style={[styles.tableRow, styles.tableHeader]}>
               <Text style={styles.thRank}>#</Text>
@@ -407,7 +382,7 @@ export default function GroupDashboardPage() {
                 }}
               />
             )}
-            <Text style={styles.note}>Records update when you tap "Refresh scores" above — pushes count as a win.</Text>
+            <Text style={styles.note}>Records update automatically as games finish — pushes count as a win.</Text>
           </View>
 
           <WeeklyRecap
@@ -446,7 +421,7 @@ export default function GroupDashboardPage() {
                           {item.line ? ` ${item.line}` : ""}
                         </Text>
                         <Text style={styles.feedSub}>
-                          {item.sport.toUpperCase()} • Week {item.week}
+                          {item.sport.toUpperCase()} • Week {displayWeek(item.week)}
                           {item.market ? ` • ${item.market}` : ""}
                         </Text>
                         <Text style={styles.feedTime}>{new Date(item.updated_at).toLocaleString()}</Text>
@@ -560,8 +535,6 @@ const styles = StyleSheet.create({
   cardTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 20, color: "#B23A2E" },
 
   leaderboardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
-  refreshBtn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1, borderColor: theme.brand },
-  refreshBtnText: { color: theme.brand, fontWeight: "700", fontSize: 12 },
 
   tableHeader: { paddingVertical: 6 },
   tableRow: {

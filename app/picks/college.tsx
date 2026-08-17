@@ -11,6 +11,7 @@ import { norm, matchupsLikelyMatch } from "@/lib/teamMatch";
 import { pickLabel } from "@/lib/pickLabel";
 import { alert } from "@/lib/alert";
 import { getOpenWeek, type OpenWeek } from "@/lib/openWeek";
+import { displayWeek } from "@/lib/weekLabel";
 import { logoUri } from "@/lib/teamLogos";
 import { colors as theme } from "@/lib/theme";
 import LockIcon from "@/components/LockIcon";
@@ -231,11 +232,19 @@ export default function CFBPicksPage() {
 
   return (
     <ScrollView style={styles.pageOuter} contentContainerStyle={styles.page}>
-      <View style={styles.pageTitleRow}>
-        <LockIcon size={22} color="#F5F3E7" />
-        <Text style={styles.pageTitle}>
-          This Weekend's CFB Locks{openWeek ? ` — Week ${openWeek.week}` : ""}
-        </Text>
+      <View style={styles.pageHeader}>
+        <View style={styles.pageTitleRow}>
+          <LockIcon size={22} color="#F5F3E7" />
+          <Text style={styles.pageTitle}>
+            This Weekend's CFB Locks{openWeek ? ` — Week ${displayWeek(openWeek.week)}` : ""}
+          </Text>
+        </View>
+        <Pressable
+          onPress={() => router.push({ pathname: "/picks/page", params: { group: groupId ?? undefined } } as Href)}
+          style={styles.crossLinkChip}
+        >
+          <Text style={styles.crossLinkText}>Go to NFL ↗</Text>
+        </Pressable>
       </View>
 
       {!groupId && (
@@ -316,9 +325,9 @@ export default function CFBPicksPage() {
 
           return (
             <View key={g.id} style={[styles.gameCard, started && styles.gameCardStarted]}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                 {!!aLogo && <Image source={{ uri: aLogo }} style={styles.logo} />}
-                <Text style={{ fontWeight: "800", flex: 1, color: "#0C1712" }}>{g.away_team} @ {g.home_team}</Text>
+                <Text style={{ fontWeight: "800", color: "#0C1712" }}>{g.away_team} @ {g.home_team}</Text>
                 {!!hLogo && <Image source={{ uri: hLogo }} style={styles.logo} />}
               </View>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -372,8 +381,14 @@ const styles = StyleSheet.create({
   pageOuter: { flex: 1, backgroundColor: theme.felt },
   page: { padding: 16, gap: 12, paddingBottom: 24 },
 
-  pageTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  pageHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  pageTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1 },
   pageTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 26, color: "#F5F3E7", flexShrink: 1 },
+  crossLinkChip: {
+    borderWidth: 1.5, borderColor: "rgba(245,243,231,0.4)", borderStyle: "dashed",
+    borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6,
+  },
+  crossLinkText: { color: "#F5F3E7", fontWeight: "800", fontSize: 12, letterSpacing: 0.3 },
 
   tab: {
     paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1.5, borderRadius: 999,

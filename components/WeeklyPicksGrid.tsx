@@ -8,6 +8,7 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { avatarColor } from "@/lib/avatar";
 import { pickLabel } from "@/lib/pickLabel";
+import { displayWeek } from "@/lib/weekLabel";
 import { recordLabel, winPct, EMPTY_RECORD, type SeasonRecord } from "@/lib/records";
 import LockIcon from "@/components/LockIcon";
 import TapeCorner from "@/components/TapeCorner";
@@ -112,22 +113,25 @@ export default function WeeklyPicksGrid({
 
             {weeks.map((week) => (
               <View key={week} style={[styles.row, styles.dataRow]}>
-                {/* Display-only: the grid's row label starts at 0, but `week`
-                    itself (used for all the data lookups below) still matches
-                    the real week number everywhere else in the app. */}
-                <View style={styles.weekCell}><Text style={styles.weekCellText}>Wk {week - 1}</Text></View>
+                <View style={styles.weekCell}><Text style={styles.weekCellText}>Wk {displayWeek(week)}</Text></View>
                 {members.map((m) => {
                   const cfb = grid.get(cellKey(m.user_id, "cfb", week, 1));
                   const nfl = grid.get(cellKey(m.user_id, "nfl", week, 1));
                   // Weeks before the NFL season opens have no NFL pick to show —
                   // fall back to a second CFB lock in that slot instead (the
-                  // "2 picks a week" gap-week rule from the picks page).
+                  // "2 picks a week" gap-week rule from the picks page). CFB's
+                  // gap-week second lock only ever opens up while NFL's own
+                  // week_num for this row is still closed, so a real cfbLock2
+                  // and a real nfl pick can never both legitimately exist for
+                  // the same row — if an nfl pick is sitting here anyway (e.g.
+                  // leftover from manually forcing a week open to test), it's
+                  // stale, and the second CFB lock should win the slot.
                   const cfbLock2 = grid.get(cellKey(m.user_id, "cfb", week, 2));
-                  const secondCell = nfl ?? cfbLock2;
+                  const secondCell = cfbLock2 ?? nfl;
                   return (
                     <View key={m.user_id} style={{ flexDirection: "row" }}>
                       <PickCell cell={cfb} />
-                      <PickCell cell={secondCell} isSecondCfbLock={!nfl && !!cfbLock2} />
+                      <PickCell cell={secondCell} isSecondCfbLock={!!cfbLock2} />
                     </View>
                   );
                 })}
