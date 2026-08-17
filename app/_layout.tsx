@@ -153,26 +153,33 @@ export default function RootLayout() {
   return (
     <ErrorBoundary>
       <View style={{ flex: 1 }}>
-        {/* Web header: logo + a single hamburger menu covering all nav */}
+        {/* Web header: centered logo + a single hamburger menu covering all nav */}
         {showHeader && (
           <View
             style={{
               backgroundColor: colors.felt,
               paddingHorizontal: 14,
-              paddingVertical: 10,
+              paddingVertical: 14,
               flexDirection: "row",
               alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
+              justifyContent: "flex-end",
+              position: "relative",
             }}
           >
-            <Link href="/" style={{ textDecorationLine: "none" }}>
-              <BrandLockup size={28} />
-            </Link>
+            {/* Absolutely centered so the hamburger on the right doesn't push it
+                off-center — box-none lets the wrapper itself pass touches through. */}
+            <View
+              style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, alignItems: "center", justifyContent: "center" }}
+              pointerEvents="box-none"
+            >
+              <Link href="/" style={{ textDecorationLine: "none" }}>
+                <BrandLockup size={32} />
+              </Link>
+            </View>
 
             <Pressable
               onPress={() => setMenuOpen((v) => !v)}
-              style={{ padding: 6 }}
+              style={{ padding: 6, zIndex: 1 }}
               accessibilityRole="button"
               accessibilityLabel={menuOpen ? "Close menu" : "Open menu"}
             >
@@ -189,7 +196,7 @@ export default function RootLayout() {
             />
             <View
               style={{
-                position: "absolute", top: 52, right: 14, zIndex: 21, minWidth: 200,
+                position: "absolute", top: 60, right: 14, zIndex: 21, minWidth: 200,
                 backgroundColor: "#F5F3E7", borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)",
                 borderStyle: "dashed", borderRadius: 10, paddingVertical: 6,
                 shadowColor: "#000", shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 6,
