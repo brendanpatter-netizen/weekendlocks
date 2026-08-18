@@ -344,9 +344,9 @@ const styles = StyleSheet.create({
     borderColor: "rgba(12,23,18,0.18)",
     borderStyle: "dashed",
   },
-  title: { fontFamily: "PermanentMarker_400Regular", fontSize: 24, color: "#B23A2E", textTransform: "uppercase" },
+  title: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 24, color: "#B23A2E", textTransform: "uppercase" },
   section: { gap: 10 },
-  sectionTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 16, color: "#B23A2E", textTransform: "uppercase" },
+  sectionTitle: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 16, color: "#B23A2E", textTransform: "uppercase" },
   row: {
     backgroundColor: "#FDFCF8",
     borderRadius: 10,

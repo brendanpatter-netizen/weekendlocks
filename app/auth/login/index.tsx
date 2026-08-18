@@ -376,7 +376,7 @@ const styles = StyleSheet.create({
       default: { shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
     }),
   },
-  title: { fontFamily: "PermanentMarker_400Regular", fontSize: 24, color: "#B23A2E", textTransform: "uppercase" },
+  title: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 24, color: "#B23A2E", textTransform: "uppercase" },
   subtitle: { color: colors.subtext, marginBottom: 6, fontWeight: "700" },
   // Fixed 2-per-row grid (not flex:1 in one row) — four labels like "Email
   // Code" and "Magic Link" don't fit four-across without crowding/overflow

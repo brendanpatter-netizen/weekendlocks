@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
     borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4, marginBottom: 4,
   },
   heroEyebrowText: { fontSize: 11, fontWeight: "800", letterSpacing: 1.5, color: "#F5F3E7" },
-  heroTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 34, color: "#F5F3E7", textAlign: "center" },
+  heroTitle: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 34, color: "#F5F3E7", textAlign: "center" },
   heroSubtitle: { fontSize: 14, color: "rgba(245,243,231,0.75)", textAlign: "center", fontWeight: "600", maxWidth: 420 },
 
   card: {
@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
     borderRadius: 10, padding: 14, paddingTop: 18, gap: 8,
   },
   cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  cardTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 18, color: "#B23A2E" },
+  cardTitle: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 18, color: "#B23A2E" },
   body: { fontSize: 14, color: "#2A362F", lineHeight: 20 },
 
   // Illustrative mocks: not real interactive cards, so visually distinct
@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
   legendText: { fontSize: 11, color: "#64748B", fontWeight: "600", marginRight: 6 },
 
   closing: { alignItems: "center", gap: 12, paddingVertical: 12 },
-  closingTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 20, color: "#F5F3E7", textAlign: "center" },
+  closingTitle: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 20, color: "#F5F3E7", textAlign: "center" },
   cta: { backgroundColor: theme.brand, paddingHorizontal: 22, height: 46, borderRadius: 999, justifyContent: "center" },
   ctaText: { color: "white", fontWeight: "700", fontSize: 15 },
 });

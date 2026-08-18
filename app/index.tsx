@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
   // The hero's own headline — hand-lettered like the group name, since this
   // is the product's single loudest "written on the board" moment.
   h1: {
-    fontFamily: "PermanentMarker_400Regular", fontSize: 34, textAlign: "center", lineHeight: 40,
+    fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 34, textAlign: "center", lineHeight: 40,
     color: "#F5F3E7", textTransform: "uppercase",
   },
   h1Accent: { color: "#B23A2E" },
@@ -200,7 +200,7 @@ const styles = StyleSheet.create({
     padding: 18, paddingTop: 22, alignItems: "center", gap: 4,
   },
   stepIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", marginBottom: 8 },
-  stepTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 15, color: "#B23A2E" },
+  stepTitle: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 15, color: "#B23A2E" },
   stepBody: { fontSize: 13, color: "#45564C", textAlign: "center", fontWeight: "600" },
 
   // A single illustrative widget, not a real live list — paper treatment,
@@ -234,6 +234,6 @@ const styles = StyleSheet.create({
   // The closing headline sits directly on the board, like the hero — the
   // same on-board voice bookending the page.
   closing: { alignItems: "center", gap: 4, paddingVertical: 8 },
-  closingTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 22, color: "#F5F3E7" },
+  closingTitle: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 22, color: "#F5F3E7" },
   closingSub: { fontSize: 13, color: "rgba(245,243,231,0.75)", marginBottom: 14, fontWeight: "600" },
 });

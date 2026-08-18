@@ -427,11 +427,11 @@ export default function GroupsIndex() {
 const styles = StyleSheet.create({
   outer: { flex: 1, backgroundColor: theme.felt },
   container: { padding: 16, gap: 4 },
-  h1: { fontFamily: "PermanentMarker_400Regular", fontSize: 26, color: "#F5F3E7" },
+  h1: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 26, color: "#F5F3E7" },
   // Sits directly on the board (not a paper card), so it stays chalk-white
   // like the primary h1 — smaller only, to read as secondary to it.
-  h1Secondary: { fontFamily: "PermanentMarker_400Regular", fontSize: 20, color: "#F5F3E7", marginTop: 26, marginBottom: 4 },
-  h2: { fontFamily: "PermanentMarker_400Regular", fontSize: 16, color: "#B23A2E" },
+  h1Secondary: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 20, color: "#F5F3E7", marginTop: 26, marginBottom: 4 },
+  h2: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 16, color: "#B23A2E" },
   muted: { color: "rgba(245,243,231,0.7)", fontWeight: "700" },
 
   actionsRow: { flexDirection: "row", gap: 14, marginTop: 16, flexWrap: "wrap" },
@@ -502,7 +502,7 @@ const styles = StyleSheet.create({
   // that already drives the avatar/member colors elsewhere (inline, not
   // hardcoded here) rather than a flat ink color, since removing the
   // initials badge means the name itself needs to carry that color signal.
-  rowTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 20, flexShrink: 1 },
+  rowTitle: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 20, flexShrink: 1 },
   rowSub: { color: "#45564C", marginTop: 2, fontSize: 12 },
   ownerTag: { backgroundColor: "#FAEEDA", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
   ownerTagText: { fontSize: 10, fontWeight: "700", color: "#633806" },

@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
       default: { shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
     }),
   },
-  title: { fontFamily: "PermanentMarker_400Regular", fontSize: 22, color: "#B23A2E", textTransform: "uppercase" },
+  title: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 22, color: "#B23A2E", textTransform: "uppercase" },
   input: { borderWidth: 1, borderColor: "rgba(12,23,18,0.18)", borderRadius: 10, padding: 12, fontSize: 16, backgroundColor: "#FDFCF8", color: colors.text },
   cta: { backgroundColor: colors.primary, borderRadius: 999, paddingVertical: 12, alignItems: "center" },
   ctaText: { color: "white", fontWeight: "800" },

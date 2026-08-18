@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F5F3E7", borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)", borderStyle: "dashed",
     borderRadius: 10, padding: 12, paddingTop: 16, gap: 8,
   },
-  cardTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 20, color: "#B23A2E" },
+  cardTitle: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 20, color: "#B23A2E" },
   empty: { paddingVertical: 8, color: "#45564C" },
 
   listBox: {

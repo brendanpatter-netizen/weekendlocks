@@ -473,7 +473,7 @@ const styles = StyleSheet.create({
   },
   heroEyebrowText: { fontSize: 11, fontWeight: "800", letterSpacing: 1.5, color: "#F5F3E7" },
   heroTitle: {
-    fontFamily: "PermanentMarker_400Regular", fontSize: 40, color: "#F5F3E7",
+    fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 40, color: "#F5F3E7",
     letterSpacing: 0.5, textAlign: "center", textTransform: "uppercase", lineHeight: 46,
   },
   heroSubtitle: { fontSize: 13, color: "rgba(245,243,231,0.7)", marginBottom: 18, textAlign: "center", fontWeight: "700" },
@@ -532,7 +532,7 @@ const styles = StyleSheet.create({
     shadowColor: "#000", shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
   },
   cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  cardTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 20, color: "#B23A2E" },
+  cardTitle: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 20, color: "#B23A2E" },
 
   leaderboardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
 

@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
   },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  cardTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 20, color: "#B23A2E" },
+  cardTitle: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 20, color: "#B23A2E" },
   weekLabel: { fontSize: 11, color: "#45564C", fontWeight: "700" },
   empty: { color: "#45564C", paddingVertical: 8 },
   row: {

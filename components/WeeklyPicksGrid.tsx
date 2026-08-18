@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F5F3E7", borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)", borderStyle: "dashed",
     borderRadius: 10, padding: 12, paddingTop: 16, gap: 4,
   },
-  cardTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 20, color: "#B23A2E" },
+  cardTitle: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 20, color: "#B23A2E" },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 },
   legend: { flexDirection: "row", alignItems: "center", gap: 5 },

@@ -71,6 +71,6 @@ const styles = StyleSheet.create({
     borderStyle: "dashed",
   },
   lockup: { flexDirection: "row", alignItems: "center", gap: 8 },
-  lockupText: { fontFamily: "PermanentMarker_400Regular", color: "#F5F3E7" },
+  lockupText: { fontFamily: "PermanentMarker_400Regular, cursive", color: "#F5F3E7" },
   lockupAccent: { color: "#B23A2E" },
 });

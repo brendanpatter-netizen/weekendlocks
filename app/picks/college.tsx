@@ -383,7 +383,7 @@ const styles = StyleSheet.create({
 
   pageHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   pageTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1 },
-  pageTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 26, color: "#F5F3E7", flexShrink: 1 },
+  pageTitle: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 26, color: "#F5F3E7", flexShrink: 1 },
   crossLinkChip: {
     borderWidth: 1.5, borderColor: "rgba(245,243,231,0.4)", borderStyle: "dashed",
     borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6,
@@ -428,7 +428,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)", borderStyle: "dashed", borderRadius: 10,
     padding: 24, marginTop: 8,
   },
-  noLiveWeekTitle: { fontFamily: "PermanentMarker_400Regular", fontSize: 18, color: "#B23A2E" },
+  noLiveWeekTitle: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 18, color: "#B23A2E" },
   noLiveWeekBody: { color: "#45564C", fontSize: 13, textAlign: "center", fontWeight: "700" },
 
   // Left as its own plain info callout, same as the prior world — an alert
