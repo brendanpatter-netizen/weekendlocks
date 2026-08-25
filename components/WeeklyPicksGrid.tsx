@@ -3,7 +3,7 @@
 // member, colored by result — mirroring the spreadsheet this group used
 // before the app existed. Reloads whenever `refreshKey` changes, which the
 // dashboard bumps after every load and after "Refresh scores".
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentType } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { pickLabel } from "@/lib/pickLabel";
@@ -11,10 +11,22 @@ import { displayWeek } from "@/lib/weekLabel";
 import { recordLabel, winPct, EMPTY_RECORD, type SeasonRecord } from "@/lib/records";
 import LockIcon from "@/components/LockIcon";
 import TapeCorner from "@/components/TapeCorner";
+import SpreadIcon from "@/components/SpreadIcon";
+import MoneylineIcon from "@/components/MoneylineIcon";
+import TotalsIcon from "@/components/TotalsIcon";
 
 type Result = "win" | "loss" | "push" | null;
-type Cell = { label: string | null; result: Result };
+type Cell = { label: string | null; result: Result; market?: string };
 type Member = { user_id: string; display_name: string };
+
+// A small glyph in place of a "spread"/"moneyline"/"totals" label — same
+// idea as the team logos on the picks pages, just for bet type instead of
+// team. Keeps the already-tight grid cells from needing more text.
+const MARKET_ICON: Record<string, ComponentType<{ size?: number; color?: string }>> = {
+  spreads: SpreadIcon,
+  h2h: MoneylineIcon,
+  totals: TotalsIcon,
+};
 
 const WEEK_COL_WIDTH = 56;
 const PICK_COL_WIDTH = 152;
@@ -65,7 +77,7 @@ export default function WeeklyPicksGrid({
       (picks ?? []).forEach((p: any) => {
         const result = resultByPickId.get(p.id) ?? null;
         const label = cellLabel(p, gameById.get(p.game_id));
-        map.set(cellKey(p.user_id, p.sport, p.week, p.slot ?? 1), { label, result });
+        map.set(cellKey(p.user_id, p.sport, p.week, p.slot ?? 1), { label, result, market: p.market });
         if (result) {
           const cur = recordAcc.get(p.user_id) ?? { ...EMPTY_RECORD };
           if (result === "loss") cur.losses += 1;
@@ -179,12 +191,16 @@ function PickCell({ cell, isSecondCfbLock }: { cell?: Cell; isSecondCfbLock?: bo
     return <View style={[styles.pickCell, styles.cellEmpty]}><Text style={styles.cellEmptyText}>—</Text></View>;
   }
   const resultStyle = cell.result === "loss" ? styles.cellLoss : cell.result ? styles.cellWin : styles.cellPending;
+  const MarketIcon = cell.market ? MARKET_ICON[cell.market] : undefined;
   return (
     <View style={[styles.pickCell, resultStyle]}>
       {isSecondCfbLock && (
         <View style={styles.secondLockBadge}><Text style={styles.secondLockBadgeText}>2</Text></View>
       )}
-      <Text style={styles.cellText}>{cell.label}</Text>
+      <View style={styles.cellContent}>
+        {MarketIcon && <MarketIcon size={13} color="#64748B" />}
+        <Text style={styles.cellText}>{cell.label}</Text>
+      </View>
     </View>
   );
 }
@@ -225,7 +241,8 @@ const styles = StyleSheet.create({
     paddingVertical: 7, paddingHorizontal: 8, justifyContent: "center", alignItems: "center",
     position: "relative",
   },
-  cellText: { fontSize: 11, fontWeight: "700", textAlign: "center", lineHeight: 14 },
+  cellContent: { flexDirection: "row", alignItems: "center", gap: 4, justifyContent: "center" },
+  cellText: { flexShrink: 1, fontSize: 11, fontWeight: "700", textAlign: "center", lineHeight: 14 },
   secondLockBadge: {
     position: "absolute", top: 2, right: 2, width: 13, height: 13, borderRadius: 999,
     backgroundColor: "rgba(15,23,42,0.35)", alignItems: "center", justifyContent: "center",
