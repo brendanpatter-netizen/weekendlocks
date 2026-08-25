@@ -6,7 +6,6 @@
 import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { supabase } from "@/lib/supabase";
-import { avatarColor } from "@/lib/avatar";
 import { pickLabel } from "@/lib/pickLabel";
 import { displayWeek } from "@/lib/weekLabel";
 import { recordLabel, winPct, EMPTY_RECORD, type SeasonRecord } from "@/lib/records";
@@ -24,6 +23,16 @@ function cellKey(userId: string, sport: "nfl" | "cfb", week: number, slot: numbe
   return `${userId}|${sport}|${week}|${slot}`;
 }
 
+// A totals pick's own label ("Under 59.5") doesn't say which game it's
+// for — unlike a spread/moneyline pick, where the team name IS the game.
+// Append the matchup so a totals cell isn't floating with no context.
+function cellLabel(p: { market: string; team: string | null; line: string | null }, game?: { home: string; away: string }): string | null {
+  const base = pickLabel(p);
+  if (!base) return null;
+  if (p.market === "totals" && game) return `${base}\n${game.away} @ ${game.home}`;
+  return base;
+}
+
 export default function WeeklyPicksGrid({
   groupId, members, weekCount, refreshKey,
 }: { groupId: string; members: Member[]; weekCount: number; refreshKey: number | string }) {
@@ -37,10 +46,17 @@ export default function WeeklyPicksGrid({
     (async () => {
       setLoading(true);
       const [{ data: picks }, { data: results }] = await Promise.all([
-        supabase.from("picks").select("id, user_id, sport, week, slot, market, team, line").eq("group_id", groupId),
+        supabase.from("picks").select("id, user_id, sport, week, slot, market, team, line, game_id").eq("group_id", groupId),
         supabase.from("pick_results").select("pick_id, result").eq("group_id", groupId),
       ]);
       if (!mounted) return;
+
+      const gameIds = Array.from(new Set((picks ?? []).map((p: any) => p.game_id).filter(Boolean)));
+      const { data: games } = gameIds.length
+        ? await supabase.from("games").select("id, home, away").in("id", gameIds)
+        : { data: [] as any[] };
+      if (!mounted) return;
+      const gameById = new Map((games ?? []).map((g: any) => [g.id, g]));
 
       const resultByPickId = new Map<string, Result>((results ?? []).map((r: any) => [r.pick_id, r.result]));
       const map = new Map<string, Cell>();
@@ -48,7 +64,8 @@ export default function WeeklyPicksGrid({
 
       (picks ?? []).forEach((p: any) => {
         const result = resultByPickId.get(p.id) ?? null;
-        map.set(cellKey(p.user_id, p.sport, p.week, p.slot ?? 1), { label: pickLabel(p), result });
+        const label = cellLabel(p, gameById.get(p.game_id));
+        map.set(cellKey(p.user_id, p.sport, p.week, p.slot ?? 1), { label, result });
         if (result) {
           const cur = recordAcc.get(p.user_id) ?? { ...EMPTY_RECORD };
           if (result === "loss") cur.losses += 1;
@@ -91,14 +108,11 @@ export default function WeeklyPicksGrid({
             {/* Member name header, spanning that member's two sub-columns */}
             <View style={styles.row}>
               <View style={styles.weekHeadCell} />
-              {members.map((m) => {
-                const color = avatarColor(m.user_id);
-                return (
-                  <View key={m.user_id} style={[styles.memberHeadCell, { backgroundColor: color.bg }]}>
-                    <Text style={[styles.memberHeadText, { color: color.fg }]} numberOfLines={1}>{m.display_name}</Text>
-                  </View>
-                );
-              })}
+              {members.map((m) => (
+                <View key={m.user_id} style={styles.memberHeadCell}>
+                  <Text style={styles.memberHeadText} numberOfLines={1}>{m.display_name}</Text>
+                </View>
+              ))}
             </View>
             {/* NCAA / NFL sub-header */}
             <View style={styles.row}>
@@ -199,8 +213,9 @@ const styles = StyleSheet.create({
   memberHeadCell: {
     width: PICK_COL_WIDTH * 2, alignItems: "center", justifyContent: "center",
     paddingVertical: 6, borderTopLeftRadius: 8, borderTopRightRadius: 8, marginLeft: 1,
+    backgroundColor: "#E2E8F0",
   },
-  memberHeadText: { fontWeight: "800", fontSize: 13 },
+  memberHeadText: { fontWeight: "800", fontSize: 13, color: "#0F172A" },
 
   subHeadCell: { width: PICK_COL_WIDTH, alignItems: "center", paddingVertical: 4, backgroundColor: "#F8FAFC" },
   subHeadText: { fontSize: 10, fontWeight: "700", color: "#64748B", textTransform: "uppercase", letterSpacing: 0.4 }, // was #94A3B8 (2.56:1) — failed WCAG AA
