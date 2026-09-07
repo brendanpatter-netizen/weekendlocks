@@ -43,3 +43,6 @@ yarn-error.*
 *.tsbuildinfo
 
 .vercel
+
+# Supabase CLI local cache
+supabase/.temp/

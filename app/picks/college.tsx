@@ -26,7 +26,16 @@ function getTeamLogo(name?: string | null): string | null {
 }
 
 type MarketKey = "spreads" | "totals" | "h2h";
-type CurrentPick = { market: string; team: string | null; line: string | null };
+type CurrentPick = { market: string; team: string | null; line: string | null; side: string | null; game_id: number | null };
+type GameRow = { home: string; away: string; kickoff_at: string };
+
+// Identity of a real-world game, for matching a stored pick's joined game
+// row against the currently-displayed odds entry — home/away strings come
+// from the same feed either way, so exact equality is enough (no need for
+// matchupsLikelyMatch's fuzzy cross-source tolerance here).
+function gameKey(home?: string | null, away?: string | null) {
+  return `${home ?? ""}||${away ?? ""}`;
+}
 
 /* helpers */
 function computeSide(game: any, outcome: any, market: MarketKey)
@@ -74,7 +83,7 @@ async function resolveOrCreateGameId(opts: {
   return data as number | null;
 }
 
-type GroupPick = { user_id: string; display_name: string; market: string; team: string | null; line: string | null; slot: number };
+type GroupPick = { user_id: string; display_name: string; market: string; team: string | null; line: string | null; slot: number; side: string | null; game_id: number | null };
 
 export default function CFBPicksPage() {
   const params = useLocalSearchParams<{ group?: string }>();
@@ -112,36 +121,52 @@ export default function CFBPicksPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [myPicks, setMyPicks] = useState<Map<number, CurrentPick>>(new Map());
   const [groupPicks, setGroupPicks] = useState<GroupPick[]>([]);
+  const [gamesById, setGamesById] = useState<Map<number, GameRow>>(new Map());
   const [saved, setSaved] = useState(false);
 
   const currentPick = myPicks.get(activeSlot) ?? null;
-  // outcome key ("market|team|line") -> who holds it. Your own OTHER slot's
-  // pick shows up here too (labeled distinctly) — you can't use the same
-  // outcome for both locks any more than two different members could.
+  const currentPickGame = currentPick?.game_id ? gamesById.get(currentPick.game_id) ?? null : null;
+  // The active slot's game already underway can't be un-picked or re-picked.
+  const myPickStarted =
+    !!currentPickGame && new Date(currentPickGame.kickoff_at).getTime() <= Date.now();
+
+  // outcome key ("gameKey|market|side") -> who holds it. Your own OTHER
+  // slot's pick shows up here too (labeled distinctly) — you can't use the
+  // same outcome for both locks any more than two different members could.
   const takenBy = useMemo(() => {
     const taken = new Map<string, string>();
     groupPicks.forEach((p) => {
       if (p.user_id === userId && p.slot === activeSlot) return; // this is the slot you're viewing — that's "picked", not "taken"
+      const g = p.game_id ? gamesById.get(p.game_id) : null;
+      if (!g) return;
       const label = p.user_id === userId ? `Your Lock #${p.slot}` : p.display_name;
-      taken.set(`${p.market}|${p.team}|${p.line}`, label);
+      taken.set(`${gameKey(g.home, g.away)}|${p.market}|${p.side}`, label);
     });
     return taken;
-  }, [groupPicks, userId, activeSlot]);
+  }, [groupPicks, userId, activeSlot, gamesById]);
 
   // Load whatever picks already exist for this group + week (both slots, so
   // the tab switch above is instant), plus every other group member's
   // current picks, so outcomes they've already locked in can be shown as taken.
   async function loadPickState(uid: string) {
     const [{ data: mine }, { data: feed }] = await Promise.all([
-      supabase.from("picks").select("slot, market, team, line")
+      supabase.from("picks").select("slot, market, team, line, side, game_id")
         .eq("user_id", uid).eq("group_id", groupId).eq("sport", "cfb").eq("week", week),
-      supabase.from("picks_feed").select("user_id, display_name, market, team, line, slot")
+      supabase.from("picks_feed").select("user_id, display_name, market, team, line, slot, side, game_id")
         .eq("group_id", groupId).eq("sport", "cfb").eq("week", week),
     ]);
     const bySlot = new Map<number, CurrentPick>();
     (mine ?? []).forEach((r: any) => bySlot.set(r.slot, r));
     setMyPicks(bySlot);
     setGroupPicks((feed ?? []) as GroupPick[]);
+
+    const gameIds = Array.from(new Set(
+      [...(mine ?? []).map((r: any) => r.game_id), ...(feed ?? []).map((p: any) => p.game_id)].filter(Boolean)
+    ));
+    const { data: gamesRows } = gameIds.length
+      ? await supabase.from("games").select("id, home, away, kickoff_at").in("id", gameIds)
+      : { data: [] as any[] };
+    setGamesById(new Map((gamesRows ?? []).map((g: any) => [g.id, g])));
   }
 
   useEffect(() => {
@@ -166,6 +191,7 @@ export default function CFBPicksPage() {
     if (!user) { router.push("/auth/login" as Href); return; }
     if (!groupId) { alert("No group selected", "Open this page from a group to make picks."); return; }
     if (!week) { alert("No live week", "There's no CFB week open for picks right now."); return; }
+    if (myPickStarted) { alert("Lock is final", "This lock's game has already started — you can't change it now."); return; }
 
     const gameId = await resolveOrCreateGameId({
       league: "cfb", week,
@@ -219,6 +245,7 @@ export default function CFBPicksPage() {
     const { data: auth } = await supabase.auth.getUser();
     const user = auth?.user; if (!user) return;
     if (!groupId) return;
+    if (myPickStarted) { alert("Lock is final", "That game has already started — you can't clear it now."); return; }
 
     const { error: delErr } = await supabase.from("picks").delete()
       .eq("user_id", user.id)
@@ -281,9 +308,13 @@ export default function CFBPicksPage() {
             {pickLabel(currentPick) ?? "none yet"}
           </Text>
           {currentPick && (
-            <Pressable onPress={handleClear} style={styles.clearBtn}>
-              <Text style={{ color: "#DC2626", fontWeight: "700", fontSize: 13 }}>Clear my pick</Text>
-            </Pressable>
+            myPickStarted ? (
+              <Text style={styles.lockedText}>Locked — game started</Text>
+            ) : (
+              <Pressable onPress={handleClear} style={styles.clearBtn}>
+                <Text style={{ color: "#DC2626", fontWeight: "700", fontSize: 13 }}>Clear my pick</Text>
+              </Pressable>
+            )
           )}
           <Pressable onPress={() => router.push(`/groups/${groupId}` as Href)} style={styles.backBtn}>
             <Text style={{ color: theme.brand, fontWeight: "700", fontSize: 13 }}>Back to group</Text>
@@ -337,12 +368,20 @@ export default function CFBPicksPage() {
 
               <View style={{ gap: 8, marginTop: 8 }}>
                 {outcomes.map((o, i) => {
-                  // Totals outcomes are literally named "Over"/"Under" on every game, so
-                  // matching by team name alone would highlight that outcome across every
-                  // card at once — the line (point) disambiguates which specific game.
                   const outcomeLine = typeof o.point === "number" ? String(o.point) : null;
-                  const isPicked = currentPick?.market === tab && currentPick?.team === o.name && currentPick?.line === outcomeLine;
-                  const takenByName = isPicked ? undefined : takenBy.get(`${tab}|${o.name}|${outcomeLine}`);
+                  // Totals outcomes are literally named "Over"/"Under" on every game, and
+                  // a game's own line moves through the week as odds update — neither the
+                  // outcome name nor the numeric line reliably identifies "this side of
+                  // this specific game" on its own. side (home/away/over/under, already
+                  // computed and stored the same way on save) plus the actual game
+                  // identity is what's genuinely unique, and stays unique even after the
+                  // line changes.
+                  const side = computeSide(g, o, tab);
+                  const thisGameKey = gameKey(g.home_team, g.away_team);
+                  const isPicked =
+                    currentPick?.market === tab && currentPick?.side === side &&
+                    !!currentPickGame && gameKey(currentPickGame.home, currentPickGame.away) === thisGameKey;
+                  const takenByName = isPicked ? undefined : takenBy.get(`${thisGameKey}|${tab}|${side}`);
                   const oLogo = getTeamLogo(o.name); // null for Over/Under — no team to show
                   return (
                     <Pressable
@@ -410,6 +449,7 @@ const styles = StyleSheet.create({
   outcomeTextTaken: { color: "#94A3B8", textDecorationLine: "line-through" },
   takenLabel: { marginLeft: "auto", fontSize: 11, color: "#94A3B8", fontStyle: "italic" },
   clearBtn: { paddingVertical: 5, paddingHorizontal: 10, borderWidth: 1, borderRadius: 999, borderColor: "#DC2626", backgroundColor: "rgba(220,38,38,0.06)" },
+  lockedText: { color: "#94A3B8", fontWeight: "700", fontSize: 13, fontStyle: "italic" },
   backBtn: { paddingVertical: 5, paddingHorizontal: 10, borderWidth: 1, borderRadius: 999, borderColor: theme.brand, backgroundColor: "rgba(11,115,95,0.06)" },
   logo: { width: 28, height: 28, resizeMode: "contain" },
   outcomeLogo: { width: 20, height: 20, resizeMode: "contain" },

@@ -32,7 +32,16 @@ function getTeamLogo(name?: string | null): string | null {
 }
 
 type MarketKey = "spreads" | "totals" | "h2h";
-type CurrentPick = { market: string; team: string | null; line: string | null };
+type CurrentPick = { market: string; team: string | null; line: string | null; side: string | null; game_id: number | null };
+type GameRow = { home: string; away: string; kickoff_at: string };
+
+// Identity of a real-world game, for matching a stored pick's joined game
+// row against the currently-displayed odds entry — home/away strings come
+// from the same feed either way, so exact equality is enough (no need for
+// matchupsLikelyMatch's fuzzy cross-source tolerance here).
+function gameKey(home?: string | null, away?: string | null) {
+  return `${home ?? ""}||${away ?? ""}`;
+}
 
 /* ---------------- helpers ---------------- */
 function computeSide(
@@ -116,26 +125,47 @@ export default function NFLPicksPage() {
   });
 
   const [currentPick, setCurrentPick] = useState<CurrentPick | null>(null);
+  const [myPickGame, setMyPickGame] = useState<GameRow | null>(null);
   const [saved, setSaved] = useState(false);
-  // outcome key ("market|team|line") -> the group member who already holds it.
+  // outcome key ("gameKey|market|side") -> the group member who already holds it.
   const [takenBy, setTakenBy] = useState<Map<string, string>>(new Map());
+
+  // A game already underway can't be un-picked or re-picked — once it's
+  // started, that lock is final. computeSide()'s "team" fallback (an
+  // outcome computeSide couldn't classify as home/away/over/under) never
+  // legitimately locks, so there's nothing to freeze either way.
+  const myPickStarted =
+    !!myPickGame && new Date(myPickGame.kickoff_at).getTime() <= Date.now();
 
   // Load whatever pick already exists for this group + week (to highlight
   // and enable "Clear my pick"), plus every other group member's current
   // pick, so outcomes they've already locked in can be shown as taken.
   async function loadPickState(uid: string) {
     const [{ data: mine }, { data: groupPicks }] = await Promise.all([
-      supabase.from("picks").select("market, team, line")
+      supabase.from("picks").select("market, team, line, side, game_id")
         .eq("user_id", uid).eq("group_id", groupId).eq("sport", "nfl").eq("week", week)
         .maybeSingle(),
-      supabase.from("picks_feed").select("user_id, display_name, market, team, line")
+      supabase.from("picks_feed").select("user_id, display_name, market, team, line, side, game_id")
         .eq("group_id", groupId).eq("sport", "nfl").eq("week", week),
     ]);
     setCurrentPick((mine as CurrentPick) ?? null);
+
+    const gameIds = Array.from(new Set(
+      [mine?.game_id, ...(groupPicks ?? []).map((p: any) => p.game_id)].filter(Boolean)
+    ));
+    const { data: gamesById } = gameIds.length
+      ? await supabase.from("games").select("id, home, away, kickoff_at").in("id", gameIds)
+      : { data: [] as any[] };
+    const gameById = new Map((gamesById ?? []).map((g: any) => [g.id, g]));
+
+    setMyPickGame(mine?.game_id ? gameById.get(mine.game_id) ?? null : null);
+
     const taken = new Map<string, string>();
     (groupPicks ?? []).forEach((p: any) => {
       if (p.user_id === uid) return; // your own pick isn't "taken", it's just yours
-      taken.set(`${p.market}|${p.team}|${p.line}`, p.display_name);
+      const g = gameById.get(p.game_id);
+      if (!g) return;
+      taken.set(`${gameKey(g.home, g.away)}|${p.market}|${p.side}`, p.display_name);
     });
     setTakenBy(taken);
   }
@@ -161,6 +191,7 @@ export default function NFLPicksPage() {
     if (!user) { router.push("/auth/login" as Href); return; }
     if (!groupId) { alert("No group selected", "Open this page from a group to make picks."); return; }
     if (!week) { alert("No live week", "There's no NFL week open for picks right now."); return; }
+    if (myPickStarted) { alert("Lock is final", "Your current pick's game has already started — you can't change it now."); return; }
 
     const gameId = await resolveOrCreateGameId({
       league: "nfl",
@@ -174,6 +205,7 @@ export default function NFLPicksPage() {
 
     const team = outcome?.name ?? null;
     const line = typeof outcome?.point === "number" ? String(outcome.point) : null;
+    const side = computeSide(game, outcome, market);
 
     // created_at is intentionally omitted: on INSERT the column default (now())
     // applies, and on the ON CONFLICT DO UPDATE it's left untouched, so
@@ -189,7 +221,7 @@ export default function NFLPicksPage() {
       team,
       price: typeof outcome?.price === "number" ? outcome.price : null,
       line,
-      side: computeSide(game, outcome, market),
+      side,
       updated_at: new Date().toISOString(),
     };
 
@@ -206,7 +238,7 @@ export default function NFLPicksPage() {
       alert("Could not save pick", upsertErr.message);
       return;
     }
-    setCurrentPick({ market, team, line });
+    setCurrentPick({ market, team, line, side, game_id: gameId });
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
     await loadPickState(user.id);
@@ -216,6 +248,7 @@ export default function NFLPicksPage() {
     const { data: auth } = await supabase.auth.getUser();
     const user = auth?.user; if (!user) return;
     if (!groupId) return;
+    if (myPickStarted) { alert("Lock is final", "That game has already started — you can't clear it now."); return; }
 
     const { error: delErr } = await supabase.from("picks").delete()
       .eq("user_id", user.id)
@@ -258,9 +291,13 @@ export default function NFLPicksPage() {
             {pickLabel(currentPick) ?? "none yet"}
           </Text>
           {currentPick && (
-            <Pressable onPress={handleClear} style={styles.clearBtn}>
-              <Text style={{ color: "#DC2626", fontWeight: "700", fontSize: 13 }}>Clear my pick</Text>
-            </Pressable>
+            myPickStarted ? (
+              <Text style={styles.lockedText}>Locked — game started</Text>
+            ) : (
+              <Pressable onPress={handleClear} style={styles.clearBtn}>
+                <Text style={{ color: "#DC2626", fontWeight: "700", fontSize: 13 }}>Clear my pick</Text>
+              </Pressable>
+            )
           )}
           <Pressable onPress={() => router.push(`/groups/${groupId}` as Href)} style={styles.backBtn}>
             <Text style={{ color: theme.brand, fontWeight: "700", fontSize: 13 }}>Back to group</Text>
@@ -314,12 +351,20 @@ export default function NFLPicksPage() {
 
               <View style={{ gap: 8, marginTop: 8 }}>
                 {outcomes.map((o, i) => {
-                  // Totals outcomes are literally named "Over"/"Under" on every game, so
-                  // matching by team name alone would highlight that outcome across every
-                  // card at once — the line (point) disambiguates which specific game.
                   const outcomeLine = typeof o.point === "number" ? String(o.point) : null;
-                  const isPicked = currentPick?.market === tab && currentPick?.team === o.name && currentPick?.line === outcomeLine;
-                  const takenByName = isPicked ? undefined : takenBy.get(`${tab}|${o.name}|${outcomeLine}`);
+                  // Totals outcomes are literally named "Over"/"Under" on every game, and
+                  // a game's own line moves through the week as odds update — neither the
+                  // outcome name nor the numeric line reliably identifies "this side of
+                  // this specific game" on its own. side (home/away/over/under, already
+                  // computed and stored the same way on save) plus the actual game
+                  // identity is what's genuinely unique, and stays unique even after the
+                  // line changes.
+                  const side = computeSide(g, o, tab);
+                  const thisGameKey = gameKey(g.home_team, g.away_team);
+                  const isPicked =
+                    currentPick?.market === tab && currentPick?.side === side &&
+                    !!myPickGame && gameKey(myPickGame.home, myPickGame.away) === thisGameKey;
+                  const takenByName = isPicked ? undefined : takenBy.get(`${thisGameKey}|${tab}|${side}`);
                   const oLogo = getTeamLogo(o.name); // null for Over/Under — no team to show
                   return (
                     <Pressable
@@ -387,6 +432,7 @@ const styles = StyleSheet.create({
   outcomeTextTaken: { color: "#94A3B8", textDecorationLine: "line-through" },
   takenLabel: { marginLeft: "auto", fontSize: 11, color: "#94A3B8", fontStyle: "italic" },
   clearBtn: { paddingVertical: 5, paddingHorizontal: 10, borderWidth: 1, borderRadius: 999, borderColor: "#DC2626", backgroundColor: "rgba(220,38,38,0.06)" },
+  lockedText: { color: "#94A3B8", fontWeight: "700", fontSize: 13, fontStyle: "italic" },
   backBtn: { paddingVertical: 5, paddingHorizontal: 10, borderWidth: 1, borderRadius: 999, borderColor: theme.brand, backgroundColor: "rgba(11,115,95,0.06)" },
   logo: { width: 28, height: 28, resizeMode: "contain" },
   outcomeLogo: { width: 20, height: 20, resizeMode: "contain" },
