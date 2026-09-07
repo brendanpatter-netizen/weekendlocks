@@ -33,6 +33,7 @@ import { useLocalSearchParams, router, Href } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { supabase } from "@/lib/supabase";
 import { logoUri } from "@/lib/teamLogos";
+import { formatLine } from "@/lib/pickLabel";
 import { alert } from "@/lib/alert";
 import { recordLabel, winPct, recordVibe, EMPTY_RECORD, type SeasonRecord } from "@/lib/records";
 import { getOpenWeek, getNextWeek, type OpenWeek } from "@/lib/openWeek";
@@ -418,7 +419,7 @@ export default function GroupDashboardPage() {
                         <Text style={styles.feedTitle}>
                           <Text style={{ fontWeight: "700" }}>{item.display_name}</Text>
                           {" "}{item.was_replaced ? "swapped in" : "locked in"} {item.team ?? "a pick"}
-                          {item.line ? ` ${item.line}` : ""}
+                          {item.line ? ` ${formatLine(item.line)}` : ""}
                         </Text>
                         <Text style={styles.feedSub}>
                           {item.sport.toUpperCase()} • Week {displayWeek(item.week)}

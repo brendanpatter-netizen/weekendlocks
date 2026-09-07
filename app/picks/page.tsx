@@ -35,6 +35,33 @@ type MarketKey = "spreads" | "totals" | "h2h";
 type CurrentPick = { market: string; team: string | null; line: string | null; side: string | null; game_id: number | null };
 type GameRow = { home: string; away: string; kickoff_at: string };
 
+// All three markets render together as one grid per game (favorite/dog rows
+// x spread/total/moneyline columns) instead of a tab per market — a member
+// comparing a spread against the total shouldn't have to click back and forth.
+const MARKETS: { key: MarketKey; label: string }[] = [
+  { key: "spreads", label: "SPREAD" },
+  { key: "totals", label: "TOTAL" },
+  { key: "h2h", label: "ML" },
+];
+
+function signed(n: number): string {
+  return `${n > 0 ? "+" : ""}${n}`;
+}
+
+// The outcome belonging to a given grid row: spreads/h2h are one outcome per
+// team, totals are one outcome per Over/Under with no team of its own — the
+// row it lands on ("away" row gets Over, "home" row gets Under) is just a
+// display convention to keep the grid uniform.
+function outcomeForRow(
+  outcomes: any[],
+  game: any,
+  market: MarketKey,
+  rowSide: "away" | "home"
+): any {
+  const want = market === "totals" ? (rowSide === "away" ? "over" : "under") : rowSide;
+  return outcomes.find((o) => computeSide(game, o, market) === want) ?? null;
+}
+
 // Identity of a real-world game, for matching a stored pick's joined game
 // row against the currently-displayed odds entry — home/away strings come
 // from the same feed either way, so exact equality is enough (no need for
@@ -108,7 +135,6 @@ export default function NFLPicksPage() {
     [params.group]
   );
 
-  const [tab, setTab] = useState<MarketKey>("spreads");
   // undefined = still resolving, null = resolved but no NFL week is live right now.
   const [openWeek, setOpenWeek] = useState<OpenWeek | null | undefined>(undefined);
   useEffect(() => {
@@ -315,27 +341,22 @@ export default function NFLPicksPage() {
         </View>
       ) : (
       <>
-      <View style={{ flexDirection: "row", gap: 8 }}>
-        {(["spreads", "totals", "h2h"] as const).map((k) => (
-          <Pressable key={k} onPress={() => setTab(k)}
-            style={[styles.tab, tab === k && styles.tabActive]}>
-            <Text style={[styles.tabText, tab === k && { color: "white" }]}>{k.toUpperCase()}</Text>
-          </Pressable>
-        ))}
-      </View>
-
       {loading ? (
         <ActivityIndicator />
       ) : error ? (
         <Text style={{ color: "#F5F3E7" }}>Error loading odds.</Text>
       ) : (
         (games ?? []).map((g: any) => {
-          const markets = g.bookmakers?.[0]?.markets ?? [];
-          const m = markets.find((x: any) => x.key === tab);
-          const outcomes: any[] = m?.outcomes ?? [];
+          const marketsData = g.bookmakers?.[0]?.markets ?? [];
+          const outcomesByMarket: Record<MarketKey, any[]> = {
+            spreads: marketsData.find((x: any) => x.key === "spreads")?.outcomes ?? [],
+            totals: marketsData.find((x: any) => x.key === "totals")?.outcomes ?? [],
+            h2h: marketsData.find((x: any) => x.key === "h2h")?.outcomes ?? [],
+          };
           const hLogo = getTeamLogo(g.home_team);
           const aLogo = getTeamLogo(g.away_team);
           const started = new Date(g.commence_time).getTime() <= Date.now();
+          const thisGameKey = gameKey(g.home_team, g.away_team);
 
           return (
             <View key={g.id} style={[styles.gameCard, started && styles.gameCardStarted]}>
@@ -349,43 +370,83 @@ export default function NFLPicksPage() {
                 {started && <View style={styles.startedBadge}><Text style={styles.startedBadgeText}>Started</Text></View>}
               </View>
 
-              <View style={{ gap: 8, marginTop: 8 }}>
-                {outcomes.map((o, i) => {
-                  const outcomeLine = typeof o.point === "number" ? String(o.point) : null;
-                  // Totals outcomes are literally named "Over"/"Under" on every game, and
-                  // a game's own line moves through the week as odds update — neither the
-                  // outcome name nor the numeric line reliably identifies "this side of
-                  // this specific game" on its own. side (home/away/over/under, already
-                  // computed and stored the same way on save) plus the actual game
-                  // identity is what's genuinely unique, and stays unique even after the
-                  // line changes.
-                  const side = computeSide(g, o, tab);
-                  const thisGameKey = gameKey(g.home_team, g.away_team);
-                  const isPicked =
-                    currentPick?.market === tab && currentPick?.side === side &&
-                    !!myPickGame && gameKey(myPickGame.home, myPickGame.away) === thisGameKey;
-                  const takenByName = isPicked ? undefined : takenBy.get(`${thisGameKey}|${tab}|${side}`);
-                  const oLogo = getTeamLogo(o.name); // null for Over/Under — no team to show
+              <View style={styles.marketGrid}>
+                <View style={styles.marketHeaderRow}>
+                  <View style={styles.teamCol} />
+                  {MARKETS.map((m) => (
+                    <View key={m.key} style={styles.marketCol}>
+                      <Text style={styles.marketColHeaderText}>{m.label}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                {(["away", "home"] as const).map((rowSide) => {
+                  const teamName = rowSide === "away" ? g.away_team : g.home_team;
+                  const teamLogo = getTeamLogo(teamName);
                   return (
-                    <Pressable
-                      key={i}
-                      disabled={started || !!takenByName}
-                      onPress={() => handlePick(g, o, tab)}
-                      style={[
-                        styles.outcomeBtn,
-                        isPicked && styles.outcomeBtnActive,
-                        !!takenByName && styles.outcomeBtnTaken,
-                        { flexDirection: "row", alignItems: "center", gap: 8 },
-                      ]}
-                    >
-                      {!!oLogo && <Image source={{ uri: oLogo }} style={styles.outcomeLogo} />}
-                      <Text style={[{ fontWeight: "700" }, isPicked && { color: "white" }, !!takenByName && styles.outcomeTextTaken]}>
-                        {isPicked ? "✓ " : ""}{o.name}
-                        {typeof o.point === "number" ? ` ${o.point > 0 ? "+" : ""}${o.point}` : ""}
-                        {typeof o.price === "number" ? `  (${o.price})` : ""}
-                      </Text>
-                      {!!takenByName && <Text style={styles.takenLabel}>Taken by {takenByName}</Text>}
-                    </Pressable>
+                    <View key={rowSide} style={styles.marketRow}>
+                      <View style={styles.teamCol}>
+                        {!!teamLogo && <Image source={{ uri: teamLogo }} style={styles.rowLogo} />}
+                        <Text style={styles.rowTeamText} numberOfLines={1}>{teamName}</Text>
+                      </View>
+                      {MARKETS.map((m) => {
+                        const outcome = outcomeForRow(outcomesByMarket[m.key], g, m.key, rowSide);
+                        if (!outcome) return <View key={m.key} style={styles.marketCol} />;
+                        // Totals outcomes are literally named "Over"/"Under" on every game, and
+                        // a game's own line moves through the week as odds update — neither the
+                        // outcome name nor the numeric line reliably identifies "this side of
+                        // this specific game" on its own. side (home/away/over/under, already
+                        // computed and stored the same way on save) plus the actual game
+                        // identity is what's genuinely unique, and stays unique even after the
+                        // line changes.
+                        const side = computeSide(g, outcome, m.key);
+                        const isPicked =
+                          currentPick?.market === m.key && currentPick?.side === side &&
+                          !!myPickGame && gameKey(myPickGame.home, myPickGame.away) === thisGameKey;
+                        const takenByName = isPicked ? undefined : takenBy.get(`${thisGameKey}|${m.key}|${side}`);
+                        const point = typeof outcome.point === "number" ? outcome.point : null;
+                        const primaryText =
+                          m.key === "h2h"
+                            ? (typeof outcome.price === "number" ? signed(outcome.price) : "")
+                            : `${m.key === "totals" ? (side === "over" ? "O " : "U ") : ""}${point !== null ? signed(point) : ""}`;
+                        const secondaryText =
+                          m.key !== "h2h" && typeof outcome.price === "number" ? signed(outcome.price) : "";
+                        return (
+                          <Pressable
+                            key={m.key}
+                            disabled={started || !!takenByName}
+                            onPress={() => handlePick(g, outcome, m.key)}
+                            style={[
+                              styles.marketCol,
+                              styles.cellBtn,
+                              isPicked && styles.cellBtnActive,
+                              !!takenByName && styles.cellBtnTaken,
+                            ]}
+                          >
+                            {isPicked && (
+                              <View style={styles.checkBadge}><Text style={styles.checkBadgeText}>✓</Text></View>
+                            )}
+                            <Text
+                              numberOfLines={1}
+                              style={[styles.cellPrimaryText, isPicked && { color: "white" }, !!takenByName && styles.cellTextTaken]}
+                            >
+                              {primaryText}
+                            </Text>
+                            {!!secondaryText && (
+                              <Text
+                                numberOfLines={1}
+                                style={[styles.cellSecondaryText, isPicked && { color: "rgba(255,255,255,0.8)" }, !!takenByName && styles.cellTextTaken]}
+                              >
+                                {secondaryText}
+                              </Text>
+                            )}
+                            {!!takenByName && (
+                              <Text numberOfLines={1} style={styles.cellTakenLabel}>{takenByName}</Text>
+                            )}
+                          </Pressable>
+                        );
+                      })}
+                    </View>
                   );
                 })}
               </View>
@@ -412,13 +473,6 @@ const styles = StyleSheet.create({
   },
   crossLinkText: { color: "#F5F3E7", fontWeight: "800", fontSize: 12, letterSpacing: 0.3 },
 
-  tab: {
-    paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1.5, borderRadius: 999,
-    borderColor: "rgba(12,23,18,0.18)", borderStyle: "dashed", backgroundColor: "#F5F3E7",
-  },
-  tabActive: { backgroundColor: "#0B735F", borderColor: "#0B735F", borderStyle: "solid" },
-  tabText: { fontWeight: "800", color: "#0C1712", fontSize: 12 },
-
   // Game cards stay flat, dashed-border paper (board continuity) but skip the
   // per-card rotation/tape treatment — a dense scrolling list of tilted cards
   // would fight scanability on a page that's for making picks fast.
@@ -426,16 +480,38 @@ const styles = StyleSheet.create({
   gameCardStarted: { opacity: 0.55 },
   startedBadge: { backgroundColor: "#F1F5F9", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
   startedBadgeText: { fontSize: 11, fontWeight: "700", color: "#64748B" },
-  outcomeBtn: { backgroundColor: "#0B735F22", borderWidth: 1, borderColor: "#0B735F55", borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10 },
-  outcomeBtnActive: { backgroundColor: "#0B735F", borderColor: "#0B735F" },
-  outcomeBtnTaken: { backgroundColor: "#F1F5F9", borderColor: "#E2E8F0" },
-  outcomeTextTaken: { color: "#94A3B8", textDecorationLine: "line-through" },
-  takenLabel: { marginLeft: "auto", fontSize: 11, color: "#94A3B8", fontStyle: "italic" },
   clearBtn: { paddingVertical: 5, paddingHorizontal: 10, borderWidth: 1, borderRadius: 999, borderColor: "#DC2626", backgroundColor: "rgba(220,38,38,0.06)" },
   lockedText: { color: "#94A3B8", fontWeight: "700", fontSize: 13, fontStyle: "italic" },
   backBtn: { paddingVertical: 5, paddingHorizontal: 10, borderWidth: 1, borderRadius: 999, borderColor: theme.brand, backgroundColor: "rgba(11,115,95,0.06)" },
   logo: { width: 28, height: 28, resizeMode: "contain" },
-  outcomeLogo: { width: 20, height: 20, resizeMode: "contain" },
+
+  // All 3 markets (spread/total/moneyline) as one grid per game — a team row
+  // per side, a market column per bet type — so a member can compare and
+  // lock in any of the three without switching tabs.
+  marketGrid: { marginTop: 8, gap: 2 },
+  marketHeaderRow: { flexDirection: "row", marginBottom: 2 },
+  marketRow: { flexDirection: "row", alignItems: "stretch", gap: 4 },
+  teamCol: { flex: 1.3, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6, paddingRight: 4 },
+  rowLogo: { width: 18, height: 18, resizeMode: "contain" },
+  rowTeamText: { flexShrink: 1, fontWeight: "700", fontSize: 12, color: "#0C1712" },
+  marketCol: { flex: 1, minWidth: 0, alignItems: "center" },
+  marketColHeaderText: { fontSize: 10, fontWeight: "800", color: "#45564C", textTransform: "uppercase", letterSpacing: 0.4 },
+
+  cellBtn: {
+    width: "100%", backgroundColor: "#0B735F22", borderWidth: 1, borderColor: "#0B735F55",
+    borderRadius: 8, paddingVertical: 6, marginVertical: 2, position: "relative",
+  },
+  cellBtnActive: { backgroundColor: "#0B735F", borderColor: "#0B735F" },
+  cellBtnTaken: { backgroundColor: "#F1F5F9", borderColor: "#E2E8F0" },
+  cellPrimaryText: { fontWeight: "800", fontSize: 13, color: "#0C1712", textAlign: "center" },
+  cellSecondaryText: { fontSize: 10, color: "#45564C", textAlign: "center", marginTop: 1 },
+  cellTextTaken: { color: "#94A3B8", textDecorationLine: "line-through" },
+  cellTakenLabel: { fontSize: 8, color: "#94A3B8", fontStyle: "italic", textAlign: "center", marginTop: 1, paddingHorizontal: 2 },
+  checkBadge: {
+    position: "absolute", top: -5, right: -5, width: 16, height: 16, borderRadius: 999,
+    backgroundColor: theme.brassFill, alignItems: "center", justifyContent: "center", zIndex: 1,
+  },
+  checkBadgeText: { fontSize: 10, fontWeight: "800", color: theme.brassInk },
 
   // The one highlighted strip on this page — same paper/dashed-gold/tilt
   // recipe as the group dashboard's invite row, so the two "pinned note"
