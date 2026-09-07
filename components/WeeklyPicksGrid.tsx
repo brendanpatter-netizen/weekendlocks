@@ -35,24 +35,13 @@ function cellKey(userId: string, sport: "nfl" | "cfb", week: number, slot: numbe
   return `${userId}|${sport}|${week}|${slot}`;
 }
 
-// Last word of a team name (mascot) — "Ohio State Buckeyes" -> "Buckeyes".
-// Only used for the matchup line on totals picks, to keep it short; the
-// pick's own team/line text elsewhere always stays full.
-function shortTeam(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  return parts[parts.length - 1];
-}
-
 // A totals pick's own label ("Under 59.5") doesn't say which game it's
 // for — unlike a spread/moneyline pick, where the team name IS the game.
-// Lead with a short matchup, bet detail after (same team-then-bet order
-// as spreads/moneyline). Moneyline drops pickLabel's "ML" suffix here —
-// the icon already says "moneyline," so the text would just be repeating it.
+// Append the matchup so a totals cell isn't floating with no context.
 function cellLabel(p: { market: string; team: string | null; line: string | null }, game?: { home: string; away: string }): string | null {
-  if (p.market === "h2h") return p.team ?? null;
   const base = pickLabel(p);
   if (!base) return null;
-  if (p.market === "totals" && game) return `${shortTeam(game.away)} @ ${shortTeam(game.home)}\n${base}`;
+  if (p.market === "totals" && game) return `${base}\n${game.away} @ ${game.home}`;
   return base;
 }
 
@@ -209,7 +198,7 @@ function PickCell({ cell, isSecondCfbLock }: { cell?: Cell; isSecondCfbLock?: bo
         <View style={styles.secondLockBadge}><Text style={styles.secondLockBadgeText}>2</Text></View>
       )}
       <View style={styles.cellContent}>
-        {MarketIcon && <MarketIcon size={20} color="#334155" />}
+        {MarketIcon && <MarketIcon size={13} color="#64748B" />}
         <Text style={styles.cellText}>{cell.label}</Text>
       </View>
     </View>
