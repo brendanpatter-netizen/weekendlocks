@@ -140,18 +140,21 @@ export default function WeeklyPicksGrid({
                   // Weeks before the NFL season opens have no NFL pick to show —
                   // fall back to a second CFB lock in that slot instead (the
                   // "2 picks a week" gap-week rule from the picks page). CFB's
-                  // gap-week second lock only ever opens up while NFL's own
-                  // week_num for this row is still closed, so a real cfbLock2
-                  // and a real nfl pick can never both legitimately exist for
-                  // the same row — if an nfl pick is sitting here anyway (e.g.
-                  // leftover from manually forcing a week open to test), it's
-                  // stale, and the second CFB lock should win the slot.
+                  // and NFL's week_num counters both start near 1 independently,
+                  // so a gap-week cfbLock2 (always made while NFL's season is
+                  // still fully closed — see isGapWeek in college.tsx) commonly
+                  // shares its raw week number with an early real NFL week once
+                  // the season opens, even though the two are months apart on
+                  // the calendar. When both exist for a row, the NFL pick is the
+                  // current, real one and must win the slot — a stale gap-week
+                  // lock displacing it was reported as "NFL picks aren't saving."
                   const cfbLock2 = grid.get(cellKey(m.user_id, "cfb", week, 2));
-                  const secondCell = cfbLock2 ?? nfl;
+                  const secondCell = nfl ?? cfbLock2;
+                  const showingCfbLock2 = !nfl && !!cfbLock2;
                   return (
                     <View key={m.user_id} style={{ flexDirection: "row" }}>
                       <PickCell cell={cfb} />
-                      <PickCell cell={secondCell} isSecondCfbLock={!!cfbLock2} />
+                      <PickCell cell={secondCell} isSecondCfbLock={showingCfbLock2} />
                     </View>
                   );
                 })}
