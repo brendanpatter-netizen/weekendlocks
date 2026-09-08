@@ -264,6 +264,16 @@ export default function GroupDashboardPage() {
         <Text style={styles.heroTitle}>{groupName}</Text>
         <Text style={styles.heroSubtitle}>{members.length} member{members.length === 1 ? "" : "s"} on the crew</Text>
 
+        <Pressable
+          onPress={() => router.push(`/groups/${groupId}/live` as Href)}
+          style={styles.liveBoardChip}
+          accessibilityRole="button"
+          accessibilityLabel="Open the Live Board"
+        >
+          <View style={styles.liveBoardDot} />
+          <Text style={styles.liveBoardChipText}>Live Board</Text>
+        </Pressable>
+
         <View style={styles.pickCtaRow}>
           <Pressable
             style={[styles.pickCtaBtn, !nflOpenWeek && styles.pickCtaBtnDisabled]}
@@ -478,6 +488,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5, textAlign: "center", textTransform: "uppercase", lineHeight: 46,
   },
   heroSubtitle: { fontSize: 13, color: "rgba(245,243,231,0.7)", marginBottom: 18, textAlign: "center", fontWeight: "700" },
+  liveBoardChip: {
+    flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "center", marginBottom: 18,
+    borderWidth: 1.5, borderColor: "rgba(245,243,231,0.4)", borderStyle: "dashed",
+    borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7,
+  },
+  liveBoardDot: { width: 7, height: 7, borderRadius: 999, backgroundColor: "#DC2626" },
+  liveBoardChipText: { color: "#F5F3E7", fontWeight: "800", fontSize: 12, letterSpacing: 0.3 },
 
   inviteRow: {
     flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#F5F3E7",
