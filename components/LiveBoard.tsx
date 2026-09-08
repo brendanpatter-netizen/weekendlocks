@@ -14,7 +14,7 @@ import { displayWeek } from "@/lib/weekLabel";
 import { formatLine } from "@/lib/pickLabel";
 import { computeLiveResult, type LiveResult } from "@/lib/liveResult";
 import { logoUri } from "@/lib/teamLogos";
-import LockIcon from "@/components/LockIcon";
+import LiveIcon from "@/components/LiveIcon";
 import TapeCorner from "@/components/TapeCorner";
 
 const POLL_MS = 20_000;
@@ -264,7 +264,7 @@ export default function LiveBoard({ groupId }: { groupId: string }) {
         accessibilityLabel={expanded ? "Collapse Live Board" : "Expand Live Board"}
       >
         <View style={styles.titleRow}>
-          <LockIcon size={17} color="#B23A2E" />
+          <LiveIcon size={17} color="#B23A2E" />
           <Text style={styles.cardTitle}>Live Board</Text>
           {anyLive && (
             <View style={styles.liveCountBadge}>
