@@ -1,24 +1,22 @@
-export const unstable_settings = { prerender: false };
-
+// components/LiveBoard.tsx
+// Embedded in the group dashboard instead of a separate page — opening the
+// group page at all is the "opt-in" signal that drives live-score polling
+// (see api/_lib/refreshLiveScores.js), so folding this in here just makes
+// that signal fire on a page people already have open, no extra click
+// needed. Collapses to a one-line teaser when nothing's actually live so
+// the dashboard isn't cluttered the other 5 days of the week, and expands
+// automatically the moment something kicks off.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useLocalSearchParams, router, Href } from "expo-router";
+import { Animated, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { getOpenWeek, type OpenWeek } from "@/lib/openWeek";
 import { displayWeek } from "@/lib/weekLabel";
 import { formatLine } from "@/lib/pickLabel";
 import { computeLiveResult, type LiveResult } from "@/lib/liveResult";
 import { logoUri } from "@/lib/teamLogos";
-import { colors as theme } from "@/lib/theme";
 import LockIcon from "@/components/LockIcon";
 import TapeCorner from "@/components/TapeCorner";
 
-// The Live Board pings this while it's open instead of relying on a cron —
-// Vercel's Hobby plan only allows once-a-day cron, and pinging only while
-// someone's actually watching is cheaper than a fixed schedule anyway
-// (nobody watching costs nothing). The server-side debounce means firing
-// this every 20s from every open tab still only spends Odds API credits
-// once per ~25s per league, not once per tab.
 const POLL_MS = 20_000;
 
 function getTeamLogo(name: string | null | undefined, sport: "nfl" | "ncaaf"): string | null {
@@ -32,10 +30,14 @@ type GameRow = {
   home_score: number | null; away_score: number | null; status: string;
 };
 type PickRow = {
-  id: string; user_id: string; display_name: string; sport: "nfl" | "cfb";
+  id: string; user_id: string; sport: "nfl" | "cfb";
   market: string; team: string | null; line: string | null; side: string | null;
   slot: number; game_id: number | null;
 };
+
+function gameStarted(g: GameRow): boolean {
+  return new Date(g.kickoff_at).getTime() <= Date.now();
+}
 
 function LiveDot() {
   const pulse = useRef(new Animated.Value(0.4)).current;
@@ -54,7 +56,7 @@ function LiveDot() {
 
 function LockCard({ pick, game }: { pick: PickRow; game: GameRow | null }) {
   const league: "nfl" | "ncaaf" = pick.sport === "nfl" ? "nfl" : "ncaaf";
-  const started = !!game && new Date(game.kickoff_at).getTime() <= Date.now();
+  const started = !!game && gameStarted(game);
   const isLive = started && game?.status !== "final";
   const isFinal = game?.status === "final";
   const result: LiveResult = game ? computeLiveResult(pick, game) : null;
@@ -109,10 +111,7 @@ function LockCard({ pick, game }: { pick: PickRow; game: GameRow | null }) {
   );
 }
 
-export default function LiveBoardPage() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
-  const groupId = useMemo(() => (Array.isArray(id) ? id?.[0] : id) ?? "", [id]);
-
+export default function LiveBoard({ groupId }: { groupId: string }) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [members, setMembers] = useState<Map<string, string>>(new Map());
   const [picks, setPicks] = useState<PickRow[]>([]);
@@ -121,6 +120,8 @@ export default function LiveBoardPage() {
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [nflWeek, setNflWeek] = useState<OpenWeek | null>(null);
   const [cfbWeek, setCfbWeek] = useState<OpenWeek | null>(null);
+  // null = follow live state automatically; true/false = the user overrode it.
+  const [manualExpanded, setManualExpanded] = useState<boolean | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setAccessToken(data.session?.access_token ?? null));
@@ -135,18 +136,18 @@ export default function LiveBoardPage() {
     const [{ data: gm }, nflPicks, cfbPicks] = await Promise.all([
       supabase.from("group_members").select("user_id").eq("group_id", groupId),
       nfl
-        ? supabase.from("picks_feed").select("id, user_id, display_name, market, team, line, side, slot, game_id")
+        ? supabase.from("picks_feed").select("id, user_id, market, team, line, side, slot, game_id")
             .eq("group_id", groupId).eq("sport", "nfl").eq("week", nfl.week)
         : Promise.resolve({ data: [] as any[] }),
       cfb
-        ? supabase.from("picks_feed").select("id, user_id, display_name, market, team, line, side, slot, game_id")
+        ? supabase.from("picks_feed").select("id, user_id, market, team, line, side, slot, game_id")
             .eq("group_id", groupId).eq("sport", "cfb").eq("week", cfb.week)
         : Promise.resolve({ data: [] as any[] }),
     ]);
 
     const rosterIds = (gm ?? []).map((r: any) => r.user_id as string);
-    // picks_feed only has a display_name for members who've already picked
-    // this week — a fresh week with nobody locked in yet needs the roster's
+    // picks_feed only has a name for members who've already picked this
+    // week — a fresh week with nobody locked in yet needs the roster's
     // names from profiles directly, same lookup the group dashboard uses.
     const { data: profs } = rosterIds.length
       ? await supabase.from("profiles").select("id, display_name, username").in("id", rosterIds)
@@ -221,88 +222,126 @@ export default function LiveBoardPage() {
     [members, picksByUser]
   );
 
+  const trackedGames = useMemo(
+    () => Array.from(new Set(picks.map((p) => p.game_id).filter((x): x is number => x != null)))
+      .map((id) => gamesById.get(id))
+      .filter((g): g is GameRow => !!g),
+    [picks, gamesById]
+  );
+  const liveCount = trackedGames.filter((g) => gameStarted(g) && g.status !== "final").length;
+  const anyLive = liveCount > 0;
+  const expanded = manualExpanded ?? anyLive;
+
+  const nextKickoff = useMemo(() => {
+    const upcoming = trackedGames
+      .filter((g) => !gameStarted(g))
+      .sort((a, b) => new Date(a.kickoff_at).getTime() - new Date(b.kickoff_at).getTime())[0];
+    return upcoming ? new Date(upcoming.kickoff_at) : null;
+  }, [trackedGames]);
+
   const secondsAgo = lastUpdated ? Math.max(0, Math.round((Date.now() - lastUpdated) / 1000)) : null;
 
+  const collapsedSubtitle = loading
+    ? "Loading…"
+    : memberRows.every((m) => m.picks.length === 0)
+    ? "No locks yet this week"
+    // Reachable only via manual override — anyLive normally forces expanded
+    // — but still needs to say so accurately rather than falling through to
+    // "graded" just because there's no game left to call "next."
+    : anyLive
+    ? `${liveCount} game${liveCount === 1 ? "" : "s"} live right now`
+    : nextKickoff
+    ? `Next kickoff ${nextKickoff.toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}`
+    : "This week's locks are graded";
+
   return (
-    <ScrollView style={styles.pageOuter} contentContainerStyle={styles.page}>
-      <View style={styles.pageHeader}>
-        <View style={styles.pageTitleRow}>
-          <LockIcon size={22} color="#F5F3E7" />
-          <Text style={styles.pageTitle}>Live Board</Text>
+    <View style={styles.card}>
+      <TapeCorner side="right" />
+      <Pressable
+        onPress={() => setManualExpanded(!expanded)}
+        style={styles.header}
+        accessibilityRole="button"
+        accessibilityLabel={expanded ? "Collapse Live Board" : "Expand Live Board"}
+      >
+        <View style={styles.titleRow}>
+          <LockIcon size={17} color="#B23A2E" />
+          <Text style={styles.cardTitle}>Live Board</Text>
+          {anyLive && (
+            <View style={styles.liveCountBadge}>
+              <LiveDot />
+              <Text style={styles.liveCountText}>{liveCount} live</Text>
+            </View>
+          )}
         </View>
-        <Pressable onPress={() => router.push(`/groups/${groupId}` as Href)} style={styles.backChip}>
-          <Text style={styles.backChipText}>Back to group</Text>
-        </Pressable>
-      </View>
+        <Text style={styles.chevron}>{expanded ? "▲" : "▼"}</Text>
+      </Pressable>
 
-      <Text style={styles.subheading}>
-        {nflWeek ? `NFL Week ${displayWeek(nflWeek.week)}` : "NFL not live"}
-        {"  ·  "}
-        {cfbWeek ? `CFB Week ${displayWeek(cfbWeek.week)}` : "CFB not live"}
-        {secondsAgo != null && `  ·  updated ${secondsAgo}s ago`}
-      </Text>
-
-      {loading ? (
-        <Text style={styles.emptyText}>Loading the board…</Text>
-      ) : memberRows.length === 0 ? (
-        <View style={styles.noLiveWeek}>
-          <TapeCorner />
-          <Text style={styles.noLiveWeekTitle}>No locks yet</Text>
-          <Text style={styles.noLiveWeekBody}>Once the crew locks in picks for a live week, they'll show up here.</Text>
-        </View>
+      {!expanded ? (
+        <Text style={styles.collapsedSubtitle}>{collapsedSubtitle}</Text>
       ) : (
-        memberRows.map((m) => (
-          <View key={m.user_id} style={styles.memberCard}>
-            <Text style={styles.memberName}>{m.display_name}</Text>
-            {m.picks.length === 0 ? (
-              <Text style={styles.noPickText}>No lock this week</Text>
-            ) : (
-              <View style={styles.lockRow}>
-                {m.picks.map((p) => (
-                  <LockCard key={p.id} pick={p} game={p.game_id ? gamesById.get(p.game_id) ?? null : null} />
-                ))}
-              </View>
-            )}
-          </View>
-        ))
+        <>
+          <Text style={styles.subheading}>
+            {nflWeek ? `NFL Week ${displayWeek(nflWeek.week)}` : "NFL not live"}
+            {"  ·  "}
+            {cfbWeek ? `CFB Week ${displayWeek(cfbWeek.week)}` : "CFB not live"}
+            {secondsAgo != null && `  ·  updated ${secondsAgo}s ago`}
+          </Text>
+
+          {loading ? (
+            <Text style={styles.empty}>Loading the board…</Text>
+          ) : memberRows.length === 0 ? (
+            <Text style={styles.empty}>No members yet.</Text>
+          ) : (
+            <View style={{ gap: 8, marginTop: 4 }}>
+              {memberRows.map((m) => (
+                <View key={m.user_id} style={styles.memberRow}>
+                  <Text style={styles.memberName}>{m.display_name}</Text>
+                  {m.picks.length === 0 ? (
+                    <Text style={styles.noPickText}>No lock this week</Text>
+                  ) : (
+                    <View style={styles.lockRow}>
+                      {m.picks.map((p) => (
+                        <LockCard key={p.id} pick={p} game={p.game_id ? gamesById.get(p.game_id) ?? null : null} />
+                      ))}
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
+        </>
       )}
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  pageOuter: { flex: 1, backgroundColor: theme.felt },
-  page: { padding: 16, gap: 12, paddingBottom: 24 },
-
-  pageHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
-  pageTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1 },
-  pageTitle: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 26, color: "#F5F3E7", flexShrink: 1 },
-  backChip: {
-    borderWidth: 1.5, borderColor: "rgba(245,243,231,0.4)", borderStyle: "dashed",
-    borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6,
+  card: {
+    backgroundColor: "#F5F3E7", borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)", borderStyle: "dashed",
+    borderRadius: 10, padding: 12, paddingTop: 16, gap: 4,
   },
-  backChipText: { color: "#F5F3E7", fontWeight: "800", fontSize: 12, letterSpacing: 0.3 },
-  subheading: { color: "rgba(245,243,231,0.75)", fontSize: 12, fontWeight: "700" },
-  emptyText: { color: "#F5F3E7", marginTop: 12 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 1, flexWrap: "wrap" },
+  cardTitle: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 20, color: "#B23A2E" },
+  chevron: { fontSize: 12, color: "#64748B" },
 
-  noLiveWeek: {
-    position: "relative", alignItems: "center", gap: 4, backgroundColor: "#F5F3E7",
-    borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)", borderStyle: "dashed", borderRadius: 10,
-    padding: 24, marginTop: 8,
+  liveCountBadge: {
+    flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#FEE2E2",
+    borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3,
   },
-  noLiveWeekTitle: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 18, color: "#B23A2E" },
-  noLiveWeekBody: { color: "#45564C", fontSize: 13, textAlign: "center", fontWeight: "700" },
+  liveCountText: { fontSize: 10, fontWeight: "800", color: "#991B1B", letterSpacing: 0.3 },
 
-  memberCard: {
-    backgroundColor: "#F5F3E7", borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)",
-    borderRadius: 12, padding: 12, gap: 8,
-  },
-  memberName: { fontWeight: "800", fontSize: 15, color: "#0C1712" },
+  collapsedSubtitle: { color: "#64748B", fontSize: 13, fontWeight: "600" },
+  subheading: { color: "#64748B", fontSize: 12, fontWeight: "700" },
+  empty: { paddingVertical: 8, color: "#64748B" },
+
+  memberRow: { gap: 6 },
+  memberName: { fontWeight: "800", fontSize: 14, color: "#0C1712" },
   noPickText: { color: "#94A3B8", fontSize: 13, fontStyle: "italic" },
   lockRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
 
   lockCard: {
-    flexGrow: 1, flexBasis: 220, minWidth: 200, borderRadius: 10, borderWidth: 1.5,
+    flexGrow: 1, flexBasis: 200, minWidth: 180, borderRadius: 10, borderWidth: 1.5,
     padding: 10, gap: 6,
   },
   lockCardPending: { backgroundColor: "#F8FAFC", borderColor: "#E2E8F0" },
