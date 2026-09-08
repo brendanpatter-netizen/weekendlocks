@@ -289,7 +289,7 @@ export default function CFBPicksPage() {
         <View style={styles.pageTitleRow}>
           <LockIcon size={22} color="#F5F3E7" />
           <Text style={styles.pageTitle}>
-            This Weekend's CFB Locks{openWeek ? ` — Week ${displayWeek(openWeek.week)}` : ""}
+            This Weekend's CFB Locks{openWeek ? ` — Week ${displayWeek(openWeek.week, "cfb")}` : ""}
           </Text>
         </View>
         <Pressable

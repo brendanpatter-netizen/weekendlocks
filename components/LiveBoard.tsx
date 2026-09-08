@@ -281,9 +281,9 @@ export default function LiveBoard({ groupId }: { groupId: string }) {
       ) : (
         <>
           <Text style={styles.subheading}>
-            {nflWeek ? `NFL Week ${displayWeek(nflWeek.week)}` : "NFL not live"}
+            {nflWeek ? `NFL Week ${displayWeek(nflWeek.week, "nfl")}` : "NFL not live"}
             {"  ·  "}
-            {cfbWeek ? `CFB Week ${displayWeek(cfbWeek.week)}` : "CFB not live"}
+            {cfbWeek ? `CFB Week ${displayWeek(cfbWeek.week, "cfb")}` : "CFB not live"}
             {secondsAgo != null && `  ·  updated ${secondsAgo}s ago`}
           </Text>
 

@@ -293,7 +293,7 @@ export default function NFLPicksPage() {
         <View style={styles.pageTitleRow}>
           <LockIcon size={22} color="#F5F3E7" />
           <Text style={styles.pageTitle}>
-            This Weekend's NFL Locks{openWeek ? ` — Week ${displayWeek(openWeek.week)}` : ""}
+            This Weekend's NFL Locks{openWeek ? ` — Week ${displayWeek(openWeek.week, "nfl")}` : ""}
           </Text>
         </View>
         <Pressable

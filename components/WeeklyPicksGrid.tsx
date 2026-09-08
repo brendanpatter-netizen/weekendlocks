@@ -127,7 +127,13 @@ export default function WeeklyPicksGrid({
 
             {weeks.map((week) => (
               <View key={week} style={[styles.row, styles.dataRow]}>
-                <View style={styles.weekCell}><Text style={styles.weekCellText}>Wk {displayWeek(week)}</Text></View>
+                {/* One row label covers both sports' cells even though NFL/CFB
+                    calendar weeks diverge (that's what the gap-week 2nd CFB
+                    lock is for) — kept on CFB's numbering, unchanged from
+                    before displayWeek became league-aware, since this shared
+                    label was always an approximation for one sport or the
+                    other and isn't the numbering that was reported wrong. */}
+                <View style={styles.weekCell}><Text style={styles.weekCellText}>Wk {displayWeek(week, "cfb")}</Text></View>
                 {members.map((m) => {
                   const cfb = grid.get(cellKey(m.user_id, "cfb", week, 1));
                   const nfl = grid.get(cellKey(m.user_id, "nfl", week, 1));
