@@ -6,7 +6,7 @@
 import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { supabase } from "@/lib/supabase";
-import { pickLabel } from "@/lib/pickLabel";
+import { pickLabel, matchupSuffix } from "@/lib/pickLabel";
 import { recordLabel, winPct, EMPTY_RECORD, type SeasonRecord } from "@/lib/records";
 import LockIcon from "@/components/LockIcon";
 import TapeCorner from "@/components/TapeCorner";
@@ -44,14 +44,11 @@ function buildWeekRows(weeksData: { league: string; week_num: number; opens_at: 
   return { rowCount: distinctOpensAt.length, rowForWeekNum };
 }
 
-// A totals pick's own label ("Under 59.5") doesn't say which game it's
-// for — unlike a spread/moneyline pick, where the team name IS the game.
-// Append the matchup so a totals cell isn't floating with no context.
 function cellLabel(p: { market: string; team: string | null; line: string | null }, game?: { home: string; away: string }): string | null {
   const base = pickLabel(p);
   if (!base) return null;
-  if (p.market === "totals" && game) return `${base}\n${game.away} @ ${game.home}`;
-  return base;
+  const suffix = matchupSuffix(p.market, game);
+  return suffix ? `${base}\n${suffix}` : base;
 }
 
 export default function WeeklyPicksGrid({

@@ -8,7 +8,7 @@ import { useLocalSearchParams, router, Href } from "expo-router";
 import { useOdds } from "@/lib/useOdds";
 import { supabase } from "@/lib/supabase";
 import { norm, matchupsLikelyMatch } from "@/lib/teamMatch";
-import { pickLabel } from "@/lib/pickLabel";
+import { pickLabel, matchupSuffix } from "@/lib/pickLabel";
 import { alert } from "@/lib/alert";
 import { getOpenWeek, type OpenWeek } from "@/lib/openWeek";
 import { displayWeek } from "@/lib/weekLabel";
@@ -332,6 +332,10 @@ export default function CFBPicksPage() {
           <Text style={styles.pickStatusText}>
             {saved ? "✓ Pick saved: " : isGapWeek ? `Lock #${activeSlot}: ` : "Your pick: "}
             {pickLabel(currentPick) ?? "none yet"}
+            {(() => {
+              const suffix = matchupSuffix(currentPick?.market ?? null, currentPickGame);
+              return suffix ? ` — ${suffix}` : "";
+            })()}
           </Text>
           {currentPick && (
             myPickStarted ? (

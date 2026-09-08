@@ -19,3 +19,12 @@ export function pickLabel(p: PickLike | null): string | null {
   if (p.market === "h2h") return `${p.team} ML`;
   return p.line ? `${p.team} ${formatLine(p.line)}` : p.team;
 }
+
+// A totals pick's own label ("Over +47.5") doesn't say which game it's
+// for — unlike a spread/moneyline pick, where the team name IS the game.
+// Every totals pick display needs the matchup appended; this is the one
+// place that decides when (only totals, only when the game is known).
+export function matchupSuffix(market: string | null, game?: { home: string; away: string } | null): string | null {
+  if (market !== "totals" || !game) return null;
+  return `${game.away} @ ${game.home}`;
+}
