@@ -7,7 +7,6 @@ import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { pickLabel } from "@/lib/pickLabel";
-import { displayWeek } from "@/lib/weekLabel";
 import { recordLabel, winPct, EMPTY_RECORD, type SeasonRecord } from "@/lib/records";
 import LockIcon from "@/components/LockIcon";
 import TapeCorner from "@/components/TapeCorner";
@@ -19,8 +18,30 @@ type Member = { user_id: string; display_name: string };
 const WEEK_COL_WIDTH = 56;
 const PICK_COL_WIDTH = 152;
 
-function cellKey(userId: string, sport: "nfl" | "cfb", week: number, slot: number) {
-  return `${userId}|${sport}|${week}|${slot}`;
+function cellKey(userId: string, sport: "nfl" | "cfb", row: number, slot: number) {
+  return `${userId}|${sport}|${row}|${slot}`;
+}
+
+// NFL and CFB number their own weeks independently — CFB starts about two
+// weeks earlier with its own "Week 0" slate, so week_num=1 for one sport
+// isn't the same real week as week_num=1 for the other (that mismatch used
+// to let a stale pre-season CFB gap-week pick collide with, and hide, a
+// brand-new NFL pick that happened to share the same raw week number).
+// The only thing that actually identifies "the same real week" across both
+// sports is a shared kickoff window, so rows are built from each league's
+// own weeks.opens_at rather than from week_num directly: every distinct
+// opens_at across both leagues gets one row, and a week from either sport
+// lands in the row whose date it shares — naturally landing NFL's Week 1
+// in the same row as CFB's Week 2, since both open the same day.
+function buildWeekRows(weeksData: { league: string; week_num: number; opens_at: string }[]) {
+  const distinctOpensAt = Array.from(new Set(weeksData.map((w) => w.opens_at))).sort();
+  const rowForOpensAt = new Map<string, number>(distinctOpensAt.map((d, i) => [d, i]));
+  const rowForWeekNum = new Map<string, number>(); // key: `${league}|${week_num}`
+  weeksData.forEach((w) => {
+    const row = rowForOpensAt.get(w.opens_at);
+    if (row != null) rowForWeekNum.set(`${w.league}|${w.week_num}`, row);
+  });
+  return { rowCount: distinctOpensAt.length, rowForWeekNum };
 }
 
 // A totals pick's own label ("Under 59.5") doesn't say which game it's
@@ -34,10 +55,11 @@ function cellLabel(p: { market: string; team: string | null; line: string | null
 }
 
 export default function WeeklyPicksGrid({
-  groupId, members, weekCount, refreshKey,
-}: { groupId: string; members: Member[]; weekCount: number; refreshKey: number | string }) {
+  groupId, members, refreshKey,
+}: { groupId: string; members: Member[]; refreshKey: number | string }) {
   const [grid, setGrid] = useState<Map<string, Cell>>(new Map());
   const [overall, setOverall] = useState<Map<string, SeasonRecord>>(new Map());
+  const [rowCount, setRowCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -53,19 +75,40 @@ export default function WeeklyPicksGrid({
 
       const gameIds = Array.from(new Set((picks ?? []).map((p: any) => p.game_id).filter(Boolean)));
       const { data: games } = gameIds.length
-        ? await supabase.from("games").select("id, home, away").in("id", gameIds)
+        ? await supabase.from("games").select("id, home, away, week_id").in("id", gameIds)
         : { data: [] as any[] };
       if (!mounted) return;
       const gameById = new Map((games ?? []).map((g: any) => [g.id, g]));
+
+      // weeks holds every season this app has ever seeded (test 2025 data
+      // included) — merging opens_at across seasons would scatter rows
+      // across a year of unrelated dates instead of one clean sequence for
+      // the season actually in play. Derive that season from the real
+      // games this group's picks reference; fall back to the current
+      // calendar year for a brand-new group with no picks yet, so the full
+      // season skeleton still renders before anyone's picked.
+      const weekIds = Array.from(new Set((games ?? []).map((g: any) => g.week_id).filter(Boolean)));
+      const { data: pickWeeksRows } = weekIds.length
+        ? await supabase.from("weeks").select("season").in("id", weekIds)
+        : { data: [] as any[] };
+      const seasons = Array.from(new Set((pickWeeksRows ?? []).map((w: any) => w.season)));
+      const season = seasons.length ? Math.max(...seasons) : new Date().getFullYear();
+
+      const { data: weeksData } = await supabase
+        .from("weeks").select("league, week_num, opens_at").eq("season", season).in("league", ["nfl", "cfb"]);
+      if (!mounted) return;
+      const { rowCount: rc, rowForWeekNum } = buildWeekRows((weeksData ?? []) as any[]);
 
       const resultByPickId = new Map<string, Result>((results ?? []).map((r: any) => [r.pick_id, r.result]));
       const map = new Map<string, Cell>();
       const recordAcc = new Map<string, SeasonRecord>();
 
       (picks ?? []).forEach((p: any) => {
+        const row = rowForWeekNum.get(`${p.sport}|${p.week}`);
+        if (row == null) return; // no matching weeks row (shouldn't happen with real data) — nothing sane to show it under
         const result = resultByPickId.get(p.id) ?? null;
         const label = cellLabel(p, gameById.get(p.game_id));
-        map.set(cellKey(p.user_id, p.sport, p.week, p.slot ?? 1), { label, result });
+        map.set(cellKey(p.user_id, p.sport, row, p.slot ?? 1), { label, result });
         if (result) {
           const cur = recordAcc.get(p.user_id) ?? { ...EMPTY_RECORD };
           if (result === "loss") cur.losses += 1;
@@ -76,12 +119,13 @@ export default function WeeklyPicksGrid({
 
       setGrid(map);
       setOverall(recordAcc);
+      setRowCount(rc);
       setLoading(false);
     })();
     return () => { mounted = false; };
   }, [groupId, refreshKey]);
 
-  const weeks = Array.from({ length: weekCount }, (_, i) => i + 1);
+  const weeks = Array.from({ length: rowCount }, (_, i) => i);
 
   return (
     <View style={styles.card}>
@@ -125,30 +169,25 @@ export default function WeeklyPicksGrid({
               ))}
             </View>
 
-            {weeks.map((week) => (
-              <View key={week} style={[styles.row, styles.dataRow]}>
-                {/* One row label covers both sports' cells even though NFL/CFB
-                    calendar weeks diverge (that's what the gap-week 2nd CFB
-                    lock is for) — kept on CFB's numbering, unchanged from
-                    before displayWeek became league-aware, since this shared
-                    label was always an approximation for one sport or the
-                    other and isn't the numbering that was reported wrong. */}
-                <View style={styles.weekCell}><Text style={styles.weekCellText}>Wk {displayWeek(week, "cfb")}</Text></View>
+            {weeks.map((row) => (
+              <View key={row} style={[styles.row, styles.dataRow]}>
+                {/* row is already a real-calendar-week index (see
+                    buildWeekRows) — CFB "owns" the numbering since it starts
+                    the timeline with its own Week 0, so this lines up with
+                    CFB's own displayed week number for every row CFB plays,
+                    and simply keeps counting for any NFL-only rows after
+                    CFB's season ends. */}
+                <View style={styles.weekCell}><Text style={styles.weekCellText}>Wk {row}</Text></View>
                 {members.map((m) => {
-                  const cfb = grid.get(cellKey(m.user_id, "cfb", week, 1));
-                  const nfl = grid.get(cellKey(m.user_id, "nfl", week, 1));
-                  // Weeks before the NFL season opens have no NFL pick to show —
-                  // fall back to a second CFB lock in that slot instead (the
-                  // "2 picks a week" gap-week rule from the picks page). CFB's
-                  // and NFL's week_num counters both start near 1 independently,
-                  // so a gap-week cfbLock2 (always made while NFL's season is
-                  // still fully closed — see isGapWeek in college.tsx) commonly
-                  // shares its raw week number with an early real NFL week once
-                  // the season opens, even though the two are months apart on
-                  // the calendar. When both exist for a row, the NFL pick is the
-                  // current, real one and must win the slot — a stale gap-week
-                  // lock displacing it was reported as "NFL picks aren't saving."
-                  const cfbLock2 = grid.get(cellKey(m.user_id, "cfb", week, 2));
+                  const cfb = grid.get(cellKey(m.user_id, "cfb", row, 1));
+                  const nfl = grid.get(cellKey(m.user_id, "nfl", row, 1));
+                  // The gap-week 2nd CFB lock (see isGapWeek in college.tsx)
+                  // only ever gets made for a row that has no concurrent NFL
+                  // week yet, so nfl and cfbLock2 should never both be set
+                  // for the same row now that rows are matched by real
+                  // calendar date rather than by raw week_num coincidence —
+                  // ?? here is just a defensive fallback, not load-bearing.
+                  const cfbLock2 = grid.get(cellKey(m.user_id, "cfb", row, 2));
                   const secondCell = nfl ?? cfbLock2;
                   const showingCfbLock2 = !nfl && !!cfbLock2;
                   return (

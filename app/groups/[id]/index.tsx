@@ -79,10 +79,6 @@ function formatWindow(w: OpenWeek): string {
   return `${formatDate(w.opensAt)} – ${formatDate(w.closesAt)}`;
 }
 
-// NFL runs 18 weeks, CFB 15 — one shared selector covers both; CFB just has
-// no games/picks in the trailing weeks, which shows as a normal empty state.
-const WEEK_COUNT = 18;
-
 export default function GroupDashboardPage() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const groupId = useMemo(() => (Array.isArray(id) ? id?.[0] : id) ?? "", [id]);
@@ -398,7 +394,6 @@ export default function GroupDashboardPage() {
           <WeeklyPicksGrid
             groupId={groupId}
             members={members.map((m) => ({ user_id: m.user_id, display_name: m.display_name }))}
-            weekCount={WEEK_COUNT}
             refreshKey={dataVersion}
           />
 
