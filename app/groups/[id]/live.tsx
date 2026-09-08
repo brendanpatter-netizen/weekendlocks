@@ -144,13 +144,23 @@ export default function LiveBoardPage() {
         : Promise.resolve({ data: [] as any[] }),
     ]);
 
-    const roster = new Map<string, string>();
-    (gm ?? []).forEach((r: any) => roster.set(r.user_id, r.user_id));
+    const rosterIds = (gm ?? []).map((r: any) => r.user_id as string);
+    // picks_feed only has a display_name for members who've already picked
+    // this week — a fresh week with nobody locked in yet needs the roster's
+    // names from profiles directly, same lookup the group dashboard uses.
+    const { data: profs } = rosterIds.length
+      ? await supabase.from("profiles").select("id, display_name, username").in("id", rosterIds)
+      : { data: [] as any[] };
+    const roster = new Map<string, string>(
+      rosterIds.map((uid) => {
+        const p = (profs ?? []).find((x: any) => x.id === uid);
+        return [uid, p?.username || p?.display_name || uid];
+      })
+    );
     const allPicks: PickRow[] = [
       ...(nflPicks.data ?? []).map((p: any) => ({ ...p, sport: "nfl" as const })),
       ...(cfbPicks.data ?? []).map((p: any) => ({ ...p, sport: "cfb" as const })),
     ];
-    allPicks.forEach((p) => roster.set(p.user_id, p.display_name));
     setMembers(roster);
     setPicks(allPicks);
 
