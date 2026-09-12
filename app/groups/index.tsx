@@ -37,6 +37,7 @@ type GroupPreview = {
   memberCount: number;
   leader: { name: string; record: SeasonRecord; logo: string | null } | null;
   needsPick: boolean;
+  waitingOn: string[];
 };
 
 // picks_feed.logoUri returns 'about:blank' when a name doesn't map to a
@@ -169,22 +170,28 @@ export default function GroupsIndex() {
           leaderLogo = lastPick ? pickLogo(lastPick.team, lastPick.sport) : null;
         }
 
+        // Fetched once for the whole roster (not just the viewer) so the
+        // card can show both "do I still need to pick" and "who in the
+        // group still needs to" from the same query.
         let needsPick = false;
-        if (rosterIds.includes(userId) && (nflWeek || cfbWeek)) {
-          const { data: myPicks } = await supabase
+        let waitingOn: string[] = [];
+        if (nflWeek || cfbWeek) {
+          const { data: weekPicks } = await supabase
             .from("picks")
-            .select("sport, week, slot")
-            .eq("group_id", g.id)
-            .eq("user_id", userId);
-          const has = (sport: string, week: number, slot: number) =>
-            (myPicks ?? []).some((p: any) => p.sport === sport && p.week === week && p.slot === slot);
-          if (isGapWeek && cfbWeek) {
-            needsPick = !has("cfb", cfbWeek.week, 1) || !has("cfb", cfbWeek.week, 2);
-          } else {
-            const needsNfl = !!nflWeek && !has("nfl", nflWeek.week, 1);
-            const needsCfb = !!cfbWeek && !has("cfb", cfbWeek.week, 1);
-            needsPick = needsNfl || needsCfb;
-          }
+            .select("user_id, sport, week, slot")
+            .eq("group_id", g.id);
+          const has = (uid: string, sport: string, week: number, slot: number) =>
+            (weekPicks ?? []).some((p: any) => p.user_id === uid && p.sport === sport && p.week === week && p.slot === slot);
+          const isMissing = (uid: string) => {
+            if (isGapWeek && cfbWeek) {
+              return !has(uid, "cfb", cfbWeek.week, 1) || !has(uid, "cfb", cfbWeek.week, 2);
+            }
+            const needsNfl = !!nflWeek && !has(uid, "nfl", nflWeek.week, 1);
+            const needsCfb = !!cfbWeek && !has(uid, "cfb", cfbWeek.week, 1);
+            return needsNfl || needsCfb;
+          };
+          needsPick = rosterIds.includes(userId) && isMissing(userId);
+          waitingOn = rosterIds.filter(isMissing).map((uid) => nameById.get(uid) ?? uid);
         }
 
         return [
@@ -194,6 +201,7 @@ export default function GroupsIndex() {
             memberCount: rosterIds.length,
             leader: leaderName ? { name: leaderName, record: leaderRecord, logo: leaderLogo } : null,
             needsPick,
+            waitingOn,
           },
         ] as const;
       })
@@ -407,6 +415,12 @@ export default function GroupsIndex() {
                     ) : (
                       <Text style={styles.leaderRecord}>No picks yet this season</Text>
                     )}
+                    {preview.waitingOn.length > 0 && (
+                      <Text style={styles.waitingLine} numberOfLines={1}>
+                        <Text style={styles.waitingLineLabel}>Waiting on </Text>
+                        {preview.waitingOn.join(", ")}
+                      </Text>
+                    )}
                   </View>
                 )}
               </Pressable>
@@ -532,6 +546,8 @@ const styles = StyleSheet.create({
   leaderLine: { flex: 1, flexDirection: "row", alignItems: "center", gap: 5, minWidth: 0 },
   leaderName: { fontSize: 13, fontWeight: "700", color: "#0C1712", flexShrink: 1 },
   leaderRecord: { fontSize: 12, color: "#45564C", fontWeight: "600" },
+  waitingLine: { fontSize: 11, color: "#8B876F", fontWeight: "600", marginTop: 2 },
+  waitingLineLabel: { fontWeight: "800", color: "#B23A2E", textTransform: "uppercase", letterSpacing: 0.2, fontSize: 10 },
   // White backing behind the logo — team logos assume a light background,
   // same treatment as the league logos in the group hero's pick CTAs.
   leaderLogoWrap: {
