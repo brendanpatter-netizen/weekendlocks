@@ -13,6 +13,7 @@ import { getOpenWeek, type OpenWeek } from "@/lib/openWeek";
 import { displayWeek } from "@/lib/weekLabel";
 import { formatLine } from "@/lib/pickLabel";
 import { computeLiveResult, type LiveResult } from "@/lib/liveResult";
+import { fetchGameClocks, findGameClock, type GameClock } from "@/lib/gameClock";
 import { logoUri } from "@/lib/teamLogos";
 import LiveIcon from "@/components/LiveIcon";
 import TapeCorner from "@/components/TapeCorner";
@@ -54,12 +55,15 @@ function LiveDot() {
   return <Animated.View style={[styles.liveDot, { opacity: pulse }]} />;
 }
 
-function LockCard({ pick, game }: { pick: PickRow; game: GameRow | null }) {
+function LockCard({ pick, game, clocks }: { pick: PickRow; game: GameRow | null; clocks: GameClock[] }) {
   const league: "nfl" | "ncaaf" = pick.sport === "nfl" ? "nfl" : "ncaaf";
   const started = !!game && gameStarted(game);
   const isLive = started && game?.status !== "final";
   const isFinal = game?.status === "final";
   const result: LiveResult = game ? computeLiveResult(pick, game) : null;
+  // ESPN-only, and unofficial — see lib/gameClock.ts. No match (or the fetch
+  // having failed entirely) just means no clock line, never a broken card.
+  const clock = isLive && game ? findGameClock(clocks, game.home, game.away, pick.sport) : null;
 
   const cardStyle =
     result === "winning" ? styles.lockCardWin
@@ -76,7 +80,7 @@ function LockCard({ pick, game }: { pick: PickRow; game: GameRow | null }) {
         {isLive && (
           <View style={styles.liveBadge}>
             <LiveDot />
-            <Text style={styles.liveBadgeText}>LIVE</Text>
+            <Text style={styles.liveBadgeText}>{clock?.label || "LIVE"}</Text>
           </View>
         )}
         {isFinal && (
@@ -120,6 +124,8 @@ export default function LiveBoard({ groupId }: { groupId: string }) {
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [nflWeek, setNflWeek] = useState<OpenWeek | null>(null);
   const [cfbWeek, setCfbWeek] = useState<OpenWeek | null>(null);
+  const [nflClocks, setNflClocks] = useState<GameClock[]>([]);
+  const [cfbClocks, setCfbClocks] = useState<GameClock[]>([]);
   // null = follow live state automatically; true/false = the user overrode it.
   const [manualExpanded, setManualExpanded] = useState<boolean | null>(null);
 
@@ -190,20 +196,34 @@ export default function LiveBoard({ groupId }: { groupId: string }) {
     }
   }, [accessToken]);
 
+  // Separate, free, uncredited source (see lib/gameClock.ts) — a failure
+  // here just leaves the previous clocks in place rather than blocking the
+  // score refresh above, since the two have nothing to do with each other.
+  const loadClocks = useCallback(async () => {
+    try {
+      const [nfl, cfb] = await Promise.all([fetchGameClocks("nfl"), fetchGameClocks("cfb")]);
+      setNflClocks(nfl);
+      setCfbClocks(cfb);
+    } catch {
+      // best-effort — cards just show "LIVE" instead of a quarter/clock
+    }
+  }, []);
+
   useEffect(() => {
     load();
-  }, [load]);
+    loadClocks();
+  }, [load, loadClocks]);
 
   useEffect(() => {
     if (!accessToken) return;
     let cancelled = false;
     const tick = async () => {
-      await pingLiveScores();
+      await Promise.all([pingLiveScores(), loadClocks()]);
       if (!cancelled) await load();
     };
     const interval = setInterval(tick, POLL_MS);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [accessToken, pingLiveScores, load]);
+  }, [accessToken, pingLiveScores, loadClocks, load]);
 
   const picksByUser = useMemo(() => {
     const map = new Map<string, PickRow[]>();
@@ -301,7 +321,12 @@ export default function LiveBoard({ groupId }: { groupId: string }) {
                   ) : (
                     <View style={styles.lockRow}>
                       {m.picks.map((p) => (
-                        <LockCard key={p.id} pick={p} game={p.game_id ? gamesById.get(p.game_id) ?? null : null} />
+                        <LockCard
+                          key={p.id}
+                          pick={p}
+                          game={p.game_id ? gamesById.get(p.game_id) ?? null : null}
+                          clocks={p.sport === "nfl" ? nflClocks : cfbClocks}
+                        />
                       ))}
                     </View>
                   )}
