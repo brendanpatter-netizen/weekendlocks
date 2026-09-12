@@ -52,7 +52,11 @@ export default function Home() {
           content="Pick your best NFL or college football lock every weekend. Create groups, compete with friends, build winning streaks, and climb the leaderboard."
         />
         <meta property="og:type" content="website" />
-        <meta name="twitter:card" content="summary" />
+        <meta property="og:image" content="https://weekendlocks.com/og-image.png" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:image" content="https://weekendlocks.com/og-image.png" />
       </Head>
       <View style={styles.hero}>
         <View style={styles.logoRow}>
@@ -102,7 +106,10 @@ export default function Home() {
         <TapeCorner />
         <View style={styles.leaderHeader}>
           <ChartIcon size={16} color={theme.brand} />
-          <Text style={styles.leaderHeaderText}>This week in "The Boys"</Text>
+          <Text style={styles.leaderHeaderText}>What your group's board looks like</Text>
+          <View style={styles.exampleChip}>
+            <Text style={styles.exampleChipText}>Example</Text>
+          </View>
         </View>
         <View style={[styles.leaderRow, styles.leaderRowHead]}>
           <Text style={[styles.leaderCellHead, { flex: 1.6 }]}>Member</Text>
@@ -211,7 +218,12 @@ const styles = StyleSheet.create({
     borderRadius: 10, padding: 16, paddingTop: 20,
   },
   leaderHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
-  leaderHeaderText: { fontSize: 12, color: "#45564C", fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.3 },
+  leaderHeaderText: { flex: 1, fontSize: 12, color: "#45564C", fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.3 },
+  exampleChip: {
+    borderWidth: 1, borderColor: "rgba(12,23,18,0.25)", borderStyle: "dashed",
+    borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2,
+  },
+  exampleChipText: { fontSize: 10, color: "#8B876F", fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.3 },
 
   leaderRow: {
     flexDirection: "row", alignItems: "center", paddingVertical: 10,
