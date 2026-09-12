@@ -116,6 +116,11 @@ export default function GroupDashboardPage() {
   // Bumped on every load so WeeklyPicksGrid (which fetches its own,
   // season-wide data) knows to refetch too.
   const [dataVersion, setDataVersion] = useState(0);
+  // Members who haven't completed this week's required picks yet — same
+  // gap-week rule (two CFB locks instead of one CFB + one NFL) as the
+  // groups list's own per-viewer "Picks open" nudge, just computed for the
+  // whole roster instead of just the current viewer.
+  const [waitingOn, setWaitingOn] = useState<string[]>([]);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? null));
@@ -201,6 +206,35 @@ export default function GroupDashboardPage() {
     loadDashboard(() => alive);
     return () => { alive = false; };
   }, [groupId]);
+
+  useEffect(() => {
+    if (!groupId || members.length === 0) { setWaitingOn([]); return; }
+    if (nflOpenWeek === undefined || cfbOpenWeek === undefined) return; // still resolving
+    if (!nflOpenWeek && !cfbOpenWeek) { setWaitingOn([]); return; }
+    let mounted = true;
+    (async () => {
+      const { data: picks } = await supabase
+        .from("picks")
+        .select("user_id, sport, week, slot")
+        .eq("group_id", groupId);
+      if (!mounted) return;
+      const isGapWeek = !!cfbOpenWeek && !nflOpenWeek;
+      const has = (uid: string, sport: string, week: number, slot: number) =>
+        (picks ?? []).some((p: any) => p.user_id === uid && p.sport === sport && p.week === week && p.slot === slot);
+      const missing = members
+        .filter((m) => {
+          if (isGapWeek && cfbOpenWeek) {
+            return !has(m.user_id, "cfb", cfbOpenWeek.week, 1) || !has(m.user_id, "cfb", cfbOpenWeek.week, 2);
+          }
+          const needsNfl = !!nflOpenWeek && !has(m.user_id, "nfl", nflOpenWeek.week, 1);
+          const needsCfb = !!cfbOpenWeek && !has(m.user_id, "cfb", cfbOpenWeek.week, 1);
+          return needsNfl || needsCfb;
+        })
+        .map((m) => m.display_name);
+      setWaitingOn(missing);
+    })();
+    return () => { mounted = false; };
+  }, [groupId, members, nflOpenWeek, cfbOpenWeek, dataVersion]);
 
   const inviteLink = inviteCode ? `https://weekendlocks.com/groups/join?code=${inviteCode}` : null;
 
@@ -318,6 +352,15 @@ export default function GroupDashboardPage() {
           </View>
         </View>
       </View>
+
+      {waitingOn.length > 0 && (
+        <View style={styles.waitingBanner}>
+          <Text style={styles.waitingBannerText}>
+            <Text style={styles.waitingBannerLabel}>Waiting on: </Text>
+            {waitingOn.join(", ")}
+          </Text>
+        </View>
+      )}
 
       {inviteCode && (
         <View style={styles.inviteRow}>
@@ -476,6 +519,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5, textAlign: "center", textTransform: "uppercase", lineHeight: 46,
   },
   heroSubtitle: { fontSize: 13, color: "rgba(245,243,231,0.7)", marginBottom: 18, textAlign: "center", fontWeight: "700" },
+
+  // Same chalk-paper/dashed-marker-red language as the groups list's own
+  // per-viewer "Picks open" corner badge — this is the group-wide version,
+  // so it's a full banner (can name several people) instead of a badge.
+  waitingBanner: {
+    backgroundColor: "#F5F3E7", borderWidth: 1.5, borderColor: "#B23A2E", borderStyle: "dashed",
+    borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14,
+  },
+  waitingBannerText: { fontSize: 13, color: "#0C1712", fontWeight: "600" },
+  waitingBannerLabel: { fontWeight: "800", color: "#B23A2E", textTransform: "uppercase", letterSpacing: 0.3, fontSize: 12 },
 
   inviteRow: {
     flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#F5F3E7",

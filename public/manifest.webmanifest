@@ -1,0 +1,13 @@
+{
+  "name": "WeekendLocks",
+  "short_name": "WeekendLocks",
+  "description": "Weekly NFL and college football picks with your crew.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#063D31",
+  "theme_color": "#063D31",
+  "icons": [
+    { "src": "/icon.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" },
+    { "src": "/icon.png", "sizes": "1024x1024", "type": "image/png", "purpose": "maskable" }
+  ]
+}

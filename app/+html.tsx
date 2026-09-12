@@ -19,6 +19,15 @@ export default function Root({ children }: PropsWithChildren) {
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+        {/* PWA install polish — Metro's static web export doesn't generate
+            a manifest or theme-color tag from app.json's web config on its
+            own (verified: neither appears in the build output), so both are
+            hand-added here instead. Felt green matches the board background
+            that's already the app's default first paint, so "Add to Home
+            Screen" doesn't introduce a color the app doesn't already use. */}
+        <meta name="theme-color" content="#063D31" />
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <link rel="apple-touch-icon" href="/icon.png" />
         {/* Mirrors the react-native-web recommended style reset Expo's
             default (uncustomized) shell applies — see necolas.github.io/react-native-web/docs/setup/#root-element */}
         <style id="expo-reset">{`
