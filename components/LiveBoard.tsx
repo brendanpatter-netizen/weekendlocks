@@ -131,6 +131,14 @@ export default function LiveBoard({ groupId }: { groupId: string }) {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setAccessToken(data.session?.access_token ?? null));
+    // getSession() alone only captures the token present at mount — the
+    // client rotates it in the background (autoRefreshToken), and without
+    // this listener the stale original token silently 401s once it expires,
+    // freezing pingLiveScores forever with no visible error.
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAccessToken(session?.access_token ?? null);
+    });
+    return () => sub.subscription.unsubscribe();
   }, []);
 
   const load = useCallback(async () => {
