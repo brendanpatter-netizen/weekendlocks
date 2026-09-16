@@ -381,42 +381,44 @@ export default function GroupsIndex() {
 
                 {preview && preview.members.length > 0 && (
                   <View style={styles.rowPreview}>
-                    <View style={styles.cluster}>
-                      {preview.members.map((m, i) => {
-                        const c = avatarColor(m.id);
-                        return (
-                          <View
-                            key={m.id}
-                            style={[styles.clusterAvatar, { backgroundColor: c.bg, marginLeft: i === 0 ? 0 : -8 }]}
-                          >
-                            <Text style={[styles.clusterAvatarText, { color: c.fg }]}>{initials(m.name)}</Text>
-                          </View>
-                        );
-                      })}
-                      {overflow > 0 && (
-                        <View style={[styles.clusterAvatar, styles.clusterOverflow, { marginLeft: -8 }]}>
-                          <Text style={styles.clusterOverflowText}>+{overflow}</Text>
-                        </View>
-                      )}
-                    </View>
-                    {preview.leader && leaderLabel ? (
-                      <View style={styles.leaderLine}>
-                        <TrophyIcon size={13} color="#B23A2E" />
-                        <Text style={styles.leaderName} numberOfLines={1}>{preview.leader.name}</Text>
-                        <Text style={styles.leaderRecord}>
-                          {leaderLabel}{winPct(preview.leader.record) ? ` · ${winPct(preview.leader.record)}` : ""}
-                        </Text>
-                        {!!preview.leader.logo && (
-                          <View style={styles.leaderLogoWrap}>
-                            <Image source={{ uri: preview.leader.logo }} style={styles.leaderLogo} resizeMode="contain" />
+                    <View style={styles.rowPreviewTop}>
+                      <View style={styles.cluster}>
+                        {preview.members.map((m, i) => {
+                          const c = avatarColor(m.id);
+                          return (
+                            <View
+                              key={m.id}
+                              style={[styles.clusterAvatar, { backgroundColor: c.bg, marginLeft: i === 0 ? 0 : -8 }]}
+                            >
+                              <Text style={[styles.clusterAvatarText, { color: c.fg }]}>{initials(m.name)}</Text>
+                            </View>
+                          );
+                        })}
+                        {overflow > 0 && (
+                          <View style={[styles.clusterAvatar, styles.clusterOverflow, { marginLeft: -8 }]}>
+                            <Text style={styles.clusterOverflowText}>+{overflow}</Text>
                           </View>
                         )}
                       </View>
-                    ) : (
-                      <Text style={styles.leaderRecord}>No picks yet this season</Text>
-                    )}
+                      {preview.leader && leaderLabel ? (
+                        <View style={styles.leaderLine}>
+                          <TrophyIcon size={13} color="#B23A2E" />
+                          <Text style={styles.leaderName} numberOfLines={1}>{preview.leader.name}</Text>
+                          <Text style={styles.leaderRecord} numberOfLines={1}>
+                            {leaderLabel}{winPct(preview.leader.record) ? ` · ${winPct(preview.leader.record)}` : ""}
+                          </Text>
+                          {!!preview.leader.logo && (
+                            <View style={styles.leaderLogoWrap}>
+                              <Image source={{ uri: preview.leader.logo }} style={styles.leaderLogo} resizeMode="contain" />
+                            </View>
+                          )}
+                        </View>
+                      ) : (
+                        <Text style={styles.leaderRecord}>No picks yet this season</Text>
+                      )}
+                    </View>
                     {preview.waitingOn.length > 0 && (
-                      <Text style={styles.waitingLine} numberOfLines={1}>
+                      <Text style={styles.waitingLine} numberOfLines={2}>
                         <Text style={styles.waitingLineLabel}>Waiting on </Text>
                         {preview.waitingOn.join(", ")}
                       </Text>
@@ -524,14 +526,17 @@ const styles = StyleSheet.create({
   // Board preview: member avatar cluster + the current standings leader —
   // reason to glance at the list itself, not just a router to click through.
   rowPreview: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
     marginTop: 10,
     paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: "rgba(12,23,18,0.12)",
+    gap: 4,
   },
+  // Cluster + leader stay on one row on wide screens; on a narrow phone
+  // width there isn't room for both plus the "Waiting on" line, so that
+  // line lives outside this row entirely (see rowPreview) instead of
+  // squeezing in beside them and getting clipped.
+  rowPreviewTop: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap", rowGap: 4 },
   cluster: { flexDirection: "row", alignItems: "center" },
   clusterAvatar: {
     width: 24, height: 24, borderRadius: 999, alignItems: "center", justifyContent: "center",
