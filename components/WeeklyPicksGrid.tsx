@@ -33,15 +33,36 @@ function cellKey(userId: string, sport: "nfl" | "cfb", row: number, slot: number
 // opens_at across both leagues gets one row, and a week from either sport
 // lands in the row whose date it shares — naturally landing NFL's Week 1
 // in the same row as CFB's Week 2, since both open the same day.
+//
+// Grouped by proximity rather than exact equality: a week row can get
+// auto-created from a live schedule sync (ensure_week_row, keyed off one
+// game's kickoff) instead of the clean seed migration, which can leave its
+// opens_at a few hours or days off the aligned boundary the other league
+// uses for the same real week (this happened once — see the 2026-09-16
+// migration). Exact-match grouping would silently split that week into its
+// own row instead of merging it; two real distinct weeks are always ~7 days
+// apart, so a tolerance well under that only ever absorbs that kind of
+// drift, never merges genuinely different weeks.
+const ROW_GROUP_TOLERANCE_MS = 3 * 24 * 60 * 60 * 1000;
 function buildWeekRows(weeksData: { league: string; week_num: number; opens_at: string }[]) {
-  const distinctOpensAt = Array.from(new Set(weeksData.map((w) => w.opens_at))).sort();
-  const rowForOpensAt = new Map<string, number>(distinctOpensAt.map((d, i) => [d, i]));
+  const sortedOpensAt = Array.from(new Set(weeksData.map((w) => w.opens_at))).sort();
+  const rowForOpensAt = new Map<string, number>();
+  let rowIndex = -1;
+  let rowAnchorMs = -Infinity;
+  for (const d of sortedOpensAt) {
+    const t = new Date(d).getTime();
+    if (t - rowAnchorMs > ROW_GROUP_TOLERANCE_MS) {
+      rowIndex++;
+      rowAnchorMs = t;
+    }
+    rowForOpensAt.set(d, rowIndex);
+  }
   const rowForWeekNum = new Map<string, number>(); // key: `${league}|${week_num}`
   weeksData.forEach((w) => {
     const row = rowForOpensAt.get(w.opens_at);
     if (row != null) rowForWeekNum.set(`${w.league}|${w.week_num}`, row);
   });
-  return { rowCount: distinctOpensAt.length, rowForWeekNum };
+  return { rowCount: rowIndex + 1, rowForWeekNum };
 }
 
 function cellLabel(p: { market: string; team: string | null; line: string | null }, game?: { home: string; away: string }): string | null {
