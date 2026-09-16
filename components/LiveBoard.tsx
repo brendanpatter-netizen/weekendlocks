@@ -9,7 +9,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { supabase } from "@/lib/supabase";
-import { getOpenWeek, type OpenWeek } from "@/lib/openWeek";
+import { getOpenOrRecentWeek, type OpenWeek } from "@/lib/openWeek";
 import { displayWeek } from "@/lib/weekLabel";
 import { formatLine } from "@/lib/pickLabel";
 import { computeLiveResult, type LiveResult } from "@/lib/liveResult";
@@ -143,7 +143,7 @@ export default function LiveBoard({ groupId }: { groupId: string }) {
 
   const load = useCallback(async () => {
     if (!groupId) return;
-    const [nfl, cfb] = await Promise.all([getOpenWeek("nfl"), getOpenWeek("cfb")]);
+    const [nfl, cfb] = await Promise.all([getOpenOrRecentWeek("nfl"), getOpenOrRecentWeek("cfb")]);
     setNflWeek(nfl);
     setCfbWeek(cfb);
 
