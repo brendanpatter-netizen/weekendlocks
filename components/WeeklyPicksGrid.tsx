@@ -4,7 +4,7 @@
 // before the app existed. Reloads whenever `refreshKey` changes, which the
 // dashboard bumps after every load and after "Refresh scores".
 import { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { pickLabel, matchupSuffix } from "@/lib/pickLabel";
 import { recordLabel, winPct, EMPTY_RECORD, type SeasonRecord } from "@/lib/records";
@@ -12,8 +12,14 @@ import LockIcon from "@/components/LockIcon";
 import TapeCorner from "@/components/TapeCorner";
 
 type Result = "win" | "loss" | "push" | null;
-type Cell = { label: string | null; result: Result };
+type GameInfo = { home: string; away: string; home_score: number | null; away_score: number | null; status: string };
+type Cell = {
+  label: string | null; result: Result;
+  pick: { market: string; team: string | null; line: string | null } | null;
+  game: GameInfo | null;
+};
 type Member = { user_id: string; display_name: string };
+type OpenCell = { memberName: string; weekLabel: string; cell: Cell };
 
 const WEEK_COL_WIDTH = 56;
 const PICK_COL_WIDTH = 152;
@@ -79,6 +85,7 @@ export default function WeeklyPicksGrid({
   const [overall, setOverall] = useState<Map<string, SeasonRecord>>(new Map());
   const [rowCount, setRowCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [openCell, setOpenCell] = useState<OpenCell | null>(null);
 
   useEffect(() => {
     if (!groupId) return;
@@ -93,7 +100,7 @@ export default function WeeklyPicksGrid({
 
       const gameIds = Array.from(new Set((picks ?? []).map((p: any) => p.game_id).filter(Boolean)));
       const { data: games } = gameIds.length
-        ? await supabase.from("games").select("id, home, away, week_id").in("id", gameIds)
+        ? await supabase.from("games").select("id, home, away, week_id, home_score, away_score, status").in("id", gameIds)
         : { data: [] as any[] };
       if (!mounted) return;
       const gameById = new Map((games ?? []).map((g: any) => [g.id, g]));
@@ -125,8 +132,13 @@ export default function WeeklyPicksGrid({
         const row = rowForWeekNum.get(`${p.sport}|${p.week}`);
         if (row == null) return; // no matching weeks row (shouldn't happen with real data) — nothing sane to show it under
         const result = resultByPickId.get(p.id) ?? null;
-        const label = cellLabel(p, gameById.get(p.game_id));
-        map.set(cellKey(p.user_id, p.sport, row, p.slot ?? 1), { label, result });
+        const game = gameById.get(p.game_id) ?? null;
+        const label = cellLabel(p, game);
+        map.set(cellKey(p.user_id, p.sport, row, p.slot ?? 1), {
+          label, result,
+          pick: { market: p.market, team: p.team, line: p.line },
+          game: game ? { home: game.home, away: game.away, home_score: game.home_score, away_score: game.away_score, status: game.status } : null,
+        });
         if (result) {
           const cur = recordAcc.get(p.user_id) ?? { ...EMPTY_RECORD };
           if (result === "loss") cur.losses += 1;
@@ -208,10 +220,11 @@ export default function WeeklyPicksGrid({
                   const cfbLock2 = grid.get(cellKey(m.user_id, "cfb", row, 2));
                   const secondCell = nfl ?? cfbLock2;
                   const showingCfbLock2 = !nfl && !!cfbLock2;
+                  const weekLabel = `Wk ${row}`;
                   return (
                     <View key={m.user_id} style={{ flexDirection: "row" }}>
-                      <PickCell cell={cfb} />
-                      <PickCell cell={secondCell} isSecondCfbLock={showingCfbLock2} />
+                      <PickCell cell={cfb} onOpen={() => cfb && setOpenCell({ memberName: m.display_name, weekLabel, cell: cfb })} />
+                      <PickCell cell={secondCell} isSecondCfbLock={showingCfbLock2} onOpen={() => secondCell && setOpenCell({ memberName: m.display_name, weekLabel, cell: secondCell })} />
                     </View>
                   );
                 })}
@@ -236,22 +249,79 @@ export default function WeeklyPicksGrid({
           </View>
         </ScrollView>
       )}
+      <ScorePunchOut open={openCell} onClose={() => setOpenCell(null)} />
     </View>
   );
 }
 
-function PickCell({ cell, isSecondCfbLock }: { cell?: Cell; isSecondCfbLock?: boolean }) {
+function PickCell({ cell, isSecondCfbLock, onOpen }: { cell?: Cell; isSecondCfbLock?: boolean; onOpen: () => void }) {
   if (!cell || !cell.label) {
     return <View style={[styles.pickCell, styles.cellEmpty]}><Text style={styles.cellEmptyText}>—</Text></View>;
   }
   const resultStyle = cell.result === "loss" ? styles.cellLoss : cell.result ? styles.cellWin : styles.cellPending;
+  // Only a graded (final) game has a score worth punching out to show —
+  // a pending pick's cell just isn't tappable yet.
+  const isFinal = cell.game?.status === "final";
   return (
-    <View style={[styles.pickCell, resultStyle]}>
+    <Pressable
+      disabled={!isFinal}
+      onPress={onOpen}
+      style={({ pressed }) => [styles.pickCell, resultStyle, isFinal && pressed && styles.pickCellPressed]}
+      hitSlop={4}
+    >
       {isSecondCfbLock && (
         <View style={styles.secondLockBadge}><Text style={styles.secondLockBadgeText}>2</Text></View>
       )}
       <Text style={styles.cellText}>{cell.label}</Text>
-    </View>
+    </Pressable>
+  );
+}
+
+function ScorePunchOut({ open, onClose }: { open: OpenCell | null; onClose: () => void }) {
+  if (!open) return null;
+  const { memberName, weekLabel, cell } = open;
+  const game = cell.game;
+  const pickText = cell.pick ? pickLabel(cell.pick) : null;
+  const resultLabel = cell.result === "win" ? "Won" : cell.result === "loss" ? "Lost" : cell.result === "push" ? "Push" : null;
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.modalBackdrop} onPress={onClose}>
+        <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+          <TapeCorner />
+          <Text style={styles.modalEyebrow}>{memberName} · {weekLabel}</Text>
+          {game && (
+            <View style={styles.modalMatchup}>
+              <View style={styles.modalTeamRow}>
+                <Text style={styles.modalTeamName} numberOfLines={1}>{game.away}</Text>
+                <Text style={styles.modalTeamScore}>{game.away_score ?? "–"}</Text>
+              </View>
+              <View style={styles.modalTeamRow}>
+                <Text style={styles.modalTeamName} numberOfLines={1}>{game.home}</Text>
+                <Text style={styles.modalTeamScore}>{game.home_score ?? "–"}</Text>
+              </View>
+            </View>
+          )}
+          {pickText && (
+            <Text style={styles.modalPickText}>
+              Pick: <Text style={styles.modalPickTextBold}>{pickText}</Text>
+              {cell.pick?.market === "totals" && game ? ` (${game.away} @ ${game.home})` : ""}
+            </Text>
+          )}
+          {resultLabel && (
+            <Text style={[
+              styles.modalResult,
+              cell.result === "win" && styles.modalResultWin,
+              cell.result === "loss" && styles.modalResultLoss,
+            ]}>
+              {resultLabel}
+            </Text>
+          )}
+          <Pressable style={styles.modalCloseBtn} onPress={onClose}>
+            <Text style={styles.modalCloseBtnText}>Close</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -302,9 +372,32 @@ const styles = StyleSheet.create({
   cellPending: { backgroundColor: "#F1F5F9" },
   cellEmpty: { backgroundColor: "transparent" },
   cellEmptyText: { fontSize: 12, color: "#CBD5E1" },
+  pickCellPressed: { opacity: 0.6 },
 
   overallCell: { width: PICK_COL_WIDTH * 2, alignItems: "center", justifyContent: "center", paddingVertical: 8, marginLeft: 1 },
   overallLabel: { fontSize: 12, fontWeight: "800", color: "#0F172A" },
   overallRecordText: { fontSize: 13, fontWeight: "800", color: "#0F172A" },
   overallPctText: { fontSize: 11, color: "#64748B" },
+
+  // The "punch out" — a chalk-paper card matching the group dashboard's own
+  // modal-less card language, just centered over a dimmed backdrop instead
+  // of living in the page flow.
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(6,20,15,0.55)", alignItems: "center", justifyContent: "center", padding: 20 },
+  modalCard: {
+    position: "relative", width: "100%", maxWidth: 320, backgroundColor: "#F5F3E7",
+    borderWidth: 1.5, borderColor: "rgba(12,23,18,0.18)", borderStyle: "dashed",
+    borderRadius: 12, padding: 18, gap: 10,
+  },
+  modalEyebrow: { fontSize: 11, fontWeight: "800", color: "#64748B", textTransform: "uppercase", letterSpacing: 0.4 },
+  modalMatchup: { gap: 4 },
+  modalTeamRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  modalTeamName: { flex: 1, fontSize: 15, fontWeight: "700", color: "#0C1712" },
+  modalTeamScore: { fontSize: 18, fontWeight: "800", color: "#0C1712" },
+  modalPickText: { fontSize: 13, color: "#45564C" },
+  modalPickTextBold: { fontWeight: "800", color: "#0C1712" },
+  modalResult: { fontSize: 13, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.4, color: "#64748B" },
+  modalResultWin: { color: "#166534" },
+  modalResultLoss: { color: "#991B1B" },
+  modalCloseBtn: { alignSelf: "flex-end", marginTop: 4, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 999, backgroundColor: "rgba(12,23,18,0.08)" },
+  modalCloseBtnText: { fontSize: 12, fontWeight: "700", color: "#45564C" },
 });
