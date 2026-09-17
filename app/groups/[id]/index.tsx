@@ -414,7 +414,13 @@ export default function GroupDashboardPage() {
                       <Text style={styles.rankText}>{index + 1}</Text>
                       <View style={styles.userCell}>
                         <Text style={styles.userName} numberOfLines={1}>{item.display_name}</Text>
-                        {vibe && <Text style={styles.vibeChip}>{vibe}</Text>}
+                        {vibe && (
+                          <View style={[styles.vibeChip, vibe.tone === "hot" ? styles.vibeChipHot : styles.vibeChipCold]}>
+                            <Text style={[styles.vibeChipText, vibe.tone === "hot" ? styles.vibeChipTextHot : styles.vibeChipTextCold]}>
+                              {vibe.label}
+                            </Text>
+                          </View>
+                        )}
                       </View>
                       <View style={styles.overallCell}>
                         <Text style={styles.overallRecord}>{overallRec ?? "—"}</Text>
@@ -600,7 +606,20 @@ const styles = StyleSheet.create({
   rankText: { width: 22, fontWeight: "800", fontSize: 13, color: "#64748B" }, // was #94A3B8 (2.56:1) — failed WCAG AA
   userCell: { flex: 1.6, flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0 },
   userName: { fontWeight: "700", flexShrink: 1 },
-  vibeChip: { fontSize: 11, fontWeight: "700", color: "#64748B", marginLeft: 2 },
+  // Same dashed hand-marked pill language as waitingBanner/inviteRow, just
+  // sized as an inline chip next to a name — ink color is the only thing
+  // that changes between "hot" and "cold" (see The Two-Voice Rule), no
+  // emoji, matching how every other icon in the product is hand-authored
+  // rather than borrowed from the system font's emoji set.
+  vibeChip: {
+    borderWidth: 1.5, borderStyle: "dashed", borderRadius: 999,
+    paddingHorizontal: 8, paddingVertical: 2, marginLeft: 2,
+  },
+  vibeChipHot: { borderColor: "#B23A2E", backgroundColor: "rgba(178,58,46,0.08)" },
+  vibeChipCold: { borderColor: theme.brand, backgroundColor: "rgba(11,115,95,0.08)" },
+  vibeChipText: { fontSize: 10, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.3 },
+  vibeChipTextHot: { color: "#B23A2E" },
+  vibeChipTextCold: { color: theme.brand },
 
   overallCell: { width: 72, alignItems: "flex-end" },
   overallRecord: { fontSize: 13, fontWeight: "800", color: "#0F172A" },

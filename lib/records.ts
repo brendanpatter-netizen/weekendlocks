@@ -15,13 +15,15 @@ export function winPct(r: SeasonRecord): string | null {
   return `${Math.round((100 * r.wins) / decided)}%`;
 }
 
+export type RecordVibe = { label: string; tone: "hot" | "cold" };
+
 // A little flavor for extreme records — needs at least 3 decided games so a
 // single early result doesn't get crowned a "heater."
-export function recordVibe(r: SeasonRecord): string | null {
+export function recordVibe(r: SeasonRecord): RecordVibe | null {
   const decided = r.wins + r.losses;
   if (decided < 3) return null;
   const pct = r.wins / decided;
-  if (pct >= 0.75) return "🔥 Heater";
-  if (pct <= 0.25) return "🥶 Ice cold";
+  if (pct >= 0.75) return { label: "Heater", tone: "hot" };
+  if (pct <= 0.25) return { label: "Ice cold", tone: "cold" };
   return null;
 }
