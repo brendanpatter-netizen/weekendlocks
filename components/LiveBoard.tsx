@@ -8,6 +8,7 @@
 // automatically the moment something kicks off.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "@/lib/supabase";
 import { getOpenOrRecentWeek, type OpenWeek } from "@/lib/openWeek";
 import { displayWeek } from "@/lib/weekLabel";
@@ -15,6 +16,7 @@ import { formatLine } from "@/lib/pickLabel";
 import { computeLiveResult, type LiveResult } from "@/lib/liveResult";
 import { fetchGameClocks, findGameClock, type GameClock } from "@/lib/gameClock";
 import { logoUri } from "@/lib/teamLogos";
+import { avatarColor, initials } from "@/lib/avatar";
 import LiveIcon from "@/components/LiveIcon";
 import TapeCorner from "@/components/TapeCorner";
 
@@ -35,6 +37,8 @@ type PickRow = {
   market: string; team: string | null; line: string | null; side: string | null;
   slot: number; game_id: number | null;
 };
+type Voter = { userId: string; name: string };
+type PickVotes = { good: Voter[]; bad: Voter[] };
 
 function gameStarted(g: GameRow): boolean {
   return new Date(g.kickoff_at).getTime() <= Date.now();
@@ -55,7 +59,38 @@ function LiveDot() {
   return <Animated.View style={[styles.liveDot, { opacity: pulse }]} />;
 }
 
-function LockCard({ pick, game, clocks }: { pick: PickRow; game: GameRow | null; clocks: GameClock[] }) {
+function VoterStack({ voters }: { voters: Voter[] }) {
+  if (voters.length === 0) return null;
+  const shown = voters.slice(0, 3);
+  const overflow = voters.length - shown.length;
+  return (
+    <View style={styles.voterStack}>
+      {shown.map((v, i) => {
+        const c = avatarColor(v.userId);
+        return (
+          <View
+            key={v.userId}
+            style={[styles.voterAvatar, { backgroundColor: c.bg, marginLeft: i === 0 ? 0 : -6 }]}
+          >
+            <Text style={[styles.voterAvatarText, { color: c.fg }]}>{initials(v.name)}</Text>
+          </View>
+        );
+      })}
+      {overflow > 0 && (
+        <View style={[styles.voterAvatar, styles.voterOverflow, { marginLeft: -6 }]}>
+          <Text style={styles.voterOverflowText}>+{overflow}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function LockCard({
+  pick, game, clocks, votes, currentUserId, onVote,
+}: {
+  pick: PickRow; game: GameRow | null; clocks: GameClock[];
+  votes: PickVotes; currentUserId: string | null; onVote: (pickId: string, vote: "good" | "bad") => void;
+}) {
   const league: "nfl" | "ncaaf" = pick.sport === "nfl" ? "nfl" : "ncaaf";
   const started = !!game && gameStarted(game);
   const isLive = started && game?.status !== "final";
@@ -111,14 +146,47 @@ function LockCard({ pick, game, clocks }: { pick: PickRow; game: GameRow | null;
       {!started && game && (
         <Text style={styles.kickoffText}>Kicks off {new Date(game.kickoff_at).toLocaleString()}</Text>
       )}
+
+      {/* Voting closes at kickoff, same window as editing the pick itself —
+          once the game's underway the outcome speaks for itself. */}
+      {!started && (
+        <View style={styles.voteRow}>
+          <Pressable
+            disabled={!currentUserId || currentUserId === pick.user_id}
+            onPress={() => onVote(pick.id, "good")}
+            style={[
+              styles.voteButton,
+              votes.good.some((v) => v.userId === currentUserId) && styles.voteButtonActiveGood,
+            ]}
+          >
+            <Ionicons name="thumbs-up" size={13} color="#0B735F" />
+            {votes.good.length > 0 && <Text style={styles.voteCountText}>{votes.good.length}</Text>}
+            <VoterStack voters={votes.good} />
+          </Pressable>
+          <Pressable
+            disabled={!currentUserId || currentUserId === pick.user_id}
+            onPress={() => onVote(pick.id, "bad")}
+            style={[
+              styles.voteButton,
+              votes.bad.some((v) => v.userId === currentUserId) && styles.voteButtonActiveBad,
+            ]}
+          >
+            <Ionicons name="thumbs-down" size={13} color="#B23A2E" />
+            {votes.bad.length > 0 && <Text style={styles.voteCountText}>{votes.bad.length}</Text>}
+            <VoterStack voters={votes.bad} />
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
 
 export default function LiveBoard({ groupId }: { groupId: string }) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [members, setMembers] = useState<Map<string, string>>(new Map());
   const [picks, setPicks] = useState<PickRow[]>([]);
+  const [votesByPick, setVotesByPick] = useState<Map<string, PickVotes>>(new Map());
   const [gamesById, setGamesById] = useState<Map<number, GameRow>>(new Map());
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
@@ -130,13 +198,17 @@ export default function LiveBoard({ groupId }: { groupId: string }) {
   const [manualExpanded, setManualExpanded] = useState<boolean | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setAccessToken(data.session?.access_token ?? null));
+    supabase.auth.getSession().then(({ data }) => {
+      setAccessToken(data.session?.access_token ?? null);
+      setCurrentUserId(data.session?.user?.id ?? null);
+    });
     // getSession() alone only captures the token present at mount — the
     // client rotates it in the background (autoRefreshToken), and without
     // this listener the stale original token silently 401s once it expires,
     // freezing pingLiveScores forever with no visible error.
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       setAccessToken(session?.access_token ?? null);
+      setCurrentUserId(session?.user?.id ?? null);
     });
     return () => sub.subscription.unsubscribe();
   }, []);
@@ -179,6 +251,24 @@ export default function LiveBoard({ groupId }: { groupId: string }) {
     setMembers(roster);
     setPicks(allPicks);
 
+    const pickIds = allPicks.map((p) => p.id);
+    if (pickIds.length) {
+      const { data: voteRows } = await supabase
+        .from("pick_vote_details")
+        .select("pick_id, user_id, vote, voter_name")
+        .in("pick_id", pickIds);
+      const votesMap = new Map<string, PickVotes>();
+      (voteRows ?? []).forEach((v: any) => {
+        const entry = votesMap.get(v.pick_id) ?? { good: [], bad: [] };
+        const voter: Voter = { userId: v.user_id, name: v.voter_name ?? v.user_id };
+        if (v.vote === "good") entry.good.push(voter); else entry.bad.push(voter);
+        votesMap.set(v.pick_id, entry);
+      });
+      setVotesByPick(votesMap);
+    } else {
+      setVotesByPick(new Map());
+    }
+
     const gameIds = Array.from(new Set(allPicks.map((p) => p.game_id).filter((x): x is number => x != null)));
     if (gameIds.length) {
       const { data: gamesData } = await supabase
@@ -203,6 +293,30 @@ export default function LiveBoard({ groupId }: { groupId: string }) {
       // best-effort — the board still shows whatever's already in the DB
     }
   }, [accessToken]);
+
+  // Optimistic: flips the button instantly rather than waiting on the vote
+  // to round-trip and the next load() to pick it up. RLS (see the
+  // 2026-09-17 migration) is the real backstop — a rejected write just
+  // leaves the optimistic state stale until the next poll corrects it.
+  const castVote = useCallback(async (pickId: string, vote: "good" | "bad") => {
+    if (!currentUserId) return;
+    setVotesByPick((prev) => {
+      const next = new Map(prev);
+      const entry = next.get(pickId) ?? { good: [], bad: [] };
+      const withoutMe = {
+        good: entry.good.filter((v) => v.userId !== currentUserId),
+        bad: entry.bad.filter((v) => v.userId !== currentUserId),
+      };
+      const me: Voter = { userId: currentUserId, name: members.get(currentUserId) ?? currentUserId };
+      withoutMe[vote] = [...withoutMe[vote], me];
+      next.set(pickId, withoutMe);
+      return next;
+    });
+    await supabase.from("pick_votes").upsert(
+      { pick_id: pickId, user_id: currentUserId, vote },
+      { onConflict: "pick_id,user_id" }
+    );
+  }, [currentUserId, members]);
 
   // Separate, free, uncredited source (see lib/gameClock.ts) — a failure
   // here just leaves the previous clocks in place rather than blocking the
@@ -334,6 +448,9 @@ export default function LiveBoard({ groupId }: { groupId: string }) {
                           pick={p}
                           game={p.game_id ? gamesById.get(p.game_id) ?? null : null}
                           clocks={p.sport === "nfl" ? nflClocks : cfbClocks}
+                          votes={votesByPick.get(p.id) ?? { good: [], bad: [] }}
+                          currentUserId={currentUserId}
+                          onVote={castVote}
                         />
                       ))}
                     </View>
@@ -400,4 +517,22 @@ const styles = StyleSheet.create({
 
   pickText: { fontSize: 12, fontWeight: "700", color: "#45564C" },
   kickoffText: { fontSize: 10, color: "#94A3B8" },
+
+  voteRow: { flexDirection: "row", gap: 6, marginTop: 2 },
+  voteButton: {
+    flexDirection: "row", alignItems: "center", gap: 4, flex: 1,
+    borderWidth: 1.5, borderStyle: "dashed", borderColor: "rgba(12,23,18,0.15)",
+    borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4,
+  },
+  voteButtonActiveGood: { borderColor: "#0B735F", backgroundColor: "rgba(11,115,95,0.08)" },
+  voteButtonActiveBad: { borderColor: "#B23A2E", backgroundColor: "rgba(178,58,46,0.08)" },
+  voteCountText: { fontSize: 11, fontWeight: "800", color: "#45564C" },
+  voterStack: { flexDirection: "row", alignItems: "center", marginLeft: "auto" },
+  voterAvatar: {
+    width: 16, height: 16, borderRadius: 999, alignItems: "center", justifyContent: "center",
+    borderWidth: 1.5, borderColor: "#F8FAFC",
+  },
+  voterAvatarText: { fontSize: 7, fontWeight: "800" },
+  voterOverflow: { backgroundColor: "#E9ECE8" },
+  voterOverflowText: { fontSize: 6.5, fontWeight: "800", color: "#45564C" },
 });
