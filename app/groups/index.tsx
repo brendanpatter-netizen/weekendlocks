@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
-  Image,
   TextInput,
   Pressable,
   FlatList,
@@ -20,9 +19,7 @@ import { alert } from "@/lib/alert";
 import { colors as theme } from "@/lib/theme";
 import { getOpenWeek } from "@/lib/openWeek";
 import { recordLabel, winPct, EMPTY_RECORD, type SeasonRecord } from "@/lib/records";
-import { logoUri } from "@/lib/teamLogos";
 import TapeCorner from "@/components/TapeCorner";
-import TrophyIcon from "@/components/TrophyIcon";
 
 type Group = {
   id: string;
@@ -35,18 +32,10 @@ type Group = {
 type GroupPreview = {
   members: { id: string; name: string }[];
   memberCount: number;
-  leader: { name: string; record: SeasonRecord; logo: string | null } | null;
+  leader: { name: string; record: SeasonRecord } | null;
   needsPick: boolean;
   waitingOn: string[];
 };
-
-// picks_feed.logoUri returns 'about:blank' when a name doesn't map to a
-// known team — same helper as the group dashboard's Recent Activity uses.
-function pickLogo(team: string | null | undefined, sport: string): string | null {
-  if (!team) return null;
-  const uri = logoUri(team, sport === "nfl" ? "nfl" : "ncaaf");
-  return uri === "about:blank" ? null : uri;
-}
 
 export default function GroupsIndex() {
   const [loading, setLoading] = useState(true);
@@ -137,7 +126,6 @@ export default function GroupsIndex() {
 
         // Same ranking rule as the Standings: win% among decided games,
         // 0 decided sinks to the bottom, ties broken by name.
-        let leaderUid: string | null = null;
         let leaderName: string | null = null;
         let leaderRecord: SeasonRecord = EMPTY_RECORD;
         let bestVal = -Infinity;
@@ -148,27 +136,10 @@ export default function GroupsIndex() {
           const name = nameById.get(uid) ?? uid;
           if (leaderName === null || val > bestVal || (val === bestVal && name.localeCompare(leaderName, undefined, { sensitivity: "base" }) < 0)) {
             bestVal = val;
-            leaderUid = uid;
             leaderName = name;
             leaderRecord = rec;
           }
         });
-
-        // A small flourish, not a data point: the leader's most recent lock,
-        // shown as its team logo. Only worth fetching once they've actually
-        // got a decided record — skip the extra query otherwise.
-        let leaderLogo: string | null = null;
-        if (leaderUid && leaderRecord.wins + leaderRecord.losses > 0) {
-          const { data: lastPick } = await supabase
-            .from("picks_feed")
-            .select("team, sport")
-            .eq("group_id", g.id)
-            .eq("user_id", leaderUid)
-            .order("updated_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          leaderLogo = lastPick ? pickLogo(lastPick.team, lastPick.sport) : null;
-        }
 
         // Fetched once for the whole roster (not just the viewer) so the
         // card can show both "do I still need to pick" and "who in the
@@ -199,7 +170,7 @@ export default function GroupsIndex() {
           {
             members: rosterIds.slice(0, 4).map((uid) => ({ id: uid, name: nameById.get(uid) ?? uid })),
             memberCount: rosterIds.length,
-            leader: leaderName ? { name: leaderName, record: leaderRecord, logo: leaderLogo } : null,
+            leader: leaderName ? { name: leaderName, record: leaderRecord } : null,
             needsPick,
             waitingOn,
           },
@@ -402,16 +373,10 @@ export default function GroupsIndex() {
                       </View>
                       {preview.leader && leaderLabel ? (
                         <View style={styles.leaderLine}>
-                          <TrophyIcon size={13} color="#B23A2E" />
                           <Text style={styles.leaderName} numberOfLines={1}>{preview.leader.name}</Text>
                           <Text style={styles.leaderRecord} numberOfLines={1}>
                             {leaderLabel}{winPct(preview.leader.record) ? ` · ${winPct(preview.leader.record)}` : ""}
                           </Text>
-                          {!!preview.leader.logo && (
-                            <View style={styles.leaderLogoWrap}>
-                              <Image source={{ uri: preview.leader.logo }} style={styles.leaderLogo} resizeMode="contain" />
-                            </View>
-                          )}
                         </View>
                       ) : (
                         <Text style={styles.leaderRecord}>No picks yet this season</Text>
@@ -545,21 +510,13 @@ const styles = StyleSheet.create({
   clusterAvatarText: { fontSize: 10, fontWeight: "700" },
   clusterOverflow: { backgroundColor: "#E9ECE8" },
   clusterOverflowText: { fontSize: 9, fontWeight: "700", color: "#45564C" },
-  // flex:1 (not just flexShrink) so it fills the row's remaining width after
-  // the avatar cluster — that's what lets the trailing logo's marginLeft:
-  // "auto" push it flush to the row's right edge instead of just its own.
   leaderLine: { flex: 1, flexDirection: "row", alignItems: "center", gap: 5, minWidth: 0 },
-  leaderName: { fontSize: 13, fontWeight: "700", color: "#0C1712", flexShrink: 1 },
+  // Gold text is the only "leader" signal now — color doing the work an
+  // icon used to, same restraint as the streak badges' ink-only treatment.
+  leaderName: { fontSize: 13, fontWeight: "700", color: theme.brass, flexShrink: 1 },
   leaderRecord: { fontSize: 12, color: "#45564C", fontWeight: "600" },
   waitingLine: { fontSize: 11, color: "#8B876F", fontWeight: "600", marginTop: 2 },
   waitingLineLabel: { fontWeight: "800", color: "#B23A2E", textTransform: "uppercase", letterSpacing: 0.2, fontSize: 10 },
-  // White backing behind the logo — team logos assume a light background,
-  // same treatment as the league logos in the group hero's pick CTAs.
-  leaderLogoWrap: {
-    width: 20, height: 20, borderRadius: 999, backgroundColor: "white",
-    alignItems: "center", justifyContent: "center", padding: 2, marginLeft: "auto",
-  },
-  leaderLogo: { width: "100%", height: "100%" },
 
   // Square, no rotation — same as everything else in the product (see The
   // Accent-Only Tilt Rule). Only unusual thing about it is the absolute
