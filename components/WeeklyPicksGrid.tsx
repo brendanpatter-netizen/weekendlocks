@@ -4,18 +4,25 @@
 // before the app existed. Reloads whenever `refreshKey` changes, which the
 // dashboard bumps after every load and after "Refresh scores".
 import { useEffect, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { pickLabel, matchupSuffix } from "@/lib/pickLabel";
 import { recordLabel, winPct, EMPTY_RECORD, type SeasonRecord } from "@/lib/records";
+import { logoUri } from "@/lib/teamLogos";
 import LockIcon from "@/components/LockIcon";
 import TapeCorner from "@/components/TapeCorner";
+
+function getTeamLogo(name: string | null | undefined, sport: "nfl" | "cfb"): string | null {
+  if (!name) return null;
+  const uri = logoUri(name, sport === "nfl" ? "nfl" : "ncaaf");
+  return uri === "about:blank" ? null : uri;
+}
 
 type Result = "win" | "loss" | "push" | null;
 type GameInfo = { home: string; away: string; home_score: number | null; away_score: number | null; status: string };
 type Cell = {
   label: string | null; result: Result;
-  pick: { market: string; team: string | null; line: string | null } | null;
+  pick: { sport: "nfl" | "cfb"; market: string; team: string | null; line: string | null } | null;
   game: GameInfo | null;
 };
 type Member = { user_id: string; display_name: string };
@@ -136,7 +143,7 @@ export default function WeeklyPicksGrid({
         const label = cellLabel(p, game);
         map.set(cellKey(p.user_id, p.sport, row, p.slot ?? 1), {
           label, result,
-          pick: { market: p.market, team: p.team, line: p.line },
+          pick: { sport: p.sport, market: p.market, team: p.team, line: p.line },
           game: game ? { home: game.home, away: game.away, home_score: game.home_score, away_score: game.away_score, status: game.status } : null,
         });
         if (result) {
@@ -277,12 +284,31 @@ function PickCell({ cell, isSecondCfbLock, onOpen }: { cell?: Cell; isSecondCfbL
   );
 }
 
+function ScoreboardTeamRow({
+  name, score, logo, isWinner,
+}: { name: string; score: number | null; logo: string | null; isWinner: boolean }) {
+  return (
+    <View style={styles.sbTeamRow}>
+      {logo ? (
+        <View style={styles.sbLogoWrap}><Image source={{ uri: logo }} style={styles.sbLogo} resizeMode="contain" /></View>
+      ) : (
+        <View style={styles.sbLogoPlaceholder} />
+      )}
+      <Text style={[styles.sbTeamName, isWinner && styles.sbTeamNameWinner]} numberOfLines={1}>{name}</Text>
+      <Text style={[styles.sbScore, isWinner && styles.sbScoreWinner]}>{score ?? "–"}</Text>
+    </View>
+  );
+}
+
 function ScorePunchOut({ open, onClose }: { open: OpenCell | null; onClose: () => void }) {
   if (!open) return null;
   const { memberName, weekLabel, cell } = open;
   const game = cell.game;
   const pickText = cell.pick ? pickLabel(cell.pick) : null;
   const resultLabel = cell.result === "win" ? "Won" : cell.result === "loss" ? "Lost" : cell.result === "push" ? "Push" : null;
+  const sport = cell.pick?.sport ?? "nfl";
+  const homeWon = !!game && game.home_score != null && game.away_score != null && game.home_score > game.away_score;
+  const awayWon = !!game && game.home_score != null && game.away_score != null && game.away_score > game.home_score;
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.modalBackdrop} onPress={onClose}>
@@ -290,15 +316,17 @@ function ScorePunchOut({ open, onClose }: { open: OpenCell | null; onClose: () =
           <TapeCorner />
           <Text style={styles.modalEyebrow}>{memberName} · {weekLabel}</Text>
           {game && (
-            <View style={styles.modalMatchup}>
-              <View style={styles.modalTeamRow}>
-                <Text style={styles.modalTeamName} numberOfLines={1}>{game.away}</Text>
-                <Text style={styles.modalTeamScore}>{game.away_score ?? "–"}</Text>
-              </View>
-              <View style={styles.modalTeamRow}>
-                <Text style={styles.modalTeamName} numberOfLines={1}>{game.home}</Text>
-                <Text style={styles.modalTeamScore}>{game.home_score ?? "–"}</Text>
-              </View>
+            <View style={styles.scoreboard}>
+              <View style={styles.sbFinalTag}><Text style={styles.sbFinalTagText}>Final</Text></View>
+              <ScoreboardTeamRow
+                name={game.away} score={game.away_score} isWinner={awayWon}
+                logo={getTeamLogo(game.away, sport)}
+              />
+              <View style={styles.sbDivider} />
+              <ScoreboardTeamRow
+                name={game.home} score={game.home_score} isWinner={homeWon}
+                logo={getTeamLogo(game.home, sport)}
+              />
             </View>
           )}
           {pickText && (
@@ -389,10 +417,39 @@ const styles = StyleSheet.create({
     borderRadius: 12, padding: 18, gap: 10,
   },
   modalEyebrow: { fontSize: 11, fontWeight: "800", color: "#64748B", textTransform: "uppercase", letterSpacing: 0.4 },
-  modalMatchup: { gap: 4 },
-  modalTeamRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  modalTeamName: { flex: 1, fontSize: 15, fontWeight: "700", color: "#0C1712" },
-  modalTeamScore: { fontSize: 18, fontWeight: "800", color: "#0C1712" },
+
+  // The scoreboard panel — a dark "under the lights" inset inside the
+  // otherwise light chalk-paper card, since the actual point here is the
+  // score, not another sheet of paper. Winner's row gets brass/gold, same
+  // "special" color the rest of the product reserves for a standout value
+  // (the leader's name on the groups list, the OTP pill) rather than a new
+  // color meaning "won" only here.
+  scoreboard: {
+    position: "relative", backgroundColor: "#0A2620", borderRadius: 10,
+    paddingVertical: 14, paddingHorizontal: 14, gap: 8,
+  },
+  sbFinalTag: {
+    position: "absolute", top: -8, left: 12, backgroundColor: "#0A2620",
+    borderWidth: 1, borderColor: "rgba(242,194,102,0.5)", borderRadius: 999,
+    paddingHorizontal: 8, paddingVertical: 2,
+  },
+  sbFinalTagText: { fontSize: 9, fontWeight: "800", color: "#F2C266", textTransform: "uppercase", letterSpacing: 0.6 },
+  sbTeamRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  sbLogoWrap: {
+    width: 22, height: 22, borderRadius: 999, backgroundColor: "white",
+    alignItems: "center", justifyContent: "center", padding: 2,
+  },
+  sbLogo: { width: "100%", height: "100%" },
+  sbLogoPlaceholder: { width: 22, height: 22 },
+  sbTeamName: { flex: 1, fontSize: 14, fontWeight: "700", color: "rgba(245,243,231,0.75)" },
+  sbTeamNameWinner: { color: "#F5F3E7", fontWeight: "800" },
+  sbScore: {
+    fontSize: 22, fontWeight: "800", color: "rgba(245,243,231,0.75)", minWidth: 34, textAlign: "right",
+    fontVariant: ["tabular-nums"],
+  },
+  sbScoreWinner: { color: "#F2C266" },
+  sbDivider: { height: 1, backgroundColor: "rgba(245,243,231,0.12)" },
+
   modalPickText: { fontSize: 13, color: "#45564C" },
   modalPickTextBold: { fontWeight: "800", color: "#0C1712" },
   modalResult: { fontSize: 13, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.4, color: "#64748B" },
