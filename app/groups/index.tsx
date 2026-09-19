@@ -15,6 +15,8 @@ import { Link, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../../lib/supabase";
 import { avatarColor, initials } from "@/lib/avatar";
+import { isBadgeId, type BadgeId } from "@/lib/badges";
+import BadgeIcon from "@/components/BadgeIcon";
 import { alert } from "@/lib/alert";
 import { colors as theme } from "@/lib/theme";
 import { getOpenWeek } from "@/lib/openWeek";
@@ -30,7 +32,7 @@ type Group = {
 };
 
 type GroupPreview = {
-  members: { id: string; name: string }[];
+  members: { id: string; name: string; badgeId: BadgeId | null }[];
   memberCount: number;
   leader: { name: string; record: SeasonRecord } | null;
   needsPick: boolean;
@@ -107,12 +109,18 @@ export default function GroupsIndex() {
         const rosterIds = (gm ?? []).map((r: any) => r.user_id as string);
 
         const { data: profs } = rosterIds.length
-          ? await supabase.from("profiles").select("id, username, display_name").in("id", rosterIds)
+          ? await supabase.from("profiles").select("id, username, display_name, badge_id").in("id", rosterIds)
           : { data: [] as any[] };
         const nameById = new Map<string, string>(
           rosterIds.map((uid) => {
             const p = (profs ?? []).find((x: any) => x.id === uid);
             return [uid, p?.username || p?.display_name || uid];
+          })
+        );
+        const badgeById = new Map<string, BadgeId | null>(
+          rosterIds.map((uid) => {
+            const p = (profs ?? []).find((x: any) => x.id === uid);
+            return [uid, isBadgeId(p?.badge_id) ? p.badge_id : null];
           })
         );
 
@@ -168,7 +176,7 @@ export default function GroupsIndex() {
         return [
           g.id,
           {
-            members: rosterIds.slice(0, 4).map((uid) => ({ id: uid, name: nameById.get(uid) ?? uid })),
+            members: rosterIds.slice(0, 4).map((uid) => ({ id: uid, name: nameById.get(uid) ?? uid, badgeId: badgeById.get(uid) ?? null })),
             memberCount: rosterIds.length,
             leader: leaderName ? { name: leaderName, record: leaderRecord } : null,
             needsPick,
@@ -361,7 +369,11 @@ export default function GroupsIndex() {
                               key={m.id}
                               style={[styles.clusterAvatar, { backgroundColor: c.bg, marginLeft: i === 0 ? 0 : -8 }]}
                             >
-                              <Text style={[styles.clusterAvatarText, { color: c.fg }]}>{initials(m.name)}</Text>
+                              {m.badgeId ? (
+                                <BadgeIcon id={m.badgeId} size={13} color={c.fg} />
+                              ) : (
+                                <Text style={[styles.clusterAvatarText, { color: c.fg }]}>{initials(m.name)}</Text>
+                              )}
                             </View>
                           );
                         })}

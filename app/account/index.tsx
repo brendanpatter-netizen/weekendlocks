@@ -13,7 +13,10 @@ import { supabase } from "@/lib/supabase";
 import { alert } from "@/lib/alert";
 import { colors as theme } from "@/lib/theme";
 import { toE164 } from "@/lib/phone";
+import { BADGE_IDS, isBadgeId, type BadgeId } from "@/lib/badges";
+import { recordLabel, winPct, recordVibe, EMPTY_RECORD, type SeasonRecord } from "@/lib/records";
 import TapeCorner from "@/components/TapeCorner";
+import BadgeIcon from "@/components/BadgeIcon";
 
 const colors = {
   primary: theme.brand,
@@ -27,6 +30,9 @@ export default function AccountPage() {
   const [phone, setPhone] = useState("");
   const [username, setUsername] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
+  const [badgeId, setBadgeId] = useState<BadgeId | null>(null);
+  const [savingBadge, setSavingBadge] = useState<BadgeId | null>(null);
+  const [overall, setOverall] = useState<SeasonRecord>(EMPTY_RECORD);
 
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -56,10 +62,10 @@ export default function AccountPage() {
       setEmail(user.email ?? "");
       setPhone(user.phone ?? "");
 
-      // Read profile (just id, username)
+      // Read profile (username + chosen badge)
       const { data, error } = await supabase
         .from("profiles")
-        .select("username")
+        .select("username, badge_id")
         .eq("id", user.id)
         .maybeSingle();
 
@@ -74,8 +80,38 @@ export default function AccountPage() {
         (user.email ? user.email.split("@")[0] : "User");
 
       setUsername((data?.username ?? fallback).replace(/\s/g, ""));
+      setBadgeId(isBadgeId(data?.badge_id) ? data.badge_id : null);
+
+      // Season record across every group this member is in — the same
+      // per-(group, sport) rows the group dashboard's Standings sums per
+      // group, just summed across all of them here for one account-wide
+      // number, since this page has no single group context of its own.
+      const { data: records } = await supabase
+        .from("member_records")
+        .select("wins, losses")
+        .eq("user_id", user.id);
+      const totals = (records ?? []).reduce(
+        (acc, r: any) => ({ wins: acc.wins + r.wins, losses: acc.losses + r.losses }),
+        { ...EMPTY_RECORD }
+      );
+      setOverall(totals);
     })();
   }, []);
+
+  const saveBadge = async (id: BadgeId) => {
+    const previous = badgeId;
+    setBadgeId(id);
+    setSavingBadge(id);
+    try {
+      const { error } = await supabase.rpc("set_profile_badge", { p_badge_id: id });
+      if (error) throw error;
+    } catch (e: any) {
+      setBadgeId(previous);
+      alert("Couldn’t save badge", e?.message ?? "Please try again.");
+    } finally {
+      setSavingBadge(null);
+    }
+  };
 
   // Save via RPC (security definer)
   const saveProfile = async () => {
@@ -197,6 +233,57 @@ export default function AccountPage() {
       <View style={styles.card}>
         <TapeCorner />
         <Text style={styles.title}>My Account</Text>
+
+        {/* Player card — the badge + live season record, so this page reads
+            as a personal card being customized rather than a settings form. */}
+        <View style={styles.playerCard}>
+          <View style={styles.playerBadgeWrap}>
+            {badgeId ? (
+              <BadgeIcon id={badgeId} size={34} color={theme.brass} />
+            ) : (
+              <Text style={styles.playerBadgePlaceholder}>?</Text>
+            )}
+          </View>
+          <View style={styles.playerInfo}>
+            <Text style={styles.playerName} numberOfLines={1}>{username || "Your name"}</Text>
+            {recordLabel(overall) ? (
+              <View style={styles.playerRecordRow}>
+                <Text style={styles.playerRecordText}>
+                  {recordLabel(overall)}{winPct(overall) ? ` · ${winPct(overall)}` : ""}
+                </Text>
+                {recordVibe(overall) && (
+                  <View style={[styles.vibeChip, recordVibe(overall)!.tone === "hot" ? styles.vibeChipHot : styles.vibeChipCold]}>
+                    <Text style={[styles.vibeChipText, recordVibe(overall)!.tone === "hot" ? styles.vibeChipTextHot : styles.vibeChipTextCold]}>
+                      {recordVibe(overall)!.label}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            ) : (
+              <Text style={styles.playerRecordText}>No picks graded yet this season</Text>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Your Badge</Text>
+          <Text style={styles.badgeHint}>Shows next to your name on the groups list.</Text>
+          <View style={styles.badgeGrid}>
+            {BADGE_IDS.map((id) => {
+              const selected = badgeId === id;
+              return (
+                <Pressable
+                  key={id}
+                  onPress={() => saveBadge(id)}
+                  disabled={savingBadge === id}
+                  style={[styles.badgeOption, selected && styles.badgeOptionSelected]}
+                >
+                  <BadgeIcon id={id} size={22} color={selected ? theme.brass : colors.subtext} />
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
 
         {/* Profile */}
         <View style={styles.section}>
@@ -345,6 +432,43 @@ const styles = StyleSheet.create({
     borderStyle: "dashed",
   },
   title: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 24, color: "#B23A2E", textTransform: "uppercase" },
+
+  // The player card — badge left, name + live record right. Sits on the
+  // same chalk-paper card as everything else on this page (the account
+  // page has no board-hero layout of its own), so the badge circle uses a
+  // darker felt backing to read as its own object rather than another
+  // sheet of paper.
+  playerCard: { flexDirection: "row", alignItems: "center", gap: 14 },
+  playerBadgeWrap: {
+    width: 64, height: 64, borderRadius: 999, backgroundColor: theme.felt,
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 1.5, borderColor: "rgba(179,120,31,0.5)",
+  },
+  playerBadgePlaceholder: { fontSize: 24, fontWeight: "800", color: "rgba(245,243,231,0.4)" },
+  playerInfo: { flex: 1, minWidth: 0, gap: 3 },
+  playerName: { fontSize: 20, fontWeight: "800", color: colors.text },
+  playerRecordRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  playerRecordText: { fontSize: 13, color: colors.subtext, fontWeight: "600" },
+  // Same dashed ink-only pill as the group Standings' streak badge — see
+  // app/groups/[id]/index.tsx's vibeChip.
+  vibeChip: {
+    borderWidth: 1.5, borderStyle: "dashed", borderRadius: 999,
+    paddingHorizontal: 8, paddingVertical: 2,
+  },
+  vibeChipHot: { borderColor: "#B23A2E", backgroundColor: "rgba(178,58,46,0.08)" },
+  vibeChipCold: { borderColor: theme.brand, backgroundColor: "rgba(11,115,95,0.08)" },
+  vibeChipText: { fontSize: 10, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.3 },
+  vibeChipTextHot: { color: "#B23A2E" },
+  vibeChipTextCold: { color: theme.brand },
+
+  badgeHint: { fontSize: 12, color: colors.subtext },
+  badgeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  badgeOption: {
+    width: 48, height: 48, borderRadius: 10, alignItems: "center", justifyContent: "center",
+    backgroundColor: "#FDFCF8", borderWidth: 1.5, borderColor: "rgba(12,23,18,0.12)", borderStyle: "dashed",
+  },
+  badgeOptionSelected: { borderColor: theme.brass, backgroundColor: "rgba(179,120,31,0.1)" },
+
   section: { gap: 10 },
   sectionTitle: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 16, color: "#B23A2E", textTransform: "uppercase" },
   row: {
