@@ -9,13 +9,21 @@ export type OpenWeek = { week: number; opensAt: string; closesAt: string };
 
 export async function getOpenWeek(league: "nfl" | "cfb"): Promise<OpenWeek | null> {
   const nowIso = new Date().toISOString();
+  // Correct data has at most one week matching this window at a time, so
+  // ordering direction is normally moot — but a week row occasionally gets
+  // corrupted by something outside this codebase with a bogus "opens
+  // today" timestamp (see the 2026-09-21 migration, the third time this
+  // has hit a different row), which briefly makes two weeks match at once.
+  // Preferring the EARLIEST-opening match means a legitimately-still-open
+  // week (open for days already) wins over a newly-appeared bogus one,
+  // rather than the reverse.
   const { data, error } = await supabase
     .from("weeks")
     .select("week_num, opens_at, closes_at")
     .eq("league", league)
     .lte("opens_at", nowIso)
     .gt("closes_at", nowIso)
-    .order("opens_at", { ascending: false })
+    .order("opens_at", { ascending: true })
     .limit(1)
     .maybeSingle();
 
