@@ -7,7 +7,27 @@ import { supabase } from "@/lib/supabase";
 
 export type OpenWeek = { week: number; opensAt: string; closesAt: string };
 
+// Self-healing backstop for the recurring external week-row corruption
+// (see the 2026-10-04 migration) — rather than only reacting to each
+// drifted row by hand, every call to getOpenWeek opportunistically asks
+// the DB to recompute and correct any week whose boundary has drifted
+// from its canonical formula. Throttled module-wide (not per-call) so
+// LiveBoard's 20s poll cycle doesn't hammer the RPC — this is a
+// best-effort nudge, not a guarantee, so a throttle miss just means the
+// next call within a few minutes catches it instead.
+const HEAL_THROTTLE_MS = 5 * 60 * 1000;
+let lastHealAttempt = 0;
+function healBoundariesIfDue() {
+  const now = Date.now();
+  if (now - lastHealAttempt < HEAL_THROTTLE_MS) return;
+  lastHealAttempt = now;
+  supabase.rpc("heal_week_boundaries").then(({ error }) => {
+    if (error) console.warn("heal_week_boundaries failed:", error);
+  });
+}
+
 export async function getOpenWeek(league: "nfl" | "cfb"): Promise<OpenWeek | null> {
+  healBoundariesIfDue();
   const nowIso = new Date().toISOString();
   // Correct data has at most one week matching this window at a time, so
   // ordering direction is normally moot — but a week row occasionally gets
