@@ -15,6 +15,13 @@ export function winPct(r: SeasonRecord): string | null {
   return `${Math.round((100 * r.wins) / decided)}%`;
 }
 
+// Ranking key for the leaderboard: win% when they've got decided games,
+// otherwise sinks to the bottom (haven't proven anything yet).
+export function rankValue(r: SeasonRecord): number {
+  const decided = r.wins + r.losses;
+  return decided === 0 ? -1 : r.wins / decided;
+}
+
 export type RecordVibe = { label: string; tone: "hot" | "cold" };
 
 // A little flavor for extreme records — needs at least 3 decided games so a

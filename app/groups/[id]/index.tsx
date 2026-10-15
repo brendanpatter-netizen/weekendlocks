@@ -35,17 +35,16 @@ import { supabase } from "@/lib/supabase";
 import { logoUri } from "@/lib/teamLogos";
 import { formatLine } from "@/lib/pickLabel";
 import { alert } from "@/lib/alert";
-import { recordLabel, winPct, recordVibe, EMPTY_RECORD, type SeasonRecord } from "@/lib/records";
+import { EMPTY_RECORD, rankValue, type SeasonRecord } from "@/lib/records";
 import { getOpenWeek, getNextWeek, type OpenWeek } from "@/lib/openWeek";
 import { displayWeek } from "@/lib/weekLabel";
 import { colors as theme } from "@/lib/theme";
 import GroupChat from "@/components/GroupChat";
 import WeeklyPicksGrid from "@/components/WeeklyPicksGrid";
 import WeeklyRecap from "@/components/WeeklyRecap";
-import Bankroll from "@/components/Bankroll";
+import Standings from "@/components/Standings";
 import LiveBoard from "@/components/LiveBoard";
 import LockIcon from "@/components/LockIcon";
-import TrophyIcon from "@/components/TrophyIcon";
 import TapeCorner from "@/components/TapeCorner";
 
 // null for Over/Under totals picks (no single team) or unmapped names.
@@ -65,13 +64,6 @@ type ActivityItem = {
   id: string; user_id: string; display_name: string; sport: "nfl" | "cfb"; week: number;
   market: string | null; team: string | null; line: string | null; updated_at: string; was_replaced: boolean;
 };
-
-// Ranking key for the leaderboard: win% when they've got decided games,
-// otherwise sinks to the bottom (haven't proven anything yet).
-function rankValue(r: SeasonRecord): number {
-  const decided = r.wins + r.losses;
-  return decided === 0 ? -1 : r.wins / decided;
-}
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -386,60 +378,11 @@ export default function GroupDashboardPage() {
         <>
         <LiveBoard groupId={groupId} />
 
-        <View style={[styles.card, styles.cardElevated]}>
-            <TapeCorner />
-            <View style={styles.leaderboardHeader}>
-              <View style={styles.cardTitleRow}>
-                <TrophyIcon size={18} color="#B23A2E" />
-                <Text style={styles.cardTitle}>The Standings</Text>
-              </View>
-            </View>
-            <View style={[styles.tableRow, styles.tableHeader]}>
-              <Text style={styles.thRank}>#</Text>
-              <Text style={styles.thUser}>Member</Text>
-              <Text style={styles.thOverall}>Record</Text>
-            </View>
-            {members.length === 0 ? (
-              <Text style={styles.empty}>No members yet.</Text>
-            ) : (
-              <FlatList
-                data={members}
-                keyExtractor={(m) => m.user_id}
-                scrollEnabled={false}
-                renderItem={({ item, index }) => {
-                  const overallRec = recordLabel(item.overall);
-                  const overallPct = winPct(item.overall);
-                  const vibe = recordVibe(item.overall);
-                  return (
-                    <View style={styles.tableRow}>
-                      <Text style={styles.rankText}>{index + 1}</Text>
-                      <View style={styles.userCell}>
-                        <Text style={styles.userName} numberOfLines={1}>{item.display_name}</Text>
-                        {vibe && (
-                          <View style={[styles.vibeChip, vibe.tone === "hot" ? styles.vibeChipHot : styles.vibeChipCold]}>
-                            <Text style={[styles.vibeChipText, vibe.tone === "hot" ? styles.vibeChipTextHot : styles.vibeChipTextCold]}>
-                              {vibe.label}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                      <View style={styles.overallCell}>
-                        <Text style={styles.overallRecord}>{overallRec ?? "—"}</Text>
-                        {overallPct && <Text style={styles.overallPct}>{overallPct}</Text>}
-                      </View>
-                    </View>
-                  );
-                }}
-              />
-            )}
-            <Text style={styles.note}>Records update automatically as games finish — pushes count as a win.</Text>
-          </View>
-
-          <Bankroll
-            groupId={groupId}
-            members={members.map((m) => ({ user_id: m.user_id, display_name: m.display_name }))}
-            refreshKey={dataVersion}
-          />
+        <Standings
+          groupId={groupId}
+          members={members}
+          refreshKey={dataVersion}
+        />
 
           <WeeklyRecap
             groupId={groupId}
@@ -596,43 +539,8 @@ const styles = StyleSheet.create({
   cardElevated: {
     shadowColor: "#000", shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
   },
-  cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   cardTitle: { fontFamily: "PermanentMarker_400Regular, cursive", fontSize: 20, color: "#B23A2E" },
 
-  leaderboardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
-
-  tableHeader: { paddingVertical: 6 },
-  tableRow: {
-    paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#E5E7EB",
-    flexDirection: "row", alignItems: "center", gap: 10,
-  },
-  thRank: { width: 22, fontWeight: "800", fontSize: 12, color: "#64748B" },
-  thUser: { flex: 1.6, fontWeight: "800", fontSize: 12, color: "#64748B", textTransform: "uppercase" },
-  thOverall: { width: 72, fontWeight: "800", fontSize: 12, color: "#64748B", textTransform: "uppercase", textAlign: "right" },
-
-  rankText: { width: 22, fontWeight: "800", fontSize: 13, color: "#64748B" }, // was #94A3B8 (2.56:1) — failed WCAG AA
-  userCell: { flex: 1.6, flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0 },
-  userName: { fontWeight: "700", flexShrink: 1 },
-  // Same dashed hand-marked pill language as waitingBanner/inviteRow, just
-  // sized as an inline chip next to a name — ink color is the only thing
-  // that changes between "hot" and "cold" (see The Two-Voice Rule), no
-  // emoji, matching how every other icon in the product is hand-authored
-  // rather than borrowed from the system font's emoji set.
-  vibeChip: {
-    borderWidth: 1.5, borderStyle: "dashed", borderRadius: 999,
-    paddingHorizontal: 8, paddingVertical: 2, marginLeft: 2,
-  },
-  vibeChipHot: { borderColor: "#B23A2E", backgroundColor: "rgba(178,58,46,0.08)" },
-  vibeChipCold: { borderColor: theme.brand, backgroundColor: "rgba(11,115,95,0.08)" },
-  vibeChipText: { fontSize: 10, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.3 },
-  vibeChipTextHot: { color: "#B23A2E" },
-  vibeChipTextCold: { color: theme.brand },
-
-  overallCell: { width: 72, alignItems: "flex-end" },
-  overallRecord: { fontSize: 13, fontWeight: "800", color: "#0F172A" },
-  overallPct: { fontSize: 11, color: "#64748B" },
-
-  note: { marginTop: 8, color: "#64748B", fontSize: 12 }, // was #94A3B8 (2.56:1) — failed WCAG AA
   empty: { paddingVertical: 8, color: "#64748B" },
   activityList: { maxHeight: 380 },
 
