@@ -42,6 +42,7 @@ import { colors as theme } from "@/lib/theme";
 import GroupChat from "@/components/GroupChat";
 import WeeklyPicksGrid from "@/components/WeeklyPicksGrid";
 import WeeklyRecap from "@/components/WeeklyRecap";
+import Bankroll from "@/components/Bankroll";
 import LiveBoard from "@/components/LiveBoard";
 import LockIcon from "@/components/LockIcon";
 import TrophyIcon from "@/components/TrophyIcon";
@@ -433,6 +434,12 @@ export default function GroupDashboardPage() {
             )}
             <Text style={styles.note}>Records update automatically as games finish — pushes count as a win.</Text>
           </View>
+
+          <Bankroll
+            groupId={groupId}
+            members={members.map((m) => ({ user_id: m.user_id, display_name: m.display_name }))}
+            refreshKey={dataVersion}
+          />
 
           <WeeklyRecap
             groupId={groupId}
