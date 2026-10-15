@@ -152,6 +152,7 @@ export default function Standings({
               <View style={styles.tableRow}>
                 <Text style={styles.rankText}>{index + 1}</Text>
                 <View style={styles.userCell}>
+                  <View style={[styles.swatch, { backgroundColor: avatarColor(item.user_id).fg }]} />
                   <Text style={styles.userName} numberOfLines={1}>{item.display_name}</Text>
                   {vibe && (
                     <View style={[styles.vibeChip, vibe.tone === "hot" ? styles.vibeChipHot : styles.vibeChipCold]}>
@@ -189,6 +190,7 @@ export default function Standings({
               {formatMoney(groupTotal)}
             </Text>
           </View>
+          <View style={styles.chartOuter}>
           <View style={styles.chartWrap}>
             <Svg width="100%" height="100%" viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}>
               <Line
@@ -207,6 +209,7 @@ export default function Standings({
                 />
               ))}
             </Svg>
+          </View>
           </View>
         </View>
       )}
@@ -238,6 +241,9 @@ const styles = StyleSheet.create({
 
   rankText: { width: 22, fontWeight: "800", fontSize: 13, color: "#64748B" },
   userCell: { flex: 1.4, flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0 },
+  // Same identity color as the chart line below — the table doubles as the
+  // chart's legend instead of needing a separate one.
+  swatch: { width: 8, height: 8, borderRadius: 999 },
   userName: { fontWeight: "700", flexShrink: 1 },
   // Same dashed hand-marked pill language as waitingBanner/inviteRow, just
   // sized as an inline chip next to a name — ink color is the only thing
@@ -269,6 +275,12 @@ const styles = StyleSheet.create({
   groupTotalRow: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" },
   groupTotalLabel: { fontSize: 13, fontWeight: "700", color: "#45564C" },
   groupTotalValue: { fontSize: 20, fontWeight: "800" },
+  // Capped and centered — on a wide desktop card, an uncapped 100%-width
+  // chart blows up to the full card width (and, since chartWrap below
+  // forces the same aspect ratio, just as tall), which reads as a giant
+  // smear rather than a readable sparkline. 360px is plenty to show the
+  // season's shape at a glance.
+  chartOuter: { width: "100%", maxWidth: 360, alignSelf: "center" },
   // The View, not the Svg, owns the aspect ratio — forcing the Svg's own
   // width/height to always match its viewBox exactly, so there's no
   // width/height-vs-viewBox mismatch for react-native-svg to resolve by
